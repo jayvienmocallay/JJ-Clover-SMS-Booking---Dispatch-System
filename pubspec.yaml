@@ -1,0 +1,10 @@
+﻿name: litrato
+description: A Flutter camera application
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  camera: ^0.11.0+1
