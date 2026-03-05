@@ -112,6 +112,25 @@ class DatabaseHelper {
     }
   }
 
+    // Seed default barangays
+    await _seedBarangays(db);
+  }
+
+  // Pre-populate barangays with default data
+  Future<void> _seedBarangays(Database db) async {
+    final defaultBarangays = [
+      {'name': 'San Isidro', 'delivery_zone': 'Zone A'},
+      {'name': 'San Jose', 'delivery_zone': 'Zone A'},
+      {'name': 'Poblacion', 'delivery_zone': 'Zone B'},
+      {'name': 'Santa Rosa', 'delivery_zone': 'Zone B'},
+      {'name': 'Santo Niño', 'delivery_zone': 'Zone C'},
+    ];
+
+    for (final barangay in defaultBarangays) {
+      await db.insert('barangays', barangay);
+    }
+  }
+
   // --- Barangay operations ---
 
   /// Get all barangays (useful for dropdowns)
@@ -221,4 +240,5 @@ class DatabaseHelper {
       whereArgs: [id],
     );
   }
+}
 }
