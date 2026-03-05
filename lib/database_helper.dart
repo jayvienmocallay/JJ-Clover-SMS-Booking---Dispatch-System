@@ -44,20 +44,29 @@ class DatabaseHelper {
     );
   }
 
-  // Create Customers and Schedules tables
+  // Create all tables
   Future _createSchema(Database db, int version) async {
-    // 1. Customers Table
+    // 1. Barangays Lookup Table
+    await db.execute('''
+      CREATE TABLE barangays (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        delivery_zone TEXT NOT NULL
+      )
+    ''');
+
+    // 2. Customers Table (references barangays)
     await db.execute('''
       CREATE TABLE customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         contact_number TEXT NOT NULL,
-        barangay TEXT NOT NULL,
-        delivery_zone TEXT NOT NULL
+        barangay_id INTEGER NOT NULL,
+        FOREIGN KEY (barangay_id) REFERENCES barangays (id)
       )
     ''');
 
-    // 2. Schedules Table
+    // 3. Schedules Table
     await db.execute('''
       CREATE TABLE schedules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,11 +76,62 @@ class DatabaseHelper {
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
       )
     ''');
+
+    // Seed default barangays
+    await _seedBarangays(db);
   }
 
-  // Example CRUD operation: Insert Customer
+  // Pre-populate barangays with default data
+  Future<void> _seedBarangays(Database db) async {
+    final defaultBarangays = [
+      {'name': 'San Isidro', 'delivery_zone': 'Zone A'},
+      {'name': 'San Jose', 'delivery_zone': 'Zone A'},
+      {'name': 'Poblacion', 'delivery_zone': 'Zone B'},
+      {'name': 'Santa Rosa', 'delivery_zone': 'Zone B'},
+      {'name': 'Santo Niño', 'delivery_zone': 'Zone C'},
+    ];
+
+    for (final barangay in defaultBarangays) {
+      await db.insert('barangays', barangay);
+    }
+  }
+
+  // --- Barangay operations ---
+
+  /// Get all barangays (useful for dropdowns)
+  Future<List<Map<String, dynamic>>> getBarangays() async {
+    final db = await instance.database;
+    return await db.query('barangays', orderBy: 'name ASC');
+  }
+
+  /// Get a single barangay by ID
+  Future<Map<String, dynamic>?> getBarangayById(int id) async {
+    final db = await instance.database;
+    final results = await db.query(
+      'barangays',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  // --- Customer operations ---
+
+  /// Insert a new customer
   Future<int> insertCustomer(Map<String, dynamic> customerData) async {
     final db = await instance.database;
     return await db.insert('customers', customerData);
+  }
+
+  /// Get all customers with their barangay info joined
+  Future<List<Map<String, dynamic>>> getCustomersWithBarangay() async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT c.id, c.name, c.contact_number,
+             b.name AS barangay, b.delivery_zone
+      FROM customers c
+      INNER JOIN barangays b ON c.barangay_id = b.id
+      ORDER BY c.name ASC
+    ''');
   }
 }
