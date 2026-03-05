@@ -18,7 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Simple Camera App',
+      title: 'JJ SmartRelay',
       theme: ThemeData.dark(),
       home: CameraPreviewScreen(),
       debugShowCheckedModeBanner: false,
@@ -64,7 +64,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Camera Preview')),
+      appBar: AppBar(title: const Text('JJ SmartRelay')),
       body: CameraPreview(controller!),
     );
   }
