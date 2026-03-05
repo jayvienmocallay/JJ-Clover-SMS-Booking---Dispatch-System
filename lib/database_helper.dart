@@ -93,8 +93,9 @@ class DatabaseHelper {
       )
     ''');
 
-    // Seed default barangays
+    // Seed default barangays and customers
     await _seedBarangays(db);
+    await _seedCustomers(db);
   }
 
   // Pre-populate barangays with default data
@@ -105,10 +106,160 @@ class DatabaseHelper {
       {'name': 'Poblacion', 'delivery_zone': 'Zone B'},
       {'name': 'Santa Rosa', 'delivery_zone': 'Zone B'},
       {'name': 'Santo Niño', 'delivery_zone': 'Zone C'},
+      {'name': 'Semong', 'delivery_zone': 'Zone C'},
+      {'name': 'Gabuyan', 'delivery_zone': 'Zone C'},
+      {'name': 'Bunawan', 'delivery_zone': 'Zone C'},
+      {'name': 'Katipunan', 'delivery_zone': 'Zone C'},
+      {'name': 'Dagohoy', 'delivery_zone': 'Zone C'},
+      {'name': 'Tiburcia', 'delivery_zone': 'Zone C'},
+      {'name': 'Clementa', 'delivery_zone': 'Zone C'},
     ];
 
     for (final barangay in defaultBarangays) {
       await db.insert('barangays', barangay);
+    }
+  }
+
+  // Pre-populate customers with synthetic data
+  Future<void> _seedCustomers(Database db) async {
+    final defaultCustomers = [
+      // Zone A — San Isidro (barangay_id: 1)
+      {
+        'name': 'Maria Santos',
+        'contact_number': '09171000001',
+        'barangay_id': 1,
+      },
+      {
+        'name': 'Juan dela Cruz',
+        'contact_number': '09171000002',
+        'barangay_id': 1,
+      },
+      {'name': 'Rosa Reyes', 'contact_number': '09171000003', 'barangay_id': 1},
+      // Zone A — San Jose (barangay_id: 2)
+      {
+        'name': 'Pedro Garcia',
+        'contact_number': '09171000004',
+        'barangay_id': 2,
+      },
+      {
+        'name': 'Ana Mendoza',
+        'contact_number': '09171000005',
+        'barangay_id': 2,
+      },
+      // Zone B — Poblacion (barangay_id: 3)
+      {
+        'name': 'Carlos Ramos',
+        'contact_number': '09171000006',
+        'barangay_id': 3,
+      },
+      {
+        'name': 'Elena Torres',
+        'contact_number': '09171000007',
+        'barangay_id': 3,
+      },
+      {
+        'name': 'Roberto Cruz',
+        'contact_number': '09171000008',
+        'barangay_id': 3,
+      },
+      // Zone B — Santa Rosa (barangay_id: 4)
+      {
+        'name': 'Liza Navarro',
+        'contact_number': '09171000009',
+        'barangay_id': 4,
+      },
+      {
+        'name': 'Miguel Aquino',
+        'contact_number': '09171000010',
+        'barangay_id': 4,
+      },
+      // Zone C — Santo Niño (barangay_id: 5)
+      {
+        'name': 'Teresa Villanueva',
+        'contact_number': '09171000011',
+        'barangay_id': 5,
+      },
+      {
+        'name': 'Ramon Bautista',
+        'contact_number': '09171000012',
+        'barangay_id': 5,
+      },
+      // Zone C — Semong (barangay_id: 6)
+      {
+        'name': 'Gloria Pascual',
+        'contact_number': '09171000013',
+        'barangay_id': 6,
+      },
+      {
+        'name': 'Ernesto Diaz',
+        'contact_number': '09171000014',
+        'barangay_id': 6,
+      },
+      // Zone C — Gabuyan (barangay_id: 7)
+      {
+        'name': 'Cynthia Flores',
+        'contact_number': '09171000015',
+        'barangay_id': 7,
+      },
+      {
+        'name': 'Alberto Lopez',
+        'contact_number': '09171000016',
+        'barangay_id': 7,
+      },
+      // Zone C — Bunawan (barangay_id: 8)
+      {
+        'name': 'Nelia Soriano',
+        'contact_number': '09171000017',
+        'barangay_id': 8,
+      },
+      {
+        'name': 'Danny Castillo',
+        'contact_number': '09171000018',
+        'barangay_id': 8,
+      },
+      // Zone C — Katipunan (barangay_id: 9)
+      {
+        'name': 'Beatriz Salazar',
+        'contact_number': '09171000019',
+        'barangay_id': 9,
+      },
+      {
+        'name': 'Fernando Rivera',
+        'contact_number': '09171000020',
+        'barangay_id': 9,
+      },
+      // Zone C — Dagohoy (barangay_id: 10)
+      {
+        'name': 'Josefa Mangubat',
+        'contact_number': '09171000021',
+        'barangay_id': 10,
+      },
+      {
+        'name': 'Ricky Pelaez',
+        'contact_number': '09171000022',
+        'barangay_id': 10,
+      },
+      // Zone C — Tiburcia (barangay_id: 11)
+      {
+        'name': 'Maricel Tan',
+        'contact_number': '09171000023',
+        'barangay_id': 11,
+      },
+      {
+        'name': 'Joel Fernandez',
+        'contact_number': '09171000024',
+        'barangay_id': 11,
+      },
+      // Zone C — Clementa (barangay_id: 12)
+      {
+        'name': 'Luz Morales',
+        'contact_number': '09171000025',
+        'barangay_id': 12,
+      },
+    ];
+
+    for (final customer in defaultCustomers) {
+      await db.insert('customers', customer);
     }
   }
 
