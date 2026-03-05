@@ -35,7 +35,6 @@ class DatabaseHelper {
 
     final password = await _getSecurePassword();
 
-    // Open the database using the secure password
     return await openDatabase(
       path,
       password: password,
@@ -74,6 +73,23 @@ class DatabaseHelper {
         delivery_day TEXT NOT NULL,
         status TEXT NOT NULL,
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 4. Orders Table
+    await db.execute('''
+      CREATE TABLE orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        phone_number TEXT NOT NULL,
+        type TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        address TEXT,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        delivery_day TEXT,
+        is_pre_book INTEGER DEFAULT 0,
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
       )
     ''');
 
@@ -123,15 +139,86 @@ class DatabaseHelper {
     return await db.insert('customers', customerData);
   }
 
+  /// Get all customers (raw)
+  Future<List<Map<String, dynamic>>> getCustomers() async {
+    final db = await instance.database;
+    return await db.query('customers', orderBy: 'name ASC');
+  }
+
   /// Get all customers with their barangay info joined
   Future<List<Map<String, dynamic>>> getCustomersWithBarangay() async {
     final db = await instance.database;
     return await db.rawQuery('''
       SELECT c.id, c.name, c.contact_number,
+             c.barangay_id,
              b.name AS barangay, b.delivery_zone
       FROM customers c
       INNER JOIN barangays b ON c.barangay_id = b.id
       ORDER BY c.name ASC
     ''');
+  }
+
+  /// Find a customer by phone number
+  Future<Map<String, dynamic>?> getCustomerByPhone(String phoneNumber) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'customers',
+      where: 'contact_number = ?',
+      whereArgs: [phoneNumber],
+    );
+    return result.isNotEmpty ? result.first : null;
+  }
+
+  // --- Schedule operations ---
+
+  Future<int> insertSchedule(Map<String, dynamic> scheduleData) async {
+    final db = await instance.database;
+    return await db.insert('schedules', scheduleData);
+  }
+
+  Future<List<Map<String, dynamic>>> getSchedules() async {
+    final db = await instance.database;
+    return await db.query('schedules', orderBy: 'id DESC');
+  }
+
+  // --- Order operations ---
+
+  Future<int> insertOrder(Map<String, dynamic> orderData) async {
+    final db = await instance.database;
+    return await db.insert('orders', orderData);
+  }
+
+  Future<List<Map<String, dynamic>>> getOrders({
+    String? where,
+    List<Object?>? whereArgs,
+  }) async {
+    final db = await instance.database;
+    return await db.query(
+      'orders',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'created_at DESC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getTodayOrders() async {
+    final db = await instance.database;
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    return await db.query(
+      'orders',
+      where: 'date(created_at) = ?',
+      whereArgs: [today],
+      orderBy: 'created_at DESC',
+    );
+  }
+
+  Future<int> updateOrderStatus(int id, String status) async {
+    final db = await instance.database;
+    return await db.update(
+      'orders',
+      {'status': status},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 }
