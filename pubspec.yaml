@@ -1,5 +1,5 @@
-name: jj_smart_relay
-description: A Flutter camera application
+name: jj_clover_sms
+description: JJ Clover Smart SMS Dispatch System
 
 environment:
   sdk: ^3.9.0
@@ -7,7 +7,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  camera: ^0.11.0+1
   sqflite_sqlcipher: ^3.1.0+1
   path_provider: ^2.1.2
   flutter_secure_storage: ^9.2.4
