@@ -1,4 +1,4 @@
-package com.example.litrato
+package com.jjclover.smartrelay
 
 import io.flutter.embedding.android.FlutterActivity
 
