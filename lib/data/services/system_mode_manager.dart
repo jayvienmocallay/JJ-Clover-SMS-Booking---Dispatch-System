@@ -1,7 +1,16 @@
+// Task 008 — System Mode Manager: 4-mode toggle with ChangeNotifier (Provider-ready)
+// Task 013 — Singleton pattern so UI toggles and background service share the same mode
 import 'package:flutter/foundation.dart';
 import '../../core/constants/app_constants.dart';
 
 class SystemModeManager extends ChangeNotifier {
+  // Singleton — shared between Provider (UI) and SmsBackgroundService
+  static final SystemModeManager instance = SystemModeManager._();
+  SystemModeManager._();
+
+  /// Creates a new instance for testing (avoids singleton state leaks between tests)
+  factory SystemModeManager.forTest() = _TestSystemModeManager;
+
   SystemMode _currentMode = SystemMode.operating;
 
   SystemMode get currentMode => _currentMode;
@@ -60,4 +69,9 @@ class SystemModeManager extends ChangeNotifier {
         return 'System under maintenance. We are currently closed.';
     }
   }
+}
+
+/// Test-only subclass that bypasses the private constructor
+class _TestSystemModeManager extends SystemModeManager {
+  _TestSystemModeManager() : super._();
 }
