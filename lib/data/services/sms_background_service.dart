@@ -1,3 +1,6 @@
+// Task 004 — SMS Background Service: headless SMS listener and command router
+// Task 007 — Pre-book context cache, cutoff time queuing, gallon type passthrough
+// Task 008 — Zone-specific validation integration, next-day scheduling
 import 'dart:async';
 import 'package:telephony/telephony.dart';
 import 'package:flutter/foundation.dart';
@@ -9,23 +12,53 @@ import '../models/order_model.dart';
 import 'sms_parser.dart';
 import 'zone_validator.dart';
 import 'system_mode_manager.dart';
+import 'alarm_service.dart';
 
+/// Background SMS service that listens for incoming messages and processes
+/// them as commands (DELIVER, DROP, YES, STATUS).
+///
+/// This is the "Background Isolate" in the system architecture — it runs
+/// headlessly, parsing SMS via regex, validating zones, and writing orders
+/// to the encrypted database. The UI reads from the same database.
+///
+/// Architecture: SMS → SmsParser → ZoneValidator → DatabaseHelper → Auto-Reply
 class SmsBackgroundService {
+  // --- Singleton pattern: ensures only one instance listens for SMS ---
   static final SmsBackgroundService instance = SmsBackgroundService._internal();
 
+  /// Telephony API for sending/receiving SMS
   final Telephony _telephony = Telephony.instance;
-  final DatabaseHelper _db = DatabaseHelper.instance;
-  final SystemModeManager _modeManager = SystemModeManager();
 
+  /// Database helper for all CRUD operations
+  final DatabaseHelper _db = DatabaseHelper.instance;
+
+  /// Manages system modes (Operating, Staff Away, Full, Maintenance)
+  /// Task 013 — Uses singleton so UI mode toggles are reflected in SMS replies
+  final SystemModeManager _modeManager = SystemModeManager.instance;
+
+  /// Tracks whether the SMS listener is currently active
   bool _isListening = false;
 
+  /// Stores pre-book context: maps a phone number to the delivery day
+  /// that was offered in the "Wrong Day" reply. When the customer replies
+  /// YES, we look up this map to know which day to create the pre-book for.
+  /// Key: phone number (String), Value: offered delivery day (String)
+  final Map<String, _PreBookContext> _preBookPending = {};
+
+  /// Private constructor — use [instance] to access
   SmsBackgroundService._internal();
 
+  /// Whether the service is currently listening for incoming SMS
   bool get isListening => _isListening;
 
+  /// Starts listening for incoming SMS messages.
+  /// Registers [_processIncomingSms] as the callback for new messages.
+  /// Does nothing if already listening (prevents duplicate listeners).
   Future<void> startListening() async {
+    // Guard: don't register the listener twice
     if (_isListening) return;
 
+    // Register the SMS listener callback with the Telephony API
     _telephony.listenIncomingSms(
       onNewMessage: (SmsMessage msg) {
         _processIncomingSms(msg);
@@ -36,27 +69,39 @@ class SmsBackgroundService {
     debugPrint('SMS Background Service started');
   }
 
+  /// Stops the SMS listener gracefully.
   void stopListening() {
     _isListening = false;
     debugPrint('SMS Background Service stopped');
   }
 
+  /// Changes the system operational mode.
+  /// This affects how the system responds to DELIVER and DROP commands.
   void setMode(SystemMode mode) {
     _modeManager.setMode(mode);
   }
 
+  /// Returns the current system mode (Operating, Staff Away, Full, Maintenance)
   SystemMode get currentMode => _modeManager.currentMode;
 
+  /// Main entry point for processing an incoming SMS message.
+  ///
+  /// Flow: Extract sender/body → Parse command → Route to handler
+  /// Each handler is responsible for validation, DB operations, and auto-reply.
   Future<void> _processIncomingSms(SmsMessage msg) async {
+    // Extract the sender phone number and message body from the SMS
     final sender = msg.address ?? '';
     final message = msg.body ?? '';
 
+    // Ignore messages with no sender (can't reply without a phone number)
     if (sender.isEmpty) return;
 
     debugPrint('SMS received from $sender: $message');
 
+    // Parse the raw message into a structured command object
     final parsed = SmsParser.parse(message);
 
+    // Route to the appropriate handler based on the parsed command type
     switch (parsed.command) {
       case SmsCommand.deliver:
         await _handleDeliver(sender, parsed);
@@ -71,19 +116,33 @@ class SmsBackgroundService {
         await _handleStatus(sender);
         break;
       case SmsCommand.unknown:
+        // Send help text for unrecognized commands
         await _sendReply(sender, SmsParser.getUnknownCommandReply());
         break;
     }
   }
 
+  /// Handles the DELIVER command — the core order processing flow.
+  ///
+  /// Full pipeline per Logic Flowchart:
+  /// 1. Check system mode — can we accept deliveries?
+  /// 2. Look up customer by phone number
+  /// 3. Validate zone/schedule for today
+  /// 4. Check order cutoff time (before/after 7:00 AM)
+  /// 5. Create order with appropriate status and delivery day
+  /// 6. Send auto-reply
   Future<void> _handleDeliver(String sender, ParsedSms parsed) async {
+    // Step 1: Mode gate — check if deliveries are accepted in current mode
+    // Only OPERATING mode accepts deliveries; other modes reject/delay
     if (!_modeManager.canAcceptDelivery()) {
       await _sendReply(sender, _modeManager.getDeliveryReply());
       return;
     }
 
+    // Step 2: Customer lookup — find the sender in the customer database
     final customerData = await _db.getCustomerByPhone(sender);
     if (customerData == null) {
+      // Phone number not registered — prompt them to register
       await _sendReply(
         sender,
         'Unknown number. Please register first or call the station.',
@@ -91,59 +150,120 @@ class SmsBackgroundService {
       return;
     }
 
-    final customer = Customer.fromMap(customerData);
-    final schedulesData = await _db.getSchedules();
+    // Step 3: Build customer object and fetch their active schedules
+    // We use getCustomersWithBarangay to get the joined barangay data
+    // needed for the Customer.fromMap() factory
+    final customerWithBarangay = await _db.getCustomersWithBarangay();
+    // Find this specific customer's joined record by matching the phone number
+    final customerJoined = customerWithBarangay.firstWhere(
+      (c) => c['contact_number'] == sender,
+    );
+    final customer = Customer.fromMap(customerJoined);
+
+    // Fetch this customer's active schedule records from the database
+    final schedulesData = await _db.getSchedulesForCustomer(customer.id!);
+    // Convert raw maps to Schedule model objects for the validator
     final schedules = schedulesData.map((s) => Schedule.fromMap(s)).toList();
+    // Get today's day name (e.g., 'Monday') for schedule comparison
     final today = DeliveryDays.getToday();
 
+    // Step 4: Zone validation — is this customer's zone scheduled for today?
     final validation = ZoneValidator.validate(
       customer: customer,
       schedules: schedules,
       currentDay: today,
     );
 
-    if (validation.result == ValidationResult.unregistered) {
-      await _sendReply(sender, validation.message!);
-      return;
-    }
-
+    // If the customer's zone doesn't match today's schedule
     if (validation.result == ValidationResult.invalidDay) {
+      // Store the pre-book context so _handleYes knows the details
+      // when the customer replies YES to the pre-book offer
+      if (validation.correctDay != null) {
+        _preBookPending[sender] = _PreBookContext(
+          customerId: customer.id!,
+          phoneNumber: sender,
+          quantity: parsed.quantity ?? 0,
+          gallonType: parsed.gallonType,
+          address: parsed.address,
+          deliveryDay: validation.correctDay!,
+        );
+      }
+      // Send the "Wrong Day" reply with pre-book offer
       await _sendReply(sender, validation.message!);
       return;
     }
 
+    // Step 5: Cutoff time check — determine if order is for today or queued
     final now = DateTime.now();
+    // Check if the current time is before the 7:00 AM cutoff
     final isBeforeCutoff =
         now.hour < AppConstants.orderCutOffHour ||
         (now.hour == AppConstants.orderCutOffHour &&
             now.minute < AppConstants.orderCutOffMinute);
 
+    // Determine delivery day and status based on cutoff
+    String? deliveryDay;
+    OrderStatus orderStatus;
+
+    if (isBeforeCutoff) {
+      // Before 7:00 AM → add to Today's Dispatch Manifest (FR-4.2)
+      deliveryDay = today;
+      orderStatus = OrderStatus.confirmed;
+    } else {
+      // After 7:00 AM → queue for PM trip or next scheduled day (FR-4.3)
+      // Find the next delivery day for this customer's zone
+      deliveryDay = _findNextAvailableDay(schedules, today);
+      orderStatus = OrderStatus.pending;
+    }
+
+    // Step 6: Create the order in the database
     final order = Order(
       customerId: customer.id,
       phoneNumber: sender,
       type: OrderType.deliver,
       quantity: parsed.quantity ?? 0,
+      // Pass through the gallon type from the parsed SMS (null if not specified)
+      gallonType: _mapGallonType(parsed.gallonType),
       address: parsed.address,
-      status: OrderStatus.confirmed,
+      status: orderStatus,
       createdAt: now,
-      deliveryDay: isBeforeCutoff ? today : null,
+      deliveryDay: deliveryDay,
     );
 
     await _db.insertOrder(order.toMap());
 
-    final reply = _modeManager.getDeliveryReply();
-    await _sendReply(sender, reply);
+    // Step 7: Send the appropriate auto-reply based on cutoff status
+    if (isBeforeCutoff) {
+      // Order confirmed for today
+      await _sendReply(sender, _modeManager.getDeliveryReply());
+    } else {
+      // Order queued — inform customer of the scheduled delivery day
+      await _sendReply(
+        sender,
+        'Order received. Past today\'s cutoff time. '
+        'Your order has been queued for $deliveryDay.',
+      );
+    }
   }
 
+  /// Handles the DROP command — walk-in/drop-off at the station.
+  ///
+  /// DROP bypasses the Zone Validator entirely (per Logic Flowchart Section 4)
+  /// because the customer is physically present at the station.
+  /// The priority action is logging the order and (future) triggering the alarm.
   Future<void> _handleDrop(String sender, ParsedSms parsed) async {
+    // Step 1: Mode gate — check if drop-offs are accepted
+    // Only MAINTENANCE mode rejects drop-offs; all others allow them
     if (!_modeManager.canAcceptDrop()) {
       await _sendReply(sender, _modeManager.getDropReply());
       return;
     }
 
+    // Step 2: Look up the customer (optional — drop-offs can be unregistered)
     final customerData = await _db.getCustomerByPhone(sender);
     final customerId = customerData?['id'] as int?;
 
+    // Step 3: Create the drop-off order in the database
     final order = Order(
       customerId: customerId,
       phoneNumber: sender,
@@ -155,28 +275,161 @@ class SmsBackgroundService {
 
     await _db.insertOrder(order.toMap());
 
+    // Step 4: Send the mode-appropriate auto-reply
+    // (e.g., "Staff will assist" or "Leave bottles at designated area")
     final reply = _modeManager.getDropReply();
     await _sendReply(sender, reply);
-  }
 
-  Future<void> _handleYes(String sender) async {
-    await _sendReply(
-      sender,
-      'Pre-book confirmed! We will deliver on your scheduled day.',
+    // Task 012 — Trigger loud alarm for walk-in customer
+    await AlarmService.instance.trigger(
+      phone: sender,
+      qty: parsed.quantity ?? 0,
     );
   }
 
+  /// Handles the YES command — confirms a pre-booking offer.
+  ///
+  /// When a customer gets a "Wrong Day" reply with a pre-book offer and
+  /// responds YES, we create a pre-booked order for their correct delivery day.
+  /// The pre-book context (quantity, day, etc.) was saved in [_preBookPending]
+  /// when the original DELIVER command was processed.
+  Future<void> _handleYes(String sender) async {
+    // Look up the pre-book context for this phone number
+    final context = _preBookPending[sender];
+
+    if (context == null) {
+      // No pending pre-book offer found — the customer sent YES unprompted
+      await _sendReply(
+        sender,
+        'No pending pre-book found. Please send a DELIVER command first.',
+      );
+      return;
+    }
+
+    // Create the pre-booked order with the saved context
+    final order = Order(
+      customerId: context.customerId,
+      phoneNumber: context.phoneNumber,
+      type: OrderType.deliver,
+      quantity: context.quantity,
+      gallonType: _mapGallonType(context.gallonType),
+      address: context.address,
+      // Pre-booked orders start as pending until the delivery day arrives
+      status: OrderStatus.pending,
+      createdAt: DateTime.now(),
+      // Set the delivery day to the correct scheduled day
+      deliveryDay: context.deliveryDay,
+      // Flag this as a pre-booked order for filtering/display
+      isPreBook: true,
+    );
+
+    // Insert the pre-booked order into the database
+    await _db.insertOrder(order.toMap());
+
+    // Remove the pending context — each YES is a one-time confirmation
+    _preBookPending.remove(sender);
+
+    // Confirm the pre-booking to the customer
+    await _sendReply(
+      sender,
+      'Pre-book confirmed! Your order of ${context.quantity} gallon(s) '
+      'is scheduled for ${context.deliveryDay}.',
+    );
+  }
+
+  /// Handles the STATUS command — returns the current system mode.
   Future<void> _handleStatus(String sender) async {
     final mode = _modeManager.currentMode;
+    // Send the display name of the current mode (e.g., 'OPERATING', 'STAFF AWAY')
     await _sendReply(sender, 'Current status: ${mode.displayName}');
   }
 
+  /// Sends an SMS reply to the specified phone number.
+  /// Wraps the Telephony API call with error handling to prevent
+  /// crashes if SMS sending fails (e.g., no signal, permission denied).
   Future<void> _sendReply(String phoneNumber, String message) async {
     try {
       await _telephony.sendSms(to: phoneNumber, message: message);
       debugPrint('Reply sent to $phoneNumber: $message');
     } catch (e) {
+      // Log the failure but don't crash — the background service must stay alive
       debugPrint('Failed to send reply: $e');
     }
   }
+
+  /// Finds the next available delivery day for a customer based on their schedules.
+  ///
+  /// Used when an order arrives after the cutoff time — the order is queued
+  /// for the next scheduled day instead of today.
+  /// Searches forward through the week starting from tomorrow.
+  String _findNextAvailableDay(List<Schedule> schedules, String currentDay) {
+    // Extract all allowed delivery days from the customer's schedules
+    final allowedDays = schedules.map((s) => s.deliveryDay).toSet();
+
+    // Get today's index in the week (0=Monday, 6=Sunday)
+    final todayIndex = DeliveryDays.days.indexOf(currentDay);
+
+    // Search forward starting from tomorrow, wrapping around the week
+    for (int offset = 1; offset <= 7; offset++) {
+      final checkIndex = (todayIndex + offset) % 7;
+      final checkDay = DeliveryDays.days[checkIndex];
+      // Return the first day that's in the customer's schedule
+      if (allowedDays.contains(checkDay)) {
+        return checkDay;
+      }
+    }
+
+    // Fallback — shouldn't reach here if customer has at least one schedule
+    return currentDay;
+  }
+
+  /// Maps a gallon type string from the SMS parser to the [GallonType] enum.
+  ///
+  /// The parser outputs lowercase strings ('new', 'old') or null.
+  /// This converts them to the model's enum type for database storage.
+  GallonType? _mapGallonType(String? gallonTypeStr) {
+    switch (gallonTypeStr) {
+      case 'new':
+        return GallonType.newGallon;
+      case 'old':
+        return GallonType.oldGallon;
+      default:
+        // Not specified in the SMS — gallon type is optional
+        return null;
+    }
+  }
+}
+
+/// Holds the context of a pending pre-book offer for a specific customer.
+///
+/// When a DELIVER command is rejected due to a wrong day, we store the
+/// order details here so that when the customer replies YES, we can
+/// create the pre-booked order with the correct information.
+class _PreBookContext {
+  /// The customer's database ID
+  final int customerId;
+
+  /// The phone number that sent the original DELIVER command
+  final String phoneNumber;
+
+  /// The requested quantity from the original DELIVER command
+  final int quantity;
+
+  /// The gallon type from the original DELIVER command (null if not specified)
+  final String? gallonType;
+
+  /// The delivery address from the original DELIVER command
+  final String? address;
+
+  /// The correct delivery day offered in the "Wrong Day" reply
+  final String deliveryDay;
+
+  _PreBookContext({
+    required this.customerId,
+    required this.phoneNumber,
+    required this.quantity,
+    this.gallonType,
+    this.address,
+    required this.deliveryDay,
+  });
 }
