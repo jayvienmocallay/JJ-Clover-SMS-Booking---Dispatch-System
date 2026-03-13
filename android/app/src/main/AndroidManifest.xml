@@ -1,8 +1,26 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Task 002 — SMS permissions: required for sending/receiving/reading customer orders -->
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
+
+    <!-- Task 002 — Battery optimization: allows the background SMS service to run persistently
+         without being killed by Android's battery saver (Doze mode).
+         Critical for the "Ghost Station" fix — the app must always be listening. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Task 002 — Foreground service: required for running the SMS listener as a persistent
+         foreground service with a notification, preventing Android from stopping it. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- Task 002 — Wake lock: keeps the CPU active to process incoming SMS even when the
+         screen is off. Ensures the background isolate stays responsive. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Task 002 — Exact alarm: allows scheduling precise alarm triggers for the DROP command
+         audio alert (FR-5) and future time-based dispatch reminders. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:label="JJ Clover"
