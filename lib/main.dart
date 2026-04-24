@@ -30,6 +30,7 @@ Future<void> main() async {
   if (!kIsWeb) {
     try {
       await DatabaseHelper.instance.database;
+      await DatabaseHelper.instance.ensureSchedulesSeeded();
       debugPrint('Database initialized successfully');
     } catch (e) {
       debugPrint('Database initialization error: $e');
@@ -122,7 +123,7 @@ class _PermissionGateState extends State<PermissionGate> {
 
     // Step 1: Request SMS permissions.
     final statuses = await [
-      Permission.sms,               // Covers SEND_SMS, RECEIVE_SMS, READ_SMS
+      Permission.sms, // Covers SEND_SMS, RECEIVE_SMS, READ_SMS
     ].request();
 
     // Step 2: Check if SMS permission was granted
@@ -199,7 +200,11 @@ class _PermissionGateState extends State<PermissionGate> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Warning icon to draw attention
-                const Icon(Icons.sms_failed, size: 64, color: AppColors.statusAway),
+                const Icon(
+                  Icons.sms_failed,
+                  size: 64,
+                  color: AppColors.statusAway,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'SMS Permissions Required',

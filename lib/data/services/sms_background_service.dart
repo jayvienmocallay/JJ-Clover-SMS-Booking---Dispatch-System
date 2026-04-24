@@ -6,6 +6,7 @@ import 'package:telephony/telephony.dart';
 import 'package:flutter/foundation.dart';
 import '../../database_helper.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/phone_number_utils.dart';
 import '../models/customer_model.dart';
 import '../models/schedule_model.dart';
 import '../models/order_model.dart';
@@ -132,6 +133,8 @@ class SmsBackgroundService {
   /// 5. Create order with appropriate status and delivery day
   /// 6. Send auto-reply
   Future<void> _handleDeliver(String sender, ParsedSms parsed) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+
     // Step 1: Mode gate — check if deliveries are accepted in current mode
     // Only OPERATING mode accepts deliveries; other modes reject/delay
     if (!_modeManager.canAcceptDelivery()) {
@@ -140,7 +143,7 @@ class SmsBackgroundService {
     }
 
     // Step 2: Customer lookup — find the sender in the customer database
-    final customerData = await _db.getCustomerByPhone(sender);
+    final customerData = await _db.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
       // Phone number not registered — prompt them to register
       await _sendReply(
@@ -153,11 +156,16 @@ class SmsBackgroundService {
     // Step 3: Build customer object and fetch their active schedules
     // We use getCustomersWithBarangay to get the joined barangay data
     // needed for the Customer.fromMap() factory
-    final customerWithBarangay = await _db.getCustomersWithBarangay();
-    // Find this specific customer's joined record by matching the phone number
-    final customerJoined = customerWithBarangay.firstWhere(
-      (c) => c['contact_number'] == sender,
+    final customerJoined = await _db.getCustomerWithBarangayByPhone(
+      normalizedSender,
     );
+    if (customerJoined == null) {
+      await _sendReply(
+        sender,
+        'Customer profile is incomplete. Please call the station.',
+      );
+      return;
+    }
     final customer = Customer.fromMap(customerJoined);
 
     // Fetch this customer's active schedule records from the database
@@ -179,9 +187,9 @@ class SmsBackgroundService {
       // Store the pre-book context so _handleYes knows the details
       // when the customer replies YES to the pre-book offer
       if (validation.correctDay != null) {
-        _preBookPending[sender] = _PreBookContext(
+        _preBookPending[normalizedSender] = _PreBookContext(
           customerId: customer.id!,
-          phoneNumber: sender,
+          phoneNumber: normalizedSender,
           quantity: parsed.quantity ?? 0,
           gallonType: parsed.gallonType,
           address: parsed.address,
@@ -219,7 +227,7 @@ class SmsBackgroundService {
     // Step 6: Create the order in the database
     final order = Order(
       customerId: customer.id,
-      phoneNumber: sender,
+      phoneNumber: normalizedSender,
       type: OrderType.deliver,
       quantity: parsed.quantity ?? 0,
       // Pass through the gallon type from the parsed SMS (null if not specified)
@@ -252,6 +260,8 @@ class SmsBackgroundService {
   /// because the customer is physically present at the station.
   /// The priority action is logging the order and (future) triggering the alarm.
   Future<void> _handleDrop(String sender, ParsedSms parsed) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+
     // Step 1: Mode gate — check if drop-offs are accepted
     // Only MAINTENANCE mode rejects drop-offs; all others allow them
     if (!_modeManager.canAcceptDrop()) {
@@ -260,13 +270,13 @@ class SmsBackgroundService {
     }
 
     // Step 2: Look up the customer (optional — drop-offs can be unregistered)
-    final customerData = await _db.getCustomerByPhone(sender);
+    final customerData = await _db.getCustomerByPhone(normalizedSender);
     final customerId = customerData?['id'] as int?;
 
     // Step 3: Create the drop-off order in the database
     final order = Order(
       customerId: customerId,
-      phoneNumber: sender,
+      phoneNumber: normalizedSender,
       type: OrderType.drop,
       quantity: parsed.quantity ?? 0,
       status: OrderStatus.pending,
@@ -294,8 +304,10 @@ class SmsBackgroundService {
   /// The pre-book context (quantity, day, etc.) was saved in [_preBookPending]
   /// when the original DELIVER command was processed.
   Future<void> _handleYes(String sender) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+
     // Look up the pre-book context for this phone number
-    final context = _preBookPending[sender];
+    final context = _preBookPending[normalizedSender];
 
     if (context == null) {
       // No pending pre-book offer found — the customer sent YES unprompted
@@ -327,7 +339,7 @@ class SmsBackgroundService {
     await _db.insertOrder(order.toMap());
 
     // Remove the pending context — each YES is a one-time confirmation
-    _preBookPending.remove(sender);
+    _preBookPending.remove(normalizedSender);
 
     // Confirm the pre-booking to the customer
     await _sendReply(

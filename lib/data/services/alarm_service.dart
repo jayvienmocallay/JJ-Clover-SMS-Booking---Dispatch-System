@@ -43,7 +43,7 @@ class AlarmService extends ChangeNotifier {
       // Loop the alarm
       await _player.setReleaseMode(ReleaseMode.loop);
       // Play the alarm sound asset
-      await _player.play(AssetSource('audio/alarm.mp3'));
+      await _player.play(AssetSource('audio/alarm.wav'));
       debugPrint('AlarmService: Alarm triggered for DROP from $phone ($qty gal)');
     } catch (e) {
       debugPrint('AlarmService: Error playing alarm — $e');

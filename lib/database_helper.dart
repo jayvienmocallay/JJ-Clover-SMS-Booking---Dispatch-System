@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/constants/app_constants.dart';
+import 'core/utils/phone_number_utils.dart';
 
 // Task 005 — Singleton DatabaseHelper for encrypted SQLCipher access
 class DatabaseHelper {
@@ -18,6 +19,16 @@ class DatabaseHelper {
     if (_database != null) return _database!;
     _database = await _initDB('clover_secure.db');
     return _database!;
+  }
+
+  /// Ensures default schedules exist for databases created before schedule
+  /// seeding was added.
+  Future<void> ensureSchedulesSeeded() async {
+    final db = await database;
+    final existingSchedules = await db.query('schedules', limit: 1);
+    if (existingSchedules.isEmpty) {
+      await _seedSchedules(db);
+    }
   }
 
   // Retrieve or generate the database password securely
@@ -411,9 +422,9 @@ class DatabaseHelper {
       // Insert one schedule record per allowed delivery day
       for (final day in deliveryDays) {
         await db.insert('schedules', {
-          'customer_id': customerId,  // Links schedule to this customer
-          'delivery_day': day,        // The day they can receive deliveries
-          'status': 'active',         // All seeded schedules start as active
+          'customer_id': customerId, // Links schedule to this customer
+          'delivery_day': day, // The day they can receive deliveries
+          'status': 'active', // All seeded schedules start as active
         });
       }
     }
@@ -455,7 +466,14 @@ class DatabaseHelper {
   /// Insert a new customer
   Future<int> insertCustomer(Map<String, dynamic> customerData) async {
     final db = await instance.database;
-    return await db.insert('customers', customerData);
+    final normalizedData = Map<String, dynamic>.from(customerData);
+    final contactNumber = normalizedData['contact_number'] as String?;
+    if (contactNumber != null) {
+      normalizedData['contact_number'] = PhoneNumberUtils.normalize(
+        contactNumber,
+      );
+    }
+    return await db.insert('customers', normalizedData);
   }
 
   /// Get all customers (raw)
@@ -481,10 +499,32 @@ class DatabaseHelper {
   /// Find a customer by phone number
   Future<Map<String, dynamic>?> getCustomerByPhone(String phoneNumber) async {
     final db = await instance.database;
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
     final result = await db.query(
       'customers',
       where: 'contact_number = ?',
-      whereArgs: [phoneNumber],
+      whereArgs: [normalizedPhone],
+    );
+    return result.isNotEmpty ? result.first : null;
+  }
+
+  /// Find a customer by phone number with joined barangay and zone details.
+  Future<Map<String, dynamic>?> getCustomerWithBarangayByPhone(
+    String phoneNumber,
+  ) async {
+    final db = await instance.database;
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
+    final result = await db.rawQuery(
+      '''
+      SELECT c.id, c.name, c.contact_number, c.address,
+             c.barangay_id,
+             b.name AS barangay, b.delivery_zone
+      FROM customers c
+      INNER JOIN barangays b ON c.barangay_id = b.id
+      WHERE c.contact_number = ?
+      LIMIT 1
+    ''',
+      [normalizedPhone],
     );
     return result.isNotEmpty ? result.first : null;
   }
@@ -521,7 +561,12 @@ class DatabaseHelper {
 
   Future<int> insertOrder(Map<String, dynamic> orderData) async {
     final db = await instance.database;
-    return await db.insert('orders', orderData);
+    final normalizedData = Map<String, dynamic>.from(orderData);
+    final phoneNumber = normalizedData['phone_number'] as String?;
+    if (phoneNumber != null) {
+      normalizedData['phone_number'] = PhoneNumberUtils.normalize(phoneNumber);
+    }
+    return await db.insert('orders', normalizedData);
   }
 
   Future<List<Map<String, dynamic>>> getOrders({
