@@ -106,7 +106,7 @@ class _PermissionGateState extends State<PermissionGate> {
   /// Requests all runtime permissions required by the app.
   ///
   /// Permission flow:
-  /// 1. Request SMS and phone permissions (grouped by Android)
+  /// 1. Request SMS permissions
   /// 2. Request battery optimization exemption (separate system dialog)
   /// 3. Update state based on results
   Future<void> _requestPermissions() async {
@@ -120,17 +120,13 @@ class _PermissionGateState extends State<PermissionGate> {
       return;
     }
 
-    // Step 1: Request SMS and phone permissions.
-    // Android groups these into a single dialog for the user.
+    // Step 1: Request SMS permissions.
     final statuses = await [
       Permission.sms,               // Covers SEND_SMS, RECEIVE_SMS, READ_SMS
-      Permission.phone,             // Required by the telephony package
     ].request();
 
     // Step 2: Check if SMS permission was granted
     final smsGranted = statuses[Permission.sms]?.isGranted ?? false;
-    // Check if phone permission was granted
-    final phoneGranted = statuses[Permission.phone]?.isGranted ?? false;
 
     // Step 3: Request battery optimization exemption.
     // This shows a separate system dialog asking the user to allow
@@ -141,11 +137,10 @@ class _PermissionGateState extends State<PermissionGate> {
 
     // Log the results for debugging
     debugPrint('SMS permission: $smsGranted');
-    debugPrint('Phone permission: $phoneGranted');
     debugPrint('Battery optimization exemption: $batteryGranted');
 
     // Update state — the UI will show the app or a permission prompt
-    final allGranted = smsGranted && phoneGranted;
+    final allGranted = smsGranted;
     setState(() {
       // All critical permissions must be granted for the app to function
       _permissionsGranted = allGranted;
@@ -154,7 +149,7 @@ class _PermissionGateState extends State<PermissionGate> {
 
     // Task 009 — Start SMS background service once permissions are confirmed.
     // The service listens for incoming SMS and processes them as commands.
-    // Must start AFTER SMS + phone permissions are granted, otherwise
+    // Must start AFTER SMS permissions are granted, otherwise
     // the telephony plugin will fail silently.
     if (allGranted) {
       await SmsBackgroundService.instance.startListening();
@@ -217,7 +212,7 @@ class _PermissionGateState extends State<PermissionGate> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'This app needs SMS and phone permissions to process '
+                  'This app needs SMS permissions to process '
                   'customer orders. Please grant the permissions to continue.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppColors.mutedForeground),
