@@ -2,8 +2,9 @@
 // Task 007 — Pre-book context cache, cutoff time queuing, gallon type passthrough
 // Task 008 — Zone-specific validation integration, next-day scheduling
 import 'dart:async';
+import 'dart:ui';
 import 'package:telephony/telephony.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import '../../database_helper.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/phone_number_utils.dart';
@@ -14,6 +15,18 @@ import 'sms_parser.dart';
 import 'zone_validator.dart';
 import 'system_mode_manager.dart';
 import 'alarm_service.dart';
+
+/// Entry point used by Android when an SMS arrives while Flutter is backgrounded.
+@pragma('vm:entry-point')
+Future<void> smsBackgroundMessageHandler(SmsMessage msg) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+
+  await SmsBackgroundService.instance._processIncomingSms(
+    msg,
+    smsSender: Telephony.backgroundInstance,
+  );
+}
 
 /// Background SMS service that listens for incoming messages and processes
 /// them as commands (DELIVER, DROP, YES, STATUS).
@@ -64,6 +77,7 @@ class SmsBackgroundService {
       onNewMessage: (SmsMessage msg) {
         _processIncomingSms(msg);
       },
+      onBackgroundMessage: smsBackgroundMessageHandler,
     );
 
     _isListening = true;
@@ -89,7 +103,10 @@ class SmsBackgroundService {
   ///
   /// Flow: Extract sender/body → Parse command → Route to handler
   /// Each handler is responsible for validation, DB operations, and auto-reply.
-  Future<void> _processIncomingSms(SmsMessage msg) async {
+  Future<void> _processIncomingSms(
+    SmsMessage msg, {
+    Telephony? smsSender,
+  }) async {
     // Extract the sender phone number and message body from the SMS
     final sender = msg.address ?? '';
     final message = msg.body ?? '';
@@ -105,20 +122,24 @@ class SmsBackgroundService {
     // Route to the appropriate handler based on the parsed command type
     switch (parsed.command) {
       case SmsCommand.deliver:
-        await _handleDeliver(sender, parsed);
+        await _handleDeliver(sender, parsed, smsSender: smsSender);
         break;
       case SmsCommand.drop:
-        await _handleDrop(sender, parsed);
+        await _handleDrop(sender, parsed, smsSender: smsSender);
         break;
       case SmsCommand.yes:
-        await _handleYes(sender);
+        await _handleYes(sender, smsSender: smsSender);
         break;
       case SmsCommand.status:
-        await _handleStatus(sender);
+        await _handleStatus(sender, smsSender: smsSender);
         break;
       case SmsCommand.unknown:
         // Send help text for unrecognized commands
-        await _sendReply(sender, SmsParser.getUnknownCommandReply());
+        await _sendReply(
+          sender,
+          SmsParser.getUnknownCommandReply(),
+          smsSender: smsSender,
+        );
         break;
     }
   }
@@ -132,13 +153,21 @@ class SmsBackgroundService {
   /// 4. Check order cutoff time (before/after 7:00 AM)
   /// 5. Create order with appropriate status and delivery day
   /// 6. Send auto-reply
-  Future<void> _handleDeliver(String sender, ParsedSms parsed) async {
+  Future<void> _handleDeliver(
+    String sender,
+    ParsedSms parsed, {
+    Telephony? smsSender,
+  }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
 
     // Step 1: Mode gate — check if deliveries are accepted in current mode
     // Only OPERATING mode accepts deliveries; other modes reject/delay
     if (!_modeManager.canAcceptDelivery()) {
-      await _sendReply(sender, _modeManager.getDeliveryReply());
+      await _sendReply(
+        sender,
+        _modeManager.getDeliveryReply(),
+        smsSender: smsSender,
+      );
       return;
     }
 
@@ -149,6 +178,7 @@ class SmsBackgroundService {
       await _sendReply(
         sender,
         'Unknown number. Please register first or call the station.',
+        smsSender: smsSender,
       );
       return;
     }
@@ -163,6 +193,7 @@ class SmsBackgroundService {
       await _sendReply(
         sender,
         'Customer profile is incomplete. Please call the station.',
+        smsSender: smsSender,
       );
       return;
     }
@@ -197,7 +228,7 @@ class SmsBackgroundService {
         );
       }
       // Send the "Wrong Day" reply with pre-book offer
-      await _sendReply(sender, validation.message!);
+      await _sendReply(sender, validation.message!, smsSender: smsSender);
       return;
     }
 
@@ -243,13 +274,18 @@ class SmsBackgroundService {
     // Step 7: Send the appropriate auto-reply based on cutoff status
     if (isBeforeCutoff) {
       // Order confirmed for today
-      await _sendReply(sender, _modeManager.getDeliveryReply());
+      await _sendReply(
+        sender,
+        _modeManager.getDeliveryReply(),
+        smsSender: smsSender,
+      );
     } else {
       // Order queued — inform customer of the scheduled delivery day
       await _sendReply(
         sender,
         'Order received. Past today\'s cutoff time. '
         'Your order has been queued for $deliveryDay.',
+        smsSender: smsSender,
       );
     }
   }
@@ -259,13 +295,21 @@ class SmsBackgroundService {
   /// DROP bypasses the Zone Validator entirely (per Logic Flowchart Section 4)
   /// because the customer is physically present at the station.
   /// The priority action is logging the order and (future) triggering the alarm.
-  Future<void> _handleDrop(String sender, ParsedSms parsed) async {
+  Future<void> _handleDrop(
+    String sender,
+    ParsedSms parsed, {
+    Telephony? smsSender,
+  }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
 
     // Step 1: Mode gate — check if drop-offs are accepted
     // Only MAINTENANCE mode rejects drop-offs; all others allow them
     if (!_modeManager.canAcceptDrop()) {
-      await _sendReply(sender, _modeManager.getDropReply());
+      await _sendReply(
+        sender,
+        _modeManager.getDropReply(),
+        smsSender: smsSender,
+      );
       return;
     }
 
@@ -288,7 +332,7 @@ class SmsBackgroundService {
     // Step 4: Send the mode-appropriate auto-reply
     // (e.g., "Staff will assist" or "Leave bottles at designated area")
     final reply = _modeManager.getDropReply();
-    await _sendReply(sender, reply);
+    await _sendReply(sender, reply, smsSender: smsSender);
 
     // Task 012 — Trigger loud alarm for walk-in customer
     await AlarmService.instance.trigger(
@@ -303,7 +347,7 @@ class SmsBackgroundService {
   /// responds YES, we create a pre-booked order for their correct delivery day.
   /// The pre-book context (quantity, day, etc.) was saved in [_preBookPending]
   /// when the original DELIVER command was processed.
-  Future<void> _handleYes(String sender) async {
+  Future<void> _handleYes(String sender, {Telephony? smsSender}) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
 
     // Look up the pre-book context for this phone number
@@ -314,6 +358,7 @@ class SmsBackgroundService {
       await _sendReply(
         sender,
         'No pending pre-book found. Please send a DELIVER command first.',
+        smsSender: smsSender,
       );
       return;
     }
@@ -346,22 +391,34 @@ class SmsBackgroundService {
       sender,
       'Pre-book confirmed! Your order of ${context.quantity} gallon(s) '
       'is scheduled for ${context.deliveryDay}.',
+      smsSender: smsSender,
     );
   }
 
   /// Handles the STATUS command — returns the current system mode.
-  Future<void> _handleStatus(String sender) async {
+  Future<void> _handleStatus(String sender, {Telephony? smsSender}) async {
     final mode = _modeManager.currentMode;
     // Send the display name of the current mode (e.g., 'OPERATING', 'STAFF AWAY')
-    await _sendReply(sender, 'Current status: ${mode.displayName}');
+    await _sendReply(
+      sender,
+      'Current status: ${mode.displayName}',
+      smsSender: smsSender,
+    );
   }
 
   /// Sends an SMS reply to the specified phone number.
   /// Wraps the Telephony API call with error handling to prevent
   /// crashes if SMS sending fails (e.g., no signal, permission denied).
-  Future<void> _sendReply(String phoneNumber, String message) async {
+  Future<void> _sendReply(
+    String phoneNumber,
+    String message, {
+    Telephony? smsSender,
+  }) async {
     try {
-      await _telephony.sendSms(to: phoneNumber, message: message);
+      await (smsSender ?? _telephony).sendSms(
+        to: phoneNumber,
+        message: message,
+      );
       debugPrint('Reply sent to $phoneNumber: $message');
     } catch (e) {
       // Log the failure but don't crash — the background service must stay alive
