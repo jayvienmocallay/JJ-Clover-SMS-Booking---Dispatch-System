@@ -267,11 +267,12 @@ class SmsBackgroundService {
 
     // Step 5: Cutoff time check — determine if order is for today or queued
     final now = DateTime.now();
-    // Check if the current time is before the 7:00 AM cutoff
+    final cutoffHour = await _db.getCutoffHour();
+    final cutoffMinute = await _db.getCutoffMinute();
     final isBeforeCutoff =
-        now.hour < AppConstants.orderCutOffHour ||
-        (now.hour == AppConstants.orderCutOffHour &&
-            now.minute < AppConstants.orderCutOffMinute);
+        now.hour < cutoffHour ||
+        (now.hour == cutoffHour &&
+            now.minute < cutoffMinute);
 
     // Determine delivery day and status based on cutoff
     String? deliveryDay;

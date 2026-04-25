@@ -21,20 +21,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _barangayController = TextEditingController();
   List<Map<String, dynamic>> _barangays = [];
 
-  // Editable cutoff time (in-memory override of AppConstants)
+  // Editable cutoff time - loaded from persisted settings
   int _cutoffHour = AppConstants.orderCutOffHour;
   int _cutoffMinute = AppConstants.orderCutOffMinute;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadBarangays();
+    _loadData();
   }
 
-  Future<void> _loadBarangays() async {
-    if (kIsWeb) return;
+  Future<void> _loadData() async {
+    if (kIsWeb) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     final barangays = await DatabaseHelper.instance.getBarangays();
-    if (mounted) setState(() => _barangays = barangays);
+    final hour = await DatabaseHelper.instance.getCutoffHour();
+    final minute = await DatabaseHelper.instance.getCutoffMinute();
+    if (mounted) {
+      setState(() {
+        _barangays = barangays;
+        _cutoffHour = hour;
+        _cutoffMinute = minute;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _addBarangay() async {
@@ -57,12 +70,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'delivery_zone': 'Zone A', // Default zone — can be changed later
     });
     _barangayController.clear();
-    await _loadBarangays();
+    await _loadData();
   }
 
   Future<void> _removeBarangay(int id) async {
     await DatabaseHelper.instance.deleteBarangay(id);
-    await _loadBarangays();
+    await _loadData();
   }
 
   void _showTimePicker() async {
@@ -86,6 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (picked != null) {
+      await DatabaseHelper.instance.setCutoffTime(picked.hour, picked.minute);
       setState(() {
         _cutoffHour = picked.hour;
         _cutoffMinute = picked.minute;
@@ -119,6 +133,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
