@@ -5,19 +5,37 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/constants/app_constants.dart';
+import 'core/utils/phone_number_utils.dart';
 
 // Task 005 — Singleton DatabaseHelper for encrypted SQLCipher access
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
+  static bool _schemaIntegrityChecked = false;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   DatabaseHelper._init();
 
   Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB('clover_secure.db');
-    return _database!;
+    if (_database != null) {
+      await _ensureSchemaIntegrity(_database!);
+      return _database!;
+    }
+
+    final db = await _initDB('clover_secure.db');
+    _database = db;
+    await _ensureSchemaIntegrity(db);
+    return db;
+  }
+
+  /// Ensures default schedules exist for databases created before schedule
+  /// seeding was added.
+  Future<void> ensureSchedulesSeeded() async {
+    final db = await database;
+    final existingSchedules = await db.query('schedules', limit: 1);
+    if (existingSchedules.isEmpty) {
+      await _seedSchedules(db);
+    }
   }
 
   // Retrieve or generate the database password securely
@@ -42,16 +60,16 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       password: password,
-      // Version 2: Added address to customers, gallon_type/staff_id to orders,
-      // and created delivery_logs table
-      version: 2,
+      // Version 3: Adds app_settings for isolate-safe runtime state such as
+      // the current system mode.
+      version: 3,
       onCreate: _createSchema,
       // Handles upgrading existing v1 databases to v2 schema
       onUpgrade: _upgradeSchema,
     );
   }
 
-  // Task 005 — Create all tables (schema v2)
+  // Task 005 — Create all tables (schema v3)
   Future _createSchema(Database db, int version) async {
     // Task 001 — 1. Barangays Lookup Table (zone mapping from interview)
     await db.execute('''
@@ -99,6 +117,7 @@ class DatabaseHelper {
         gallon_type TEXT,
         address TEXT,
         status TEXT NOT NULL,
+        cancel_reason TEXT,
         created_at TEXT NOT NULL,
         delivery_day TEXT,
         is_pre_book INTEGER DEFAULT 0,
@@ -106,6 +125,26 @@ class DatabaseHelper {
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
       )
     ''');
+
+    // Add indexes for query performance
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_number)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)',
+    );
 
     // Task 005 — 5. Delivery Logs Table (per-household accountability)
     // Records per-household delivery details for accountability and loss tracking.
@@ -125,6 +164,19 @@ class DatabaseHelper {
       )
     ''');
 
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_delivery_logs_order ON delivery_logs(order_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_delivery_logs_customer ON delivery_logs(customer_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_delivery_logs_delivered ON delivery_logs(delivered_at)',
+    );
+
+    await _createSmsMessagesTable(db);
+    await _createAppSettingsTable(db);
+
     // Task 006 — Seed default data in order: barangays first, then customers, then schedules.
     // Order matters because of foreign key dependencies:
     // schedules -> customers -> barangays
@@ -133,7 +185,7 @@ class DatabaseHelper {
     await _seedSchedules(db);
   }
 
-  // Task 005 — Database migration: v1 → v2 schema upgrade
+  // Task 005 — Database migration: v1 → current schema upgrade
   /// Handles upgrading the database schema from an older version to the current one.
   ///
   /// v1 → v2 changes:
@@ -142,6 +194,9 @@ class DatabaseHelper {
   /// - Added `staff_id` column to orders (staff assignment & accountability)
   /// - Created `delivery_logs` table (per-household delivery tracking)
   /// - Seeded schedules if missing from v1
+  ///
+  /// v2 → v3 changes:
+  /// - Created `app_settings` table for persisted runtime settings
   Future _upgradeSchema(Database db, int oldVersion, int newVersion) async {
     // Migrate from version 1 to version 2
     if (oldVersion < 2) {
@@ -153,6 +208,9 @@ class DatabaseHelper {
 
       // Add staff assignment column for delivery accountability
       await db.execute('ALTER TABLE orders ADD COLUMN staff_id INTEGER');
+
+      // Add cancel reason column for rejected orders
+      await db.execute('ALTER TABLE orders ADD COLUMN cancel_reason TEXT');
 
       // Create the delivery_logs table for per-household tracking
       await db.execute('''
@@ -175,6 +233,100 @@ class DatabaseHelper {
       if (existingSchedules.isEmpty) {
         await _seedSchedules(db);
       }
+
+      // Add indexes for query performance (idempotent)
+      try {
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_number)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_delivery_logs_order ON delivery_logs(order_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_delivery_logs_customer ON delivery_logs(customer_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_delivery_logs_delivered ON delivery_logs(delivered_at)',
+        );
+      } catch (_) {}
+    }
+
+    if (oldVersion < 3) {
+      await _createAppSettingsTable(db);
+    }
+
+    // Create sms_messages table if not exists (for old databases)
+    await _createSmsMessagesTable(db);
+  }
+
+  Future<void> _createAppSettingsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createSmsMessagesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sms_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone_number TEXT NOT NULL,
+        message TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        related_order_id INTEGER,
+        status TEXT,
+        sent_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sms_phone ON sms_messages(phone_number)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sms_direction ON sms_messages(direction)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sms_sent ON sms_messages(sent_at)',
+    );
+  }
+
+  Future<void> _ensureSchemaIntegrity(Database db) async {
+    if (_schemaIntegrityChecked) return;
+
+    await _createAppSettingsTable(db);
+    await _createSmsMessagesTable(db);
+    await _addColumnIfMissing(db, 'orders', 'cancel_reason', 'TEXT');
+
+    _schemaIntegrityChecked = true;
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = columns.any((row) => row['name'] == column);
+    if (!exists) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
     }
   }
 
@@ -200,179 +352,10 @@ class DatabaseHelper {
     }
   }
 
-  // Task 006 — Pre-populate customers with synthetic data
+  // Task 006 — Pre-populate customers (no longer seeded with sample data)
+  // Customers are now added via the app UI
   Future<void> _seedCustomers(Database db) async {
-    final defaultCustomers = [
-      // Zone A — San Isidro (barangay_id: 1)
-      // Station vicinity — customers can walk in or request same-day delivery
-      {
-        'name': 'Maria Santos',
-        'contact_number': '09171000001',
-        'address': 'Purok 1, near barangay hall',
-        'barangay_id': 1,
-      },
-      {
-        'name': 'Juan dela Cruz',
-        'contact_number': '09171000002',
-        'address': 'Purok 2, beside sari-sari store',
-        'barangay_id': 1,
-      },
-      {
-        'name': 'Rosa Reyes',
-        'contact_number': '09171000003',
-        'address': 'Purok 3, corner house',
-        'barangay_id': 1,
-      },
-      // Zone A — San Jose (barangay_id: 2)
-      {
-        'name': 'Pedro Garcia',
-        'contact_number': '09171000004',
-        'address': 'Purok 1, near chapel',
-        'barangay_id': 2,
-      },
-      {
-        'name': 'Ana Mendoza',
-        'contact_number': '09171000005',
-        'address': 'Purok 2, along main road',
-        'barangay_id': 2,
-      },
-      // Zone B — Poblacion (barangay_id: 3)
-      // Near barangays — pedicab delivery on scheduled days
-      {
-        'name': 'Carlos Ramos',
-        'contact_number': '09171000006',
-        'address': 'Purok 4, near public market',
-        'barangay_id': 3,
-      },
-      {
-        'name': 'Elena Torres',
-        'contact_number': '09171000007',
-        'address': 'Purok 5, beside health center',
-        'barangay_id': 3,
-      },
-      {
-        'name': 'Roberto Cruz',
-        'contact_number': '09171000008',
-        'address': 'Purok 6, along national highway',
-        'barangay_id': 3,
-      },
-      // Zone B — Santa Rosa (barangay_id: 4)
-      {
-        'name': 'Liza Navarro',
-        'contact_number': '09171000009',
-        'address': 'Purok 1, near elementary school',
-        'barangay_id': 4,
-      },
-      {
-        'name': 'Miguel Aquino',
-        'contact_number': '09171000010',
-        'address': 'Purok 2, end of paved road',
-        'barangay_id': 4,
-      },
-      // Zone C — Santo Niño (barangay_id: 5)
-      // Far/mountain barangays — weekly delivery schedule
-      {
-        'name': 'Teresa Villanueva',
-        'contact_number': '09171000011',
-        'address': 'Sitio Upper, near water tank',
-        'barangay_id': 5,
-      },
-      {
-        'name': 'Ramon Bautista',
-        'contact_number': '09171000012',
-        'address': 'Sitio Lower, along creek',
-        'barangay_id': 5,
-      },
-      // Zone C — Semong (barangay_id: 6)
-      {
-        'name': 'Gloria Pascual',
-        'contact_number': '09171000013',
-        'address': 'Purok 1, hilltop area',
-        'barangay_id': 6,
-      },
-      {
-        'name': 'Ernesto Diaz',
-        'contact_number': '09171000014',
-        'address': 'Purok 2, near barangay outpost',
-        'barangay_id': 6,
-      },
-      // Zone C — Gabuyan (barangay_id: 7)
-      {
-        'name': 'Cynthia Flores',
-        'contact_number': '09171000015',
-        'address': 'Sitio Centro, main junction',
-        'barangay_id': 7,
-      },
-      {
-        'name': 'Alberto Lopez',
-        'contact_number': '09171000016',
-        'address': 'Sitio Riverside, near bridge',
-        'barangay_id': 7,
-      },
-      // Zone C — Bunawan (barangay_id: 8)
-      {
-        'name': 'Nelia Soriano',
-        'contact_number': '09171000017',
-        'address': 'Purok 3, mountain trail entrance',
-        'barangay_id': 8,
-      },
-      {
-        'name': 'Danny Castillo',
-        'contact_number': '09171000018',
-        'address': 'Purok 4, near coconut farm',
-        'barangay_id': 8,
-      },
-      // Zone C — Katipunan (barangay_id: 9)
-      {
-        'name': 'Beatriz Salazar',
-        'contact_number': '09171000019',
-        'address': 'Sitio Bukid, uphill road',
-        'barangay_id': 9,
-      },
-      {
-        'name': 'Fernando Rivera',
-        'contact_number': '09171000020',
-        'address': 'Sitio Crossing, near waiting shed',
-        'barangay_id': 9,
-      },
-      // Zone C — Dagohoy (barangay_id: 10)
-      {
-        'name': 'Josefa Mangubat',
-        'contact_number': '09171000021',
-        'address': 'Purok 1, near day care center',
-        'barangay_id': 10,
-      },
-      {
-        'name': 'Ricky Pelaez',
-        'contact_number': '09171000022',
-        'address': 'Purok 2, end of dirt road',
-        'barangay_id': 10,
-      },
-      // Zone C — Tiburcia (barangay_id: 11)
-      {
-        'name': 'Maricel Tan',
-        'contact_number': '09171000023',
-        'address': 'Sitio Taas, mountain barangay',
-        'barangay_id': 11,
-      },
-      {
-        'name': 'Joel Fernandez',
-        'contact_number': '09171000024',
-        'address': 'Sitio Ubos, lower portion',
-        'barangay_id': 11,
-      },
-      // Zone C — Clementa (barangay_id: 12)
-      {
-        'name': 'Luz Morales',
-        'contact_number': '09171000025',
-        'address': 'Purok 1, near spring source',
-        'barangay_id': 12,
-      },
-    ];
-
-    for (final customer in defaultCustomers) {
-      await db.insert('customers', customer);
-    }
+    // No sample data - customers added via app
   }
 
   /// Seeds the schedules table by assigning delivery days to each customer
@@ -411,9 +394,9 @@ class DatabaseHelper {
       // Insert one schedule record per allowed delivery day
       for (final day in deliveryDays) {
         await db.insert('schedules', {
-          'customer_id': customerId,  // Links schedule to this customer
-          'delivery_day': day,        // The day they can receive deliveries
-          'status': 'active',         // All seeded schedules start as active
+          'customer_id': customerId, // Links schedule to this customer
+          'delivery_day': day, // The day they can receive deliveries
+          'status': 'active', // All seeded schedules start as active
         });
       }
     }
@@ -450,12 +433,48 @@ class DatabaseHelper {
     return await db.delete('barangays', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Delete a customer by ID
+  Future<int> deleteCustomer(int id) async {
+    final db = await instance.database;
+    return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+  }
+
   // Task 003, Task 005 — Customer CRUD operations
 
-  /// Insert a new customer
+  /// Insert a new customer and automatically create schedules based on barangay zone
   Future<int> insertCustomer(Map<String, dynamic> customerData) async {
     final db = await instance.database;
-    return await db.insert('customers', customerData);
+    final normalizedData = Map<String, dynamic>.from(customerData);
+    final contactNumber = normalizedData['contact_number'] as String?;
+    if (contactNumber != null) {
+      normalizedData['contact_number'] = PhoneNumberUtils.normalize(
+        contactNumber,
+      );
+    }
+    final customerId = await db.insert('customers', normalizedData);
+
+    // Auto-create schedules based on barangay's delivery zone
+    final barangayId = normalizedData['barangay_id'] as int?;
+    if (barangayId != null) {
+      final barangay = await getBarangayById(barangayId);
+      if (barangay != null) {
+        final zone = barangay['delivery_zone'] as String;
+        final barangayName = barangay['name'] as String;
+        final deliveryDays = ZoneScheduleMap.getDaysForZone(
+          zone,
+          barangayName: barangayName,
+        );
+        for (final day in deliveryDays) {
+          await db.insert('schedules', {
+            'customer_id': customerId,
+            'delivery_day': day,
+            'status': 'active',
+          });
+        }
+      }
+    }
+
+    return customerId;
   }
 
   /// Get all customers (raw)
@@ -481,10 +500,32 @@ class DatabaseHelper {
   /// Find a customer by phone number
   Future<Map<String, dynamic>?> getCustomerByPhone(String phoneNumber) async {
     final db = await instance.database;
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
     final result = await db.query(
       'customers',
       where: 'contact_number = ?',
-      whereArgs: [phoneNumber],
+      whereArgs: [normalizedPhone],
+    );
+    return result.isNotEmpty ? result.first : null;
+  }
+
+  /// Find a customer by phone number with joined barangay and zone details.
+  Future<Map<String, dynamic>?> getCustomerWithBarangayByPhone(
+    String phoneNumber,
+  ) async {
+    final db = await instance.database;
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
+    final result = await db.rawQuery(
+      '''
+      SELECT c.id, c.name, c.contact_number, c.address,
+             c.barangay_id,
+             b.name AS barangay, b.delivery_zone
+      FROM customers c
+      INNER JOIN barangays b ON c.barangay_id = b.id
+      WHERE c.contact_number = ?
+      LIMIT 1
+    ''',
+      [normalizedPhone],
     );
     return result.isNotEmpty ? result.first : null;
   }
@@ -521,7 +562,12 @@ class DatabaseHelper {
 
   Future<int> insertOrder(Map<String, dynamic> orderData) async {
     final db = await instance.database;
-    return await db.insert('orders', orderData);
+    final normalizedData = Map<String, dynamic>.from(orderData);
+    final phoneNumber = normalizedData['phone_number'] as String?;
+    if (phoneNumber != null) {
+      normalizedData['phone_number'] = PhoneNumberUtils.normalize(phoneNumber);
+    }
+    return await db.insert('orders', normalizedData);
   }
 
   Future<List<Map<String, dynamic>>> getOrders({
@@ -548,14 +594,13 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> updateOrderStatus(int id, String status) async {
+  Future<int> updateOrderStatus(int id, String status, {String? reason}) async {
     final db = await instance.database;
-    return await db.update(
-      'orders',
-      {'status': status},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final data = <String, dynamic>{'status': status};
+    if (reason != null && reason.isNotEmpty) {
+      data['cancel_reason'] = reason;
+    }
+    return await db.update('orders', data, where: 'id = ?', whereArgs: [id]);
   }
 
   // Task 005 — Delivery Log CRUD operations
@@ -613,5 +658,171 @@ class DatabaseHelper {
       whereArgs: [today],
       orderBy: 'delivered_at DESC',
     );
+  }
+
+  // --- SMS Messages CRUD ---
+
+  /// Insert an SMS message (incoming or outgoing)
+  Future<int> insertSmsMessage(Map<String, dynamic> messageData) async {
+    final db = await instance.database;
+    return await db.insert('sms_messages', messageData);
+  }
+
+  /// Get all SMS messages for a phone number
+  Future<List<Map<String, dynamic>>> getSmsMessagesForPhone(
+    String phoneNumber, {
+    int? limit,
+  }) async {
+    final db = await instance.database;
+    return await db.query(
+      'sms_messages',
+      where: 'phone_number = ?',
+      whereArgs: [phoneNumber],
+      orderBy: 'sent_at DESC',
+      limit: limit,
+    );
+  }
+
+  /// Get all SMS messages, newest first
+  Future<List<Map<String, dynamic>>> getAllSmsMessages({int? limit}) async {
+    final db = await instance.database;
+    return await db.query(
+      'sms_messages',
+      orderBy: 'sent_at DESC',
+      limit: limit,
+    );
+  }
+
+  /// Get all SMS messages for today
+  Future<List<Map<String, dynamic>>> getTodaySmsMessages() async {
+    final db = await instance.database;
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    return await db.query(
+      'sms_messages',
+      where: 'date(sent_at) = ?',
+      whereArgs: [today],
+      orderBy: 'sent_at DESC',
+    );
+  }
+
+  /// Update customer info
+  Future<int> updateCustomer(
+    int customerId,
+    Map<String, dynamic> customerData,
+  ) async {
+    final db = await instance.database;
+    return await db.update(
+      'customers',
+      customerData,
+      where: 'id = ?',
+      whereArgs: [customerId],
+    );
+  }
+
+  // App settings CRUD operations
+
+  Future<String?> getSetting(String key) async {
+    final db = await database;
+    final result = await db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+
+    return result.isNotEmpty ? result.first['value'] as String? : null;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    final db = await database;
+    await db.insert('app_settings', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteSetting(String key) async {
+    final db = await database;
+    await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+  }
+
+  static const String readMessageIdsKey = 'read_message_ids';
+  static const String preBookPendingKey = 'pre_book_pending';
+  static const String cutoffHourKey = 'cutoff_hour';
+  static const String cutoffMinuteKey = 'cutoff_minute';
+
+  Future<Set<int>> getReadMessageIds() async {
+    final value = await getSetting(readMessageIdsKey);
+    if (value == null || value.isEmpty) return {};
+    try {
+      return value
+          .split(',')
+          .where((s) => s.isNotEmpty)
+          .map((s) => int.parse(s))
+          .toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> setReadMessageIds(Set<int> ids) async {
+    await setSetting(readMessageIdsKey, ids.join(','));
+  }
+
+  Future<Map<String, Map<String, dynamic>>> getPreBookPending() async {
+    final value = await getSetting(preBookPendingKey);
+    if (value == null || value.isEmpty) return {};
+    try {
+      final Map<String, Map<String, dynamic>> result = {};
+      if (value.contains('|')) {
+        for (final entry in value.split('|')) {
+          if (entry.isEmpty) continue;
+          final parts = entry.split('~');
+          if (parts.length >= 6) {
+            result[parts[0]] = {
+              'customerId': int.tryParse(parts[1]) ?? 0,
+              'phoneNumber': parts[0],
+              'quantity': int.tryParse(parts[2]) ?? 0,
+              'gallonType': parts[3].isEmpty ? null : parts[3],
+              'address': parts[4].isEmpty ? null : parts[4],
+              'deliveryDay': parts[5],
+              'timestamp': int.tryParse(parts.length > 6 ? parts[6] : '0') ?? 0,
+            };
+          }
+        }
+      }
+      return result;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> setPreBookPending(
+    Map<String, Map<String, dynamic>> pending,
+  ) async {
+    final entries = <String>[];
+    for (final entry in pending.entries) {
+      final v = entry.value;
+      entries.add(
+        '${entry.key}~${v['customerId']}~${v['quantity']}~${v['gallonType'] ?? ''}~${v['address'] ?? ''}~${v['deliveryDay']}~${v['timestamp'] ?? 0}',
+      );
+    }
+    await setSetting(preBookPendingKey, entries.join('|'));
+  }
+
+  Future<int> getCutoffHour() async {
+    final value = await getSetting(cutoffHourKey);
+    return int.tryParse(value ?? '') ?? 7;
+  }
+
+  Future<int> getCutoffMinute() async {
+    final value = await getSetting(cutoffMinuteKey);
+    return int.tryParse(value ?? '') ?? 0;
+  }
+
+  Future<void> setCutoffTime(int hour, int minute) async {
+    await setSetting(cutoffHourKey, hour.toString());
+    await setSetting(cutoffMinuteKey, minute.toString());
   }
 }

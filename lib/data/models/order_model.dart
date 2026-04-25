@@ -1,10 +1,10 @@
 // Task 003 — Order data model (core entity)
 // Task 005 — Added GallonType enum, gallonType field, and staffId field
 /// The type of order: delivery to customer or walk-in drop-off at station
-enum OrderType { deliver, drop }
+enum OrderType { deliver, drop, unrecognized }
 
 /// Tracks the lifecycle of an order from creation to completion
-enum OrderStatus { pending, confirmed, completed, cancelled }
+enum OrderStatus { pending, confirmed, inTransit, completed, cancelled, rejected }
 
 /// Classifies gallons to prevent mixing between household and store use.
 /// Based on Scope & Zone Mapping document business rule:
@@ -53,6 +53,9 @@ class Order {
   /// The staff member assigned to fulfill this order (null if unassigned)
   final int? staffId;
 
+  /// Reason for cancellation (set when order is rejected)
+  final String? cancelReason;
+
   Order({
     this.id,
     this.customerId,
@@ -66,6 +69,7 @@ class Order {
     this.deliveryDay,
     this.isPreBook = false,
     this.staffId,
+    this.cancelReason,
   });
 
   /// Creates an [Order] instance from a database row map.
@@ -75,8 +79,8 @@ class Order {
       id: map['id'] as int?,
       customerId: map['customer_id'] as int?,
       phoneNumber: map['phone_number'] as String,
-      // Map string 'deliver'/'drop' back to the OrderType enum
-      type: map['type'] == 'deliver' ? OrderType.deliver : OrderType.drop,
+      // Map string 'deliver'/'drop'/'unrecognized' back to the OrderType enum
+      type: _parseType(map['type'] as String?),
       quantity: map['quantity'] as int,
       // Map string 'new'/'old' back to GallonType enum, null if not set
       gallonType: _parseGallonType(map['gallon_type'] as String?),
@@ -89,23 +93,41 @@ class Order {
       // SQLite stores booleans as 0/1 integers
       isPreBook: (map['is_pre_book'] as int?) == 1,
       staffId: map['staff_id'] as int?,
+      cancelReason: map['cancel_reason'] as String?,
     );
+  }
+
+  /// Converts a type string from the database to an [OrderType] enum.
+  static OrderType _parseType(String? type) {
+    switch (type) {
+      case 'deliver':
+        return OrderType.deliver;
+      case 'drop':
+        return OrderType.drop;
+      case 'unrecognized':
+        return OrderType.unrecognized;
+      default:
+        return OrderType.unrecognized;
+    }
   }
 
   /// Converts a status string from the database to an [OrderStatus] enum.
   /// Defaults to [OrderStatus.pending] if the string is unrecognized.
   static OrderStatus _parseStatus(String status) {
-    switch (status) {
+switch (status) {
       case 'pending':
         return OrderStatus.pending;
       case 'confirmed':
         return OrderStatus.confirmed;
+      case 'in_transit':
+        return OrderStatus.inTransit;
       case 'completed':
         return OrderStatus.completed;
       case 'cancelled':
         return OrderStatus.cancelled;
+      case 'rejected':
+        return OrderStatus.rejected;
       default:
-        // Fallback for any unexpected status value
         return OrderStatus.pending;
     }
   }
@@ -127,25 +149,59 @@ class Order {
   /// Converts this order to a map for database insertion.
   /// Enum values are stored as readable strings, booleans as 0/1 integers.
   Map<String, dynamic> toMap() {
+    String typeStr;
+    switch (type) {
+      case OrderType.deliver:
+        typeStr = 'deliver';
+        break;
+      case OrderType.drop:
+        typeStr = 'drop';
+        break;
+      case OrderType.unrecognized:
+        typeStr = 'unrecognized';
+        break;
+    }
+
+    String statusStr;
+    switch (status) {
+      case OrderStatus.pending:
+        statusStr = 'pending';
+        break;
+      case OrderStatus.confirmed:
+        statusStr = 'confirmed';
+        break;
+      case OrderStatus.inTransit:
+        statusStr = 'in_transit';
+        break;
+      case OrderStatus.completed:
+        statusStr = 'completed';
+        break;
+      case OrderStatus.cancelled:
+        statusStr = 'cancelled';
+        break;
+      case OrderStatus.rejected:
+        statusStr = 'rejected';
+        break;
+    }
+
     return {
       if (id != null) 'id': id,
       if (customerId != null) 'customer_id': customerId,
       'phone_number': phoneNumber,
-      // Store enum as readable string: 'deliver' or 'drop'
-      'type': type == OrderType.deliver ? 'deliver' : 'drop',
+      'type': typeStr,
       'quantity': quantity,
       // Store gallon type as 'new' or 'old', omit if null
       if (gallonType != null)
         'gallon_type': gallonType == GallonType.newGallon ? 'new' : 'old',
       if (address != null) 'address': address,
-      // Store enum name directly: 'pending', 'confirmed', etc.
-      'status': status.name,
+      'status': statusStr,
       // Store DateTime as ISO 8601 string for consistent parsing
       'created_at': createdAt.toIso8601String(),
       if (deliveryDay != null) 'delivery_day': deliveryDay,
       // Store boolean as integer: 1 = true, 0 = false
       'is_pre_book': isPreBook ? 1 : 0,
       if (staffId != null) 'staff_id': staffId,
+      if (cancelReason != null) 'cancel_reason': cancelReason,
     };
   }
 }

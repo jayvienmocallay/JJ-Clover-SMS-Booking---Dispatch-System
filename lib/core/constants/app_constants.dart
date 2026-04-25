@@ -7,6 +7,14 @@ class AppConstants {
   // Task 007 — Order cutoff time from FR-4.1 in SRS (default: 7:00 AM)
   static const int orderCutOffHour = 7;
   static const int orderCutOffMinute = 0;
+
+  // Order quantity limits
+  static const int minQuantity = 1;
+  static const int maxQuantity = 50;
+
+  // Pre-book expiration and auto-refresh intervals
+  static const int preBookExpirationHours = 48;
+  static const int autoRefreshSeconds = 15;
 }
 
 // Task 008 — System modes from SRS Section 2.2 (Status Toggles)

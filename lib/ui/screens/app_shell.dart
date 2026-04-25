@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/alarm_service.dart';
+import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/walk_in_alert.dart';
 import 'dashboard_screen.dart';
@@ -25,32 +26,51 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   // Current tab index (0=Home, 1=Orders, 2=Messages, 3=Customers, 4=Settings)
   int _currentIndex = 0;
 
   // Controls visibility of the walk-in alert overlay (for manual test)
   bool _showWalkInAlert = false;
 
+  // Track initial loading state
+  bool _isInitialLoading = true;
+
   // Task 011 — Periodic refresh timer for auto-updating when background
   // service inserts new orders via SMS
   late final _refreshTimer = !kIsWeb
-      ? Stream.periodic(const Duration(seconds: 15))
+      ? Stream.periodic(
+          // ignore: prefer_const_constructors - AppConstants is accessed at runtime
+          Duration(seconds: AppConstants.autoRefreshSeconds),
+        )
           .listen((_) => _autoRefresh())
       : null;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Task 011 — Initial data load for providers (skip on web)
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        context.read<OrderProvider>().loadOrders();
-        context.read<CustomerProvider>().loadCustomers();
+        _loadInitialData();
       });
+    } else {
+      _isInitialLoading = false;
     }
     // Task 012 — Listen to AlarmService for DROP command alerts
     AlarmService.instance.addListener(_onAlarmChanged);
+    unawaited(AlarmService.instance.startUiSync());
+  }
+
+  Future<void> _loadInitialData() async {
+    final orderProv = context.read<OrderProvider>();
+    final customerProv = context.read<CustomerProvider>();
+    await orderProv.loadOrders();
+    await customerProv.loadCustomers();
+    if (mounted) {
+      setState(() => _isInitialLoading = false);
+    }
   }
 
   /// Task 012 — Reacts to alarm state changes from the background service
@@ -67,12 +87,22 @@ class _AppShellState extends State<AppShell> {
     if (!mounted || kIsWeb) return;
     context.read<OrderProvider>().loadOrders();
     context.read<CustomerProvider>().loadCustomers();
+    unawaited(AlarmService.instance.syncPendingAlert());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !kIsWeb) {
+      unawaited(AlarmService.instance.syncPendingAlert());
+    }
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
     AlarmService.instance.removeListener(_onAlarmChanged);
+    AlarmService.instance.stopUiSync();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -104,10 +134,8 @@ class _AppShellState extends State<AppShell> {
       case 4:
         return SettingsScreen(
           // Task 012 — Test alert triggers AlarmService like a real DROP
-          onTestAlert: () => AlarmService.instance.trigger(
-            phone: 'Test Alert',
-            qty: 5,
-          ),
+          onTestAlert: () =>
+              AlarmService.instance.trigger(phone: 'TEST MODE', qty: 5),
         );
       default:
         return DashboardScreen(onNavigateToTab: _navigateToTab);
@@ -116,6 +144,15 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isInitialLoading) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       // Stack allows the walk-in alert to overlay on top of the active screen
@@ -127,7 +164,7 @@ class _AppShellState extends State<AppShell> {
           if (_showWalkInAlert)
             WalkInAlert(
               onAcknowledge: () {
-                AlarmService.instance.acknowledge();
+                unawaited(AlarmService.instance.acknowledge());
                 setState(() => _showWalkInAlert = false);
               },
             ),

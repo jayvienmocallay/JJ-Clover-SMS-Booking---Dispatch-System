@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:jj_clover_sms/database_helper.dart';
+import 'package:jj_clover_sms/data/services/default_sms_app_service.dart';
 import 'package:jj_clover_sms/data/services/sms_background_service.dart';
 import 'package:jj_clover_sms/data/services/system_mode_manager.dart';
 import 'package:jj_clover_sms/data/providers/order_provider.dart';
@@ -30,6 +31,8 @@ Future<void> main() async {
   if (!kIsWeb) {
     try {
       await DatabaseHelper.instance.database;
+      await DatabaseHelper.instance.ensureSchedulesSeeded();
+      await SystemModeManager.instance.loadPersistedMode(notify: false);
       debugPrint('Database initialized successfully');
     } catch (e) {
       debugPrint('Database initialization error: $e');
@@ -74,8 +77,8 @@ class MyApp extends StatelessWidget {
 ///
 /// Android requires certain permissions to be explicitly granted by the user
 /// at runtime (not just declared in the manifest). This screen handles:
+/// - Default SMS app role — for receiving SMS_DELIVER broadcasts
 /// - SMS permissions (send, receive, read) — for order processing
-/// - Phone permission — required by the telephony package
 /// - Battery optimization exemption — keeps background service alive
 ///
 /// Once all permissions are granted, it navigates to the full dashboard.
@@ -86,9 +89,13 @@ class PermissionGate extends StatefulWidget {
   State<PermissionGate> createState() => _PermissionGateState();
 }
 
-class _PermissionGateState extends State<PermissionGate> {
+class _PermissionGateState extends State<PermissionGate>
+    with WidgetsBindingObserver {
   /// Tracks whether all required permissions have been granted
   bool _permissionsGranted = false;
+
+  /// Tracks whether Android has made this app the default SMS handler.
+  bool _isDefaultSmsApp = false;
 
   /// Tracks whether the permission check is still in progress
   bool _isChecking = true;
@@ -96,6 +103,7 @@ class _PermissionGateState extends State<PermissionGate> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Request permissions after the first frame renders
     // This avoids calling platform channels during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -103,12 +111,26 @@ class _PermissionGateState extends State<PermissionGate> {
     });
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_isChecking) {
+      _refreshPermissionState();
+    }
+  }
+
   /// Requests all runtime permissions required by the app.
   ///
   /// Permission flow:
-  /// 1. Request SMS and phone permissions (grouped by Android)
-  /// 2. Request battery optimization exemption (separate system dialog)
-  /// 3. Update state based on results
+  /// 1. Request default SMS app role
+  /// 2. Request SMS permissions
+  /// 3. Request battery optimization exemption (separate system dialog)
+  /// 4. Update state based on results
   Future<void> _requestPermissions() async {
     // On web, skip permission requests — go straight to the dashboard.
     // Permissions and SMS are Android-only features.
@@ -120,19 +142,26 @@ class _PermissionGateState extends State<PermissionGate> {
       return;
     }
 
-    // Step 1: Request SMS and phone permissions.
-    // Android groups these into a single dialog for the user.
+    // Step 1: Ask Android to make this app the default SMS handler.
+    // Android only routes SMS_DELIVER broadcasts to the current default SMS app.
+    var defaultSmsGranted = await DefaultSmsAppService.isDefaultSmsApp();
+    if (!defaultSmsGranted) {
+      defaultSmsGranted = await DefaultSmsAppService.requestDefaultSmsApp();
+      if (!defaultSmsGranted) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        defaultSmsGranted = await DefaultSmsAppService.isDefaultSmsApp();
+      }
+    }
+
+    // Step 2: Request SMS permissions.
     final statuses = await [
-      Permission.sms,               // Covers SEND_SMS, RECEIVE_SMS, READ_SMS
-      Permission.phone,             // Required by the telephony package
+      Permission.sms, // Covers SEND_SMS, RECEIVE_SMS, READ_SMS
     ].request();
 
-    // Step 2: Check if SMS permission was granted
+    // Step 3: Check if SMS permission was granted
     final smsGranted = statuses[Permission.sms]?.isGranted ?? false;
-    // Check if phone permission was granted
-    final phoneGranted = statuses[Permission.phone]?.isGranted ?? false;
 
-    // Step 3: Request battery optimization exemption.
+    // Step 4: Request battery optimization exemption.
     // This shows a separate system dialog asking the user to allow
     // the app to run unrestricted in the background (bypass Doze mode).
     // Critical for keeping the SMS listener alive when the screen is off.
@@ -140,21 +169,24 @@ class _PermissionGateState extends State<PermissionGate> {
     final batteryGranted = batteryStatus.isGranted;
 
     // Log the results for debugging
+    debugPrint('Default SMS app: $defaultSmsGranted');
+    // ignore: prefer_const_constructors
     debugPrint('SMS permission: $smsGranted');
-    debugPrint('Phone permission: $phoneGranted');
+    // ignore: prefer_const_constructors
     debugPrint('Battery optimization exemption: $batteryGranted');
 
     // Update state — the UI will show the app or a permission prompt
-    final allGranted = smsGranted && phoneGranted;
+    final allGranted = defaultSmsGranted && smsGranted;
     setState(() {
       // All critical permissions must be granted for the app to function
+      _isDefaultSmsApp = defaultSmsGranted;
       _permissionsGranted = allGranted;
       _isChecking = false;
     });
 
     // Task 009 — Start SMS background service once permissions are confirmed.
     // The service listens for incoming SMS and processes them as commands.
-    // Must start AFTER SMS + phone permissions are granted, otherwise
+    // Must start AFTER SMS permissions are granted, otherwise
     // the telephony plugin will fail silently.
     if (allGranted) {
       await SmsBackgroundService.instance.startListening();
@@ -170,13 +202,37 @@ class _PermissionGateState extends State<PermissionGate> {
     }
   }
 
+  /// Re-checks state after returning from Android settings/default-app screens.
+  ///
+  /// Some devices update the default SMS role just after the activity resumes,
+  /// so this keeps the gate from showing stale "Default SMS App Required" text.
+  Future<void> _refreshPermissionState() async {
+    if (kIsWeb) return;
+
+    final defaultSmsGranted = await DefaultSmsAppService.isDefaultSmsApp();
+    final smsGranted = (await Permission.sms.status).isGranted;
+    final allGranted = defaultSmsGranted && smsGranted;
+
+    if (!mounted) return;
+
+    setState(() {
+      _isDefaultSmsApp = defaultSmsGranted;
+      _permissionsGranted = allGranted;
+    });
+
+    if (allGranted) {
+      await SmsBackgroundService.instance.startListening();
+      debugPrint('SMS Background Service started after permissions granted');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Show loading indicator while checking permissions
     if (_isChecking) {
-      return Scaffold(
+      return const Scaffold(
         backgroundColor: AppColors.background,
-        body: const Center(
+        body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -204,11 +260,17 @@ class _PermissionGateState extends State<PermissionGate> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Warning icon to draw attention
-                const Icon(Icons.sms_failed, size: 64, color: AppColors.statusAway),
+                const Icon(
+                  Icons.sms_failed,
+                  size: 64,
+                  color: AppColors.statusAway,
+                ),
                 const SizedBox(height: 16),
-                const Text(
-                  'SMS Permissions Required',
-                  style: TextStyle(
+                Text(
+                  _isDefaultSmsApp
+                      ? 'SMS Permissions Required'
+                      : 'Default SMS App Required',
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: AppColors.foreground,
@@ -216,11 +278,14 @@ class _PermissionGateState extends State<PermissionGate> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'This app needs SMS and phone permissions to process '
-                  'customer orders. Please grant the permissions to continue.',
+                Text(
+                  _isDefaultSmsApp
+                      ? 'This app needs SMS permissions to process '
+                            'customer orders. Please grant the permissions to continue.'
+                      : 'Set JJ Clover as the default SMS app so Android can '
+                            'deliver customer order messages to it.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.mutedForeground),
+                  style: const TextStyle(color: AppColors.mutedForeground),
                 ),
                 const SizedBox(height: 24),
                 // Retry button — re-requests all permissions

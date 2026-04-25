@@ -2,10 +2,12 @@
 // Task 007 — Pre-book context cache, cutoff time queuing, gallon type passthrough
 // Task 008 — Zone-specific validation integration, next-day scheduling
 import 'dart:async';
+import 'dart:ui';
 import 'package:telephony/telephony.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import '../../database_helper.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/phone_number_utils.dart';
 import '../models/customer_model.dart';
 import '../models/schedule_model.dart';
 import '../models/order_model.dart';
@@ -13,6 +15,18 @@ import 'sms_parser.dart';
 import 'zone_validator.dart';
 import 'system_mode_manager.dart';
 import 'alarm_service.dart';
+
+/// Entry point used by Android when an SMS arrives while Flutter is backgrounded.
+@pragma('vm:entry-point')
+Future<void> smsBackgroundMessageHandler(SmsMessage msg) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+
+  await SmsBackgroundService.instance._processIncomingSms(
+    msg,
+    smsSender: Telephony.backgroundInstance,
+  );
+}
 
 /// Background SMS service that listens for incoming messages and processes
 /// them as commands (DELIVER, DROP, YES, STATUS).
@@ -39,6 +53,10 @@ class SmsBackgroundService {
   /// Tracks whether the SMS listener is currently active
   bool _isListening = false;
 
+  /// Tracks recently processed message IDs to prevent duplicate processing
+  /// when both foreground and background handlers are triggered
+  final Set<String> _processedMessageIds = {};
+
   /// Stores pre-book context: maps a phone number to the delivery day
   /// that was offered in the "Wrong Day" reply. When the customer replies
   /// YES, we look up this map to know which day to create the pre-book for.
@@ -58,15 +76,67 @@ class SmsBackgroundService {
     // Guard: don't register the listener twice
     if (_isListening) return;
 
+    // Load persisted pre-books from database
+    await _loadPreBooksFromDb();
+
     // Register the SMS listener callback with the Telephony API
     _telephony.listenIncomingSms(
       onNewMessage: (SmsMessage msg) {
         _processIncomingSms(msg);
       },
+      onBackgroundMessage: smsBackgroundMessageHandler,
     );
 
     _isListening = true;
     debugPrint('SMS Background Service started');
+  }
+
+  Future<void> _loadPreBooksFromDb() async {
+    try {
+      final pending = await _db.getPreBookPending();
+      final now = DateTime.now();
+      for (final entry in pending.entries) {
+        final v = entry.value;
+        final timestamp = v['timestamp'] as int? ?? 0;
+        final createdAt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        // Only load if not expired (48 hours)
+        if (now.difference(createdAt).inHours <= 48) {
+          _preBookPending[entry.key] = _PreBookContext(
+            customerId: v['customerId'] as int,
+            phoneNumber: v['phoneNumber'] as String,
+            quantity: v['quantity'] as int,
+            gallonType: v['gallonType'] as String?,
+            address: v['address'] as String?,
+            deliveryDay: v['deliveryDay'] as String,
+            createdAt: createdAt,
+          );
+        }
+      }
+      debugPrint('Loaded ${_preBookPending.length} pre-books from database');
+    } catch (e) {
+      debugPrint('Failed to load pre-books: $e');
+    }
+  }
+
+  Future<void> _savePreBooksToDb() async {
+    try {
+      final Map<String, Map<String, dynamic>> data = {};
+      for (final entry in _preBookPending.entries) {
+        final c = entry.value;
+        data[entry.key] = {
+          'customerId': c.customerId,
+          'phoneNumber': c.phoneNumber,
+          'quantity': c.quantity,
+          'gallonType': c.gallonType,
+          'address': c.address,
+          'deliveryDay': c.deliveryDay,
+          'timestamp': c.createdAt.millisecondsSinceEpoch,
+        };
+      }
+      await _db.setPreBookPending(data);
+    } catch (e) {
+      debugPrint('Failed to save pre-books: $e');
+    }
   }
 
   /// Stops the SMS listener gracefully.
@@ -88,7 +158,10 @@ class SmsBackgroundService {
   ///
   /// Flow: Extract sender/body → Parse command → Route to handler
   /// Each handler is responsible for validation, DB operations, and auto-reply.
-  Future<void> _processIncomingSms(SmsMessage msg) async {
+  Future<void> _processIncomingSms(
+    SmsMessage msg, {
+    Telephony? smsSender,
+  }) async {
     // Extract the sender phone number and message body from the SMS
     final sender = msg.address ?? '';
     final message = msg.body ?? '';
@@ -96,7 +169,32 @@ class SmsBackgroundService {
     // Ignore messages with no sender (can't reply without a phone number)
     if (sender.isEmpty) return;
 
+    // Create unique key for this message to prevent duplicate processing
+    final msgKey = '$sender|$message';
+    if (_processedMessageIds.contains(msgKey)) {
+      debugPrint('Duplicate message skipped: $msgKey');
+      return;
+    }
+    _processedMessageIds.add(msgKey);
+    // Clean up old entries (keep only last 100)
+    if (_processedMessageIds.length > 100) {
+      _processedMessageIds.remove(_processedMessageIds.first);
+    }
+
     debugPrint('SMS received from $sender: $message');
+
+    // Log incoming SMS for history
+    await _db.insertSmsMessage({
+      'phone_number': PhoneNumberUtils.normalize(sender),
+      'message': message,
+      'direction': 'incoming',
+      'sent_at': DateTime.now().toIso8601String(),
+    });
+
+    // The background SMS callback can run in a separate Dart isolate, so the
+    // singleton's in-memory mode may be stale. Refresh from the shared database
+    // before checking delivery/drop gates or replying to STATUS.
+    await _modeManager.loadPersistedMode();
 
     // Parse the raw message into a structured command object
     final parsed = SmsParser.parse(message);
@@ -104,20 +202,30 @@ class SmsBackgroundService {
     // Route to the appropriate handler based on the parsed command type
     switch (parsed.command) {
       case SmsCommand.deliver:
-        await _handleDeliver(sender, parsed);
+        await _handleDeliver(sender, parsed, smsSender: smsSender);
         break;
       case SmsCommand.drop:
-        await _handleDrop(sender, parsed);
+        await _handleDrop(sender, parsed, smsSender: smsSender);
         break;
       case SmsCommand.yes:
-        await _handleYes(sender);
+        await _handleYes(sender, smsSender: smsSender);
         break;
       case SmsCommand.status:
-        await _handleStatus(sender);
+        await _handleStatus(sender, smsSender: smsSender);
         break;
       case SmsCommand.unknown:
+        // Save unrecognized message as an order record for visibility in Messages tab
+        await _saveUnrecognizedMessage(
+          sender,
+          message,
+          'Unrecognized',
+        );
         // Send help text for unrecognized commands
-        await _sendReply(sender, SmsParser.getUnknownCommandReply());
+        await _sendReply(
+          sender,
+          SmsParser.getUnknownCommandReply(),
+          smsSender: smsSender,
+        );
         break;
     }
   }
@@ -131,21 +239,43 @@ class SmsBackgroundService {
   /// 4. Check order cutoff time (before/after 7:00 AM)
   /// 5. Create order with appropriate status and delivery day
   /// 6. Send auto-reply
-  Future<void> _handleDeliver(String sender, ParsedSms parsed) async {
+  Future<void> _handleDeliver(
+    String sender,
+    ParsedSms parsed, {
+    Telephony? smsSender,
+  }) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+
     // Step 1: Mode gate — check if deliveries are accepted in current mode
     // Only OPERATING mode accepts deliveries; other modes reject/delay
     if (!_modeManager.canAcceptDelivery()) {
-      await _sendReply(sender, _modeManager.getDeliveryReply());
+      await _saveUnrecognizedMessage(
+        sender,
+        'DELIVER ${parsed.quantity ?? 0} - Rejected: ${_modeManager.getDeliveryReply()}',
+        'rejected',
+      );
+      await _sendReply(
+        sender,
+        _modeManager.getDeliveryReply(),
+        smsSender: smsSender,
+      );
       return;
     }
 
     // Step 2: Customer lookup — find the sender in the customer database
-    final customerData = await _db.getCustomerByPhone(sender);
+    final customerData = await _db.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
+      // Save unrecognized message for visibility
+      await _saveUnrecognizedMessage(
+        sender,
+        parsed.rawMessage,
+        'Unregistered',
+      );
       // Phone number not registered — prompt them to register
       await _sendReply(
         sender,
         'Unknown number. Please register first or call the station.',
+        smsSender: smsSender,
       );
       return;
     }
@@ -153,11 +283,22 @@ class SmsBackgroundService {
     // Step 3: Build customer object and fetch their active schedules
     // We use getCustomersWithBarangay to get the joined barangay data
     // needed for the Customer.fromMap() factory
-    final customerWithBarangay = await _db.getCustomersWithBarangay();
-    // Find this specific customer's joined record by matching the phone number
-    final customerJoined = customerWithBarangay.firstWhere(
-      (c) => c['contact_number'] == sender,
+    final customerJoined = await _db.getCustomerWithBarangayByPhone(
+      normalizedSender,
     );
+    if (customerJoined == null) {
+      await _saveUnrecognizedMessage(
+        sender,
+        parsed.rawMessage,
+        'Incomplete',
+      );
+      await _sendReply(
+        sender,
+        'Customer profile is incomplete. Please call the station.',
+        smsSender: smsSender,
+      );
+      return;
+    }
     final customer = Customer.fromMap(customerJoined);
 
     // Fetch this customer's active schedule records from the database
@@ -176,30 +317,40 @@ class SmsBackgroundService {
 
     // If the customer's zone doesn't match today's schedule
     if (validation.result == ValidationResult.invalidDay) {
+      // Save the pre-book offer for visibility
+      await _saveUnrecognizedMessage(
+        sender,
+        'DELIVER ${parsed.quantity ?? 0} - Wrong Day (${validation.message})',
+        'prebook',
+      );
       // Store the pre-book context so _handleYes knows the details
       // when the customer replies YES to the pre-book offer
       if (validation.correctDay != null) {
-        _preBookPending[sender] = _PreBookContext(
+        final now = DateTime.now();
+        _preBookPending[normalizedSender] = _PreBookContext(
           customerId: customer.id!,
-          phoneNumber: sender,
+          phoneNumber: normalizedSender,
           quantity: parsed.quantity ?? 0,
           gallonType: parsed.gallonType,
           address: parsed.address,
           deliveryDay: validation.correctDay!,
+          createdAt: now,
         );
+        await _savePreBooksToDb();
       }
       // Send the "Wrong Day" reply with pre-book offer
-      await _sendReply(sender, validation.message!);
+      await _sendReply(sender, validation.message!, smsSender: smsSender);
       return;
     }
 
     // Step 5: Cutoff time check — determine if order is for today or queued
     final now = DateTime.now();
-    // Check if the current time is before the 7:00 AM cutoff
+    final cutoffHour = await _db.getCutoffHour();
+    final cutoffMinute = await _db.getCutoffMinute();
     final isBeforeCutoff =
-        now.hour < AppConstants.orderCutOffHour ||
-        (now.hour == AppConstants.orderCutOffHour &&
-            now.minute < AppConstants.orderCutOffMinute);
+        now.hour < cutoffHour ||
+        (now.hour == cutoffHour &&
+            now.minute < cutoffMinute);
 
     // Determine delivery day and status based on cutoff
     String? deliveryDay;
@@ -219,7 +370,7 @@ class SmsBackgroundService {
     // Step 6: Create the order in the database
     final order = Order(
       customerId: customer.id,
-      phoneNumber: sender,
+      phoneNumber: normalizedSender,
       type: OrderType.deliver,
       quantity: parsed.quantity ?? 0,
       // Pass through the gallon type from the parsed SMS (null if not specified)
@@ -235,13 +386,18 @@ class SmsBackgroundService {
     // Step 7: Send the appropriate auto-reply based on cutoff status
     if (isBeforeCutoff) {
       // Order confirmed for today
-      await _sendReply(sender, _modeManager.getDeliveryReply());
+      await _sendReply(
+        sender,
+        _modeManager.getDeliveryReply(),
+        smsSender: smsSender,
+      );
     } else {
       // Order queued — inform customer of the scheduled delivery day
       await _sendReply(
         sender,
         'Order received. Past today\'s cutoff time. '
         'Your order has been queued for $deliveryDay.',
+        smsSender: smsSender,
       );
     }
   }
@@ -251,22 +407,32 @@ class SmsBackgroundService {
   /// DROP bypasses the Zone Validator entirely (per Logic Flowchart Section 4)
   /// because the customer is physically present at the station.
   /// The priority action is logging the order and (future) triggering the alarm.
-  Future<void> _handleDrop(String sender, ParsedSms parsed) async {
+  Future<void> _handleDrop(
+    String sender,
+    ParsedSms parsed, {
+    Telephony? smsSender,
+  }) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+
     // Step 1: Mode gate — check if drop-offs are accepted
     // Only MAINTENANCE mode rejects drop-offs; all others allow them
     if (!_modeManager.canAcceptDrop()) {
-      await _sendReply(sender, _modeManager.getDropReply());
+      await _sendReply(
+        sender,
+        _modeManager.getDropReply(),
+        smsSender: smsSender,
+      );
       return;
     }
 
     // Step 2: Look up the customer (optional — drop-offs can be unregistered)
-    final customerData = await _db.getCustomerByPhone(sender);
+    final customerData = await _db.getCustomerByPhone(normalizedSender);
     final customerId = customerData?['id'] as int?;
 
     // Step 3: Create the drop-off order in the database
     final order = Order(
       customerId: customerId,
-      phoneNumber: sender,
+      phoneNumber: normalizedSender,
       type: OrderType.drop,
       quantity: parsed.quantity ?? 0,
       status: OrderStatus.pending,
@@ -278,7 +444,7 @@ class SmsBackgroundService {
     // Step 4: Send the mode-appropriate auto-reply
     // (e.g., "Staff will assist" or "Leave bottles at designated area")
     final reply = _modeManager.getDropReply();
-    await _sendReply(sender, reply);
+    await _sendReply(sender, reply, smsSender: smsSender);
 
     // Task 012 — Trigger loud alarm for walk-in customer
     await AlarmService.instance.trigger(
@@ -293,15 +459,28 @@ class SmsBackgroundService {
   /// responds YES, we create a pre-booked order for their correct delivery day.
   /// The pre-book context (quantity, day, etc.) was saved in [_preBookPending]
   /// when the original DELIVER command was processed.
-  Future<void> _handleYes(String sender) async {
+  Future<void> _handleYes(String sender, {Telephony? smsSender}) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+
     // Look up the pre-book context for this phone number
-    final context = _preBookPending[sender];
+    final context = _preBookPending[normalizedSender];
 
     if (context == null) {
-      // No pending pre-book offer found — the customer sent YES unprompted
       await _sendReply(
         sender,
         'No pending pre-book found. Please send a DELIVER command first.',
+        smsSender: smsSender,
+      );
+      return;
+    }
+
+    // Check if pre-book has expired
+    if (context.isExpired) {
+      _preBookPending.remove(normalizedSender);
+      await _sendReply(
+        sender,
+        'Pre-book offer has expired. Please send a new DELIVER command.',
+        smsSender: smsSender,
       );
       return;
     }
@@ -327,33 +506,64 @@ class SmsBackgroundService {
     await _db.insertOrder(order.toMap());
 
     // Remove the pending context — each YES is a one-time confirmation
-    _preBookPending.remove(sender);
+    _preBookPending.remove(normalizedSender);
+    await _savePreBooksToDb();
 
     // Confirm the pre-booking to the customer
     await _sendReply(
       sender,
       'Pre-book confirmed! Your order of ${context.quantity} gallon(s) '
       'is scheduled for ${context.deliveryDay}.',
+      smsSender: smsSender,
     );
   }
 
   /// Handles the STATUS command — returns the current system mode.
-  Future<void> _handleStatus(String sender) async {
+  Future<void> _handleStatus(String sender, {Telephony? smsSender}) async {
     final mode = _modeManager.currentMode;
     // Send the display name of the current mode (e.g., 'OPERATING', 'STAFF AWAY')
-    await _sendReply(sender, 'Current status: ${mode.displayName}');
+    await _sendReply(
+      sender,
+      'Current status: ${mode.displayName}',
+      smsSender: smsSender,
+    );
   }
 
   /// Sends an SMS reply to the specified phone number.
   /// Wraps the Telephony API call with error handling to prevent
   /// crashes if SMS sending fails (e.g., no signal, permission denied).
-  Future<void> _sendReply(String phoneNumber, String message) async {
+  Future<void> _sendReply(
+    String phoneNumber,
+    String message, {
+    Telephony? smsSender,
+  }) async {
     try {
-      await _telephony.sendSms(to: phoneNumber, message: message);
+      await (smsSender ?? _telephony).sendSms(
+        to: phoneNumber,
+        message: message,
+      );
       debugPrint('Reply sent to $phoneNumber: $message');
+
+      // Log outgoing SMS for history
+      await _db.insertSmsMessage({
+        'phone_number': PhoneNumberUtils.normalize(phoneNumber),
+        'message': message,
+        'direction': 'outgoing',
+        'status': 'sent',
+        'sent_at': DateTime.now().toIso8601String(),
+      });
     } catch (e) {
       // Log the failure but don't crash — the background service must stay alive
       debugPrint('Failed to send reply: $e');
+
+      // Log failed SMS
+      await _db.insertSmsMessage({
+        'phone_number': PhoneNumberUtils.normalize(phoneNumber),
+        'message': message,
+        'direction': 'outgoing',
+        'status': 'failed',
+        'sent_at': DateTime.now().toIso8601String(),
+      });
     }
   }
 
@@ -398,6 +608,43 @@ class SmsBackgroundService {
         return null;
     }
   }
+
+  /// Saves an unrecognized/invalid message as an order record for visibility in Messages tab
+  Future<void> _saveUnrecognizedMessage(
+    String sender,
+    String message,
+    String status,
+  ) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+    final customerData = await _db.getCustomerByPhone(normalizedSender);
+    final customerId = customerData?['id'] as int?;
+
+    OrderStatus orderStatus;
+    switch (status) {
+      case 'rejected':
+        orderStatus = OrderStatus.rejected;
+        break;
+      case 'Unregistered':
+      case 'Incomplete':
+      case 'prebook':
+        orderStatus = OrderStatus.pending;
+        break;
+      default:
+        orderStatus = OrderStatus.rejected;
+    }
+
+    final order = Order(
+      customerId: customerId,
+      phoneNumber: normalizedSender,
+      type: OrderType.unrecognized,
+      quantity: 0,
+      address: message,
+      status: orderStatus,
+      createdAt: DateTime.now(),
+    );
+    await _db.insertOrder(order.toMap());
+    debugPrint('Saved message from $normalizedSender: $status');
+  }
 }
 
 /// Holds the context of a pending pre-book offer for a specific customer.
@@ -424,6 +671,11 @@ class _PreBookContext {
   /// The correct delivery day offered in the "Wrong Day" reply
   final String deliveryDay;
 
+  /// Timestamp when pre-book was created (for expiration)
+  final DateTime createdAt;
+
+  static const expirationHours = 48;
+
   _PreBookContext({
     required this.customerId,
     required this.phoneNumber,
@@ -431,5 +683,10 @@ class _PreBookContext {
     this.gallonType,
     this.address,
     required this.deliveryDay,
-  });
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  bool get isExpired {
+    return DateTime.now().difference(createdAt).inHours > expirationHours;
+  }
 }

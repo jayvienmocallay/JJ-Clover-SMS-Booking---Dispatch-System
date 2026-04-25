@@ -18,6 +18,9 @@ class Customer {
   /// Full delivery address within the barangay (e.g., 'Purok 4, near chapel')
   final String? address;
 
+  /// Foreign key to barangays table
+  final int? barangayId;
+
   /// Name of the customer's barangay (joined from barangays table)
   final String barangay;
 
@@ -29,6 +32,7 @@ class Customer {
     required this.name,
     required this.contactNumber,
     this.address,
+    this.barangayId,
     required this.barangay,
     required this.deliveryZone,
   });
@@ -41,21 +45,34 @@ class Customer {
       name: map['name'] as String,
       contactNumber: map['contact_number'] as String,
       address: map['address'] as String?,
-      barangay: map['barangay'] as String,
-      deliveryZone: map['delivery_zone'] as String,
+      barangayId: map['barangay_id'] as int?,
+      barangay: map['barangay'] as String? ?? '',
+      deliveryZone: map['delivery_zone'] as String? ?? '',
+    );
+  }
+
+  /// Creates a [Customer] instance from a simple row (no JOIN).
+  factory Customer.fromSimple(Map<String, dynamic> map) {
+    return Customer(
+      id: map['id'] as int?,
+      name: map['name'] as String,
+      contactNumber: map['contact_number'] as String,
+      address: map['address'] as String?,
+      barangayId: map['barangay_id'] as int?,
+      barangay: '',
+      deliveryZone: '',
     );
   }
 
   /// Converts this customer to a map for database insertion.
-  /// Only includes non-null optional fields to avoid overwriting with null.
+  /// Uses barangay_id (FK), not the name strings.
   Map<String, dynamic> toMap() {
     return {
       if (id != null) 'id': id,
       'name': name,
       'contact_number': contactNumber,
       if (address != null) 'address': address,
-      'barangay': barangay,
-      'delivery_zone': deliveryZone,
+      'barangay_id': barangayId,
     };
   }
 }

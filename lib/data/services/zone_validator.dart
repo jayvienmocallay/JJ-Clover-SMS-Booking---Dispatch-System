@@ -103,7 +103,7 @@ class ZoneValidator {
     return ValidationResponse(
       result: ValidationResult.invalidDay,
       message:
-          'Sorry, we are serving ${DeliveryDays.getToday()} zones today. '
+          'Sorry, we are serving $currentDay zones today. '
           'Your area (${customer.deliveryZone}) is scheduled for $nextDay. '
           'Would you like to pre-book? Reply YES.',
       customer: customer,

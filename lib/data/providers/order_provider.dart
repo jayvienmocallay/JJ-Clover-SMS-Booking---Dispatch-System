@@ -6,9 +6,11 @@ import '../../database_helper.dart';
 class OrderProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _todayOrders = [];
   bool _isLoading = false;
+  String? _error;
 
   List<Map<String, dynamic>> get todayOrders => _todayOrders;
   bool get isLoading => _isLoading;
+  String? get error => _error;
 
   /// Stats computed from today's orders
   int get totalGallons =>
@@ -21,6 +23,7 @@ class OrderProvider extends ChangeNotifier {
   /// Loads today's orders from the database and notifies listeners
   Future<void> loadOrders() async {
     _isLoading = true;
+    _error = null;
     notifyListeners();
 
     try {
@@ -28,6 +31,7 @@ class OrderProvider extends ChangeNotifier {
       _todayOrders = await db.getTodayOrders();
     } catch (e) {
       debugPrint('OrderProvider.loadOrders error: $e');
+      _error = e.toString();
     }
 
     _isLoading = false;
@@ -35,14 +39,31 @@ class OrderProvider extends ChangeNotifier {
   }
 
   /// Updates an order's status and refreshes the list
-  Future<void> updateStatus(int orderId, String newStatus) async {
-    await DatabaseHelper.instance.updateOrderStatus(orderId, newStatus);
-    await loadOrders();
+  Future<void> updateStatus(int orderId, String newStatus, {String? reason}) async {
+    _error = null;
+    try {
+      await DatabaseHelper.instance.updateOrderStatus(orderId, newStatus, reason: reason);
+      await loadOrders();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
   }
 
   /// Inserts a new order and refreshes the list
   Future<void> addOrder(Map<String, dynamic> orderData) async {
-    await DatabaseHelper.instance.insertOrder(orderData);
-    await loadOrders();
+    _error = null;
+    try {
+      await DatabaseHelper.instance.insertOrder(orderData);
+      await loadOrders();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  void clearError() {
+    _error = null;
+    notifyListeners();
   }
 }

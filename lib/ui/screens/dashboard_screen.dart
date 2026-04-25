@@ -53,8 +53,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _refresh() async {
     if (kIsWeb) return;
-    await context.read<OrderProvider>().loadOrders();
-    await context.read<CustomerProvider>().loadCustomers();
+    final orderProv = context.read<OrderProvider>();
+    final customerProv = context.read<CustomerProvider>();
+    await orderProv.loadOrders();
+    await customerProv.loadCustomers();
     await _loadBarangays();
   }
 

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/models/order_model.dart';
+import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/order_card.dart';
 
@@ -18,7 +19,7 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  // Filter: 'all', 'deliver', or 'drop'
+  // Filter: 'all', 'deliver', 'drop', or 'unrecognized'
   String _filter = 'all';
 
   /// Filters orders by type
@@ -42,6 +43,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
           value: context.read<CustomerProvider>(),
           child: const _AddOrderForm(),
         ),
+      ),
+    );
+  }
+
+  void _showDeliveryManifest() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      isScrollControlled: true,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: context.read<OrderProvider>(),
+        child: const _DeliveryManifestSheet(),
       ),
     );
   }
@@ -84,35 +97,78 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       SizedBox(height: 4),
                       Text(
                         "Manage today's delivery and walk-in orders.",
-                        style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.mutedForeground,
+                        ),
                       ),
                     ],
                   ),
                   // Task 011 — Add Order button
-                  GestureDetector(
-                    onTap: _showAddOrderSheet,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.add, size: 16, color: Colors.white),
-                          SizedBox(width: 4),
-                          Text(
-                            'Add Order',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _showDeliveryManifest,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
                           ),
-                        ],
+                          decoration: BoxDecoration(
+                            color: AppColors.statusOperating,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.assignment,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Manifest',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _showAddOrderSheet,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add, size: 16, color: Colors.white),
+                              SizedBox(width: 4),
+                              Text(
+                                'Add Order',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -137,6 +193,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     label: 'Walk-ins',
                     isActive: _filter == 'drop',
                     onTap: () => setState(() => _filter = 'drop'),
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterTab(
+                    label: 'Invalid',
+                    isActive: _filter == 'unrecognized',
+                    onTap: () => setState(() => _filter = 'unrecognized'),
                   ),
                 ],
               ),
@@ -164,7 +226,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           ? () => orderProv.updateStatus(order.id!, 'confirmed')
                           : null,
                       onReject: order.status == OrderStatus.pending
-                          ? () => orderProv.updateStatus(order.id!, 'cancelled')
+                          ? () => _showRejectDialog(order.id!, orderProv)
+                          : null,
+                      onStartDelivery: order.status == OrderStatus.confirmed
+                          ? () =>
+                                orderProv.updateStatus(order.id!, 'in_transit')
+                          : null,
+                      onComplete: order.status == OrderStatus.inTransit
+                          ? () => orderProv.updateStatus(order.id!, 'completed')
                           : null,
                     ),
                   );
@@ -188,9 +257,67 @@ class _OrdersScreenState extends State<OrdersScreen> {
             color: AppColors.mutedForeground.withValues(alpha: 0.3),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'No orders found.',
-            style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+          Text(
+            _filter == 'all' ? 'No orders found.' : 'No $_filter orders found.',
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.mutedForeground,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRejectDialog(int orderId, OrderProvider orderProv) {
+    String? reason;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text(
+          'Reject Order',
+          style: TextStyle(color: AppColors.foreground),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Are you sure you want to reject this order?',
+              style: TextStyle(color: AppColors.mutedForeground),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              onChanged: (v) => reason = v,
+              style: const TextStyle(color: AppColors.foreground),
+              decoration: InputDecoration(
+                hintText: 'Reason (optional)',
+                hintStyle: const TextStyle(color: AppColors.mutedForeground),
+                filled: true,
+                fillColor: AppColors.background,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusMaintenance,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              orderProv.updateStatus(orderId, 'cancelled', reason: reason);
+            },
+            child: const Text('Reject'),
           ),
         ],
       ),
@@ -252,6 +379,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
   final _phoneController = TextEditingController();
   String _type = 'deliver';
   int _quantity = 1;
+  String _gallonType = 'new';
 
   @override
   void dispose() {
@@ -263,9 +391,9 @@ class _AddOrderFormState extends State<_AddOrderForm> {
     final phone = _phoneController.text.trim();
 
     if (_customerMode == 'existing' && _selectedCustomerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a customer')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a customer')));
       return;
     }
     if (_customerMode == 'new' && phone.isEmpty) {
@@ -280,7 +408,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
       'phone_number': phone,
       'type': _type,
       'quantity': _quantity,
-      'gallon_type': 'old',
+      'gallon_type': _gallonType,
       'status': 'pending',
       'created_at': DateTime.now().toIso8601String(),
       'is_pre_book': 0,
@@ -334,8 +462,10 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           const SizedBox(height: 20),
 
           // Customer mode toggle
-          const Text('Customer',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+          const Text(
+            'Customer',
+            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -357,11 +487,18 @@ class _AddOrderFormState extends State<_AddOrderForm> {
               ),
               child: TextField(
                 onChanged: (val) => setState(() => _customerSearch = val),
-                style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.foreground,
+                ),
                 decoration: const InputDecoration(
                   hintText: 'Search customer...',
                   hintStyle: TextStyle(color: AppColors.mutedForeground),
-                  prefixIcon: Icon(Icons.search, size: 18, color: AppColors.mutedForeground),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    size: 18,
+                    color: AppColors.mutedForeground,
+                  ),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -382,32 +519,50 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                     onTap: () {
                       setState(() {
                         _selectedCustomerId = id;
-                        _phoneController.text = c['contact_number'] as String? ?? '';
+                        _phoneController.text =
+                            c['contact_number'] as String? ?? '';
                       });
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primaryLight : AppColors.background,
+                        color: isSelected
+                            ? AppColors.primaryLight
+                            : AppColors.background,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: isSelected ? AppColors.primary : AppColors.border,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.border,
                         ),
                       ),
                       child: Row(
                         children: [
                           if (isSelected)
-                            const Icon(Icons.check_circle, size: 16, color: AppColors.primary)
+                            const Icon(
+                              Icons.check_circle,
+                              size: 16,
+                              color: AppColors.primary,
+                            )
                           else
-                            const Icon(Icons.radio_button_off, size: 16, color: AppColors.mutedForeground),
+                            const Icon(
+                              Icons.radio_button_off,
+                              size: 16,
+                              color: AppColors.mutedForeground,
+                            ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               '${c['name']} — ${c['contact_number']}',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: isSelected ? AppColors.primary : AppColors.foreground,
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : AppColors.foreground,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -424,16 +579,24 @@ class _AddOrderFormState extends State<_AddOrderForm> {
 
           // New customer: phone number input
           if (_customerMode == 'new') ...[
-            const Text('Phone Number',
-                style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+            const Text(
+              'Phone Number',
+              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+            ),
             const SizedBox(height: 6),
-            _buildTextField(_phoneController, 'e.g. 09171234567', TextInputType.phone),
+            _buildTextField(
+              _phoneController,
+              'e.g. 09171234567',
+              TextInputType.phone,
+            ),
             const SizedBox(height: 16),
           ],
 
           // Type toggle
-          const Text('Order Type',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+          const Text(
+            'Order Type',
+            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -445,15 +608,19 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           const SizedBox(height: 16),
 
           // Quantity with +/- buttons
-          const Text('Quantity (gallons)',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+          const Text(
+            'Quantity (gallons)',
+            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
               // Minus button
               GestureDetector(
                 onTap: () {
-                  if (_quantity > 1) setState(() => _quantity--);
+                  if (_quantity > AppConstants.minQuantity) {
+                    setState(() => _quantity--);
+                  }
                 },
                 child: Container(
                   width: 44,
@@ -463,7 +630,11 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.border),
                   ),
-                  child: const Icon(Icons.remove, size: 18, color: AppColors.mutedForeground),
+                  child: const Icon(
+                    Icons.remove,
+                    size: 18,
+                    color: AppColors.mutedForeground,
+                  ),
                 ),
               ),
               // Quantity display
@@ -481,7 +652,11 @@ class _AddOrderFormState extends State<_AddOrderForm> {
               ),
               // Plus button
               GestureDetector(
-                onTap: () => setState(() => _quantity++),
+                onTap: () {
+                  if (_quantity < AppConstants.maxQuantity) {
+                    setState(() => _quantity++);
+                  }
+                },
                 child: Container(
                   width: 44,
                   height: 44,
@@ -490,9 +665,28 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.primary),
                   ),
-                  child: const Icon(Icons.add, size: 18, color: AppColors.primary),
+                  child: const Icon(
+                    Icons.add,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Gallon type selector
+          const Text(
+            'Gallon Type',
+            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              _buildGallonTypeOption('new', 'New', Icons.water_drop),
+              const SizedBox(width: 12),
+              _buildGallonTypeOption('old', 'Old', Icons.local_gas_station),
             ],
           ),
           const SizedBox(height: 24),
@@ -548,8 +742,13 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14,
-                  color: isSelected ? AppColors.primary : AppColors.mutedForeground),
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.mutedForeground,
+              ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
@@ -557,7 +756,9 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: isSelected ? AppColors.primary : AppColors.mutedForeground,
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.mutedForeground,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -569,7 +770,11 @@ class _AddOrderFormState extends State<_AddOrderForm> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, TextInputType type) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint,
+    TextInputType type,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.background,
@@ -584,7 +789,10 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           hintText: hint,
           hintStyle: const TextStyle(color: AppColors.mutedForeground),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
         ),
       ),
     );
@@ -608,20 +816,400 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16,
-                  color: isSelected ? AppColors.primary : AppColors.mutedForeground),
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.mutedForeground,
+              ),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: isSelected ? AppColors.primary : AppColors.mutedForeground,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.mutedForeground,
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildGallonTypeOption(String value, String label, IconData icon) {
+    final isSelected = _gallonType == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _gallonType = value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primaryLight : AppColors.background,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.border,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.mutedForeground,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.mutedForeground,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Delivery Manifest - shows confirmed orders ready for delivery grouped by day
+class _DeliveryManifestSheet extends StatelessWidget {
+  const _DeliveryManifestSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<OrderProvider>(
+      builder: (context, orderProv, _) {
+        final confirmed = orderProv.todayOrders
+            .where(
+              (o) => o['status'] == 'confirmed' || o['status'] == 'in_transit',
+            )
+            .toList();
+
+        final Map<String, List<Map<String, dynamic>>> byDay = {};
+        for (final o in confirmed) {
+          final day = o['delivery_day'] as String? ?? 'Today';
+          byDay[day] ??= [];
+          byDay[day]!.add(o);
+        }
+
+        final totalOrders = confirmed.length;
+        final totalGallons = confirmed.fold<int>(
+          0,
+          (sum, o) => sum + ((o['quantity'] as int?) ?? 0),
+        );
+
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) => Container(
+            decoration: const BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.assignment, color: AppColors.primary),
+                      SizedBox(width: 12),
+                      Text(
+                        'Delivery Manifest',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.foreground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      _SummaryChip(
+                        label: '$totalOrders',
+                        sub: 'orders',
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      _SummaryChip(
+                        label: '$totalGallons',
+                        sub: 'gallons',
+                        color: AppColors.statusOperating,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: confirmed.isEmpty
+                      ? const Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                size: 48,
+                                color: AppColors.statusOperating,
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                'All deliveries completed!',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.mutedForeground,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView(
+                          controller: scrollController,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          children: [
+                            ...byDay.entries.map(
+                              (entry) => Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      entry.key,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ...entry.value.asMap().entries.map(
+                                    (e) => _ManifestItem(
+                                      index: e.key + 1,
+                                      order: e.value,
+                                      onStart: e.value['status'] == 'confirmed'
+                                          ? () => orderProv.updateStatus(
+                                              e.value['id'] as int,
+                                              'in_transit',
+                                            )
+                                          : null,
+                                      onComplete:
+                                          e.value['status'] == 'in_transit'
+                                          ? () => orderProv.updateStatus(
+                                              e.value['id'] as int,
+                                              'completed',
+                                            )
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SummaryChip extends StatelessWidget {
+  final String label;
+  final String sub;
+  final Color color;
+
+  const _SummaryChip({
+    required this.label,
+    required this.sub,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+            Text(sub, style: TextStyle(fontSize: 11, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ManifestItem extends StatelessWidget {
+  final int index;
+  final Map<String, dynamic> order;
+  final VoidCallback? onStart;
+  final VoidCallback? onComplete;
+
+  const _ManifestItem({
+    required this.index,
+    required this.order,
+    this.onStart,
+    this.onComplete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final status = order['status'] as String? ?? '';
+    final phone = order['phone_number'] as String? ?? '';
+    final qty = order['quantity'] as int? ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: status == 'in_transit'
+              ? AppColors.statusBusy
+              : AppColors.border,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: const BoxDecoration(
+              color: AppColors.muted,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$index',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  phone,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  '$qty gallon(s)',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: status == 'in_transit'
+                  ? AppColors.statusBusy
+                  : AppColors.statusOperating,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              status == 'in_transit' ? 'Delivering' : 'Ready',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          if (onStart != null || onComplete != null) ...[
+            const SizedBox(width: 8),
+            if (onStart != null)
+              GestureDetector(
+                onTap: onStart,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: AppColors.statusBusy,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            if (onComplete != null)
+              GestureDetector(
+                onTap: onComplete,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: AppColors.statusOperating,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.check, size: 16, color: Colors.white),
+                ),
+              ),
+          ],
+        ],
       ),
     );
   }

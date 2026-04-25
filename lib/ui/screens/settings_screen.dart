@@ -20,21 +20,35 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _barangayController = TextEditingController();
   List<Map<String, dynamic>> _barangays = [];
+  String _selectedZone = 'Zone A';
 
-  // Editable cutoff time (in-memory override of AppConstants)
+  // Editable cutoff time - loaded from persisted settings
   int _cutoffHour = AppConstants.orderCutOffHour;
   int _cutoffMinute = AppConstants.orderCutOffMinute;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadBarangays();
+    _loadData();
   }
 
-  Future<void> _loadBarangays() async {
-    if (kIsWeb) return;
+  Future<void> _loadData() async {
+    if (kIsWeb) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     final barangays = await DatabaseHelper.instance.getBarangays();
-    if (mounted) setState(() => _barangays = barangays);
+    final hour = await DatabaseHelper.instance.getCutoffHour();
+    final minute = await DatabaseHelper.instance.getCutoffMinute();
+    if (mounted) {
+      setState(() {
+        _barangays = barangays;
+        _cutoffHour = hour;
+        _cutoffMinute = minute;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _addBarangay() async {
@@ -54,15 +68,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     await DatabaseHelper.instance.insertBarangay({
       'name': name,
-      'delivery_zone': 'Zone A', // Default zone — can be changed later
+      'delivery_zone': _selectedZone,
     });
     _barangayController.clear();
-    await _loadBarangays();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$name added successfully')),
+      );
+    }
+    await _loadData();
   }
 
   Future<void> _removeBarangay(int id) async {
     await DatabaseHelper.instance.deleteBarangay(id);
-    await _loadBarangays();
+    await _loadData();
   }
 
   void _showTimePicker() async {
@@ -86,6 +105,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (picked != null) {
+      await DatabaseHelper.instance.setCutoffTime(picked.hour, picked.minute);
       setState(() {
         _cutoffHour = picked.hour;
         _cutoffMinute = picked.minute;
@@ -119,6 +139,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -300,6 +326,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Row(
             children: [
               Expanded(
+                flex: 2,
                 child: Container(
                   decoration: BoxDecoration(
                     color: AppColors.background,
@@ -318,6 +345,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       contentPadding:
                           EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Zone selector dropdown
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: DropdownButton<String>(
+                    value: _selectedZone,
+                    isExpanded: true,
+                    underline: const SizedBox(),
+                    style: const TextStyle(fontSize: 13, color: AppColors.foreground),
+                    dropdownColor: AppColors.card,
+                    items: ['Zone A', 'Zone B', 'Zone C']
+                        .map((z) => DropdownMenuItem(value: z, child: Text(z)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _selectedZone = v);
+                    },
                   ),
                 ),
               ),

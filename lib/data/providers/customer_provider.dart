@@ -6,14 +6,17 @@ import '../../database_helper.dart';
 class CustomerProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _customers = [];
   bool _isLoading = false;
+  String? _error;
 
   List<Map<String, dynamic>> get customers => _customers;
   bool get isLoading => _isLoading;
   int get count => _customers.length;
+  String? get error => _error;
 
   /// Loads all customers with barangay info and notifies listeners
   Future<void> loadCustomers() async {
     _isLoading = true;
+    _error = null;
     notifyListeners();
 
     try {
@@ -21,6 +24,7 @@ class CustomerProvider extends ChangeNotifier {
       _customers = await db.getCustomersWithBarangay();
     } catch (e) {
       debugPrint('CustomerProvider.loadCustomers error: $e');
+      _error = e.toString();
     }
 
     _isLoading = false;
@@ -29,8 +33,38 @@ class CustomerProvider extends ChangeNotifier {
 
   /// Inserts a new customer and refreshes the list
   Future<void> addCustomer(Map<String, dynamic> customerData) async {
-    await DatabaseHelper.instance.insertCustomer(customerData);
-    await loadCustomers();
+    _error = null;
+    try {
+      await DatabaseHelper.instance.insertCustomer(customerData);
+      await loadCustomers();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  /// Deletes a customer by ID
+  Future<void> deleteCustomer(int customerId) async {
+    _error = null;
+    try {
+      await DatabaseHelper.instance.deleteCustomer(customerId);
+      await loadCustomers();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  /// Updates customer information
+  Future<void> updateCustomer(int customerId, Map<String, dynamic> customerData) async {
+    _error = null;
+    try {
+      await DatabaseHelper.instance.updateCustomer(customerId, customerData);
+      await loadCustomers();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
   }
 
   /// Returns customer data by ID from cache
@@ -40,5 +74,10 @@ class CustomerProvider extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  void clearError() {
+    _error = null;
+    notifyListeners();
   }
 }

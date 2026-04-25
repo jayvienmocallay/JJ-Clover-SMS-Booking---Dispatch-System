@@ -17,6 +17,8 @@ class OrderCard extends StatelessWidget {
   final String? address;
   final VoidCallback? onConfirm;
   final VoidCallback? onReject;
+  final VoidCallback? onStartDelivery;
+  final VoidCallback? onComplete;
 
   const OrderCard({
     super.key,
@@ -27,6 +29,8 @@ class OrderCard extends StatelessWidget {
     this.address,
     this.onConfirm,
     this.onReject,
+    this.onStartDelivery,
+    this.onComplete,
   });
 
   @override
@@ -165,6 +169,26 @@ class OrderCard extends StatelessWidget {
             ],
           ),
 
+          // Cancel reason display for cancelled/rejected orders
+          if ((order.status == OrderStatus.cancelled || order.status == OrderStatus.rejected) && order.cancelReason != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.statusMaintenanceLight,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Reason: ${order.cancelReason}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.statusMaintenance,
+                  ),
+                ),
+              ),
+            ),
+
           // Task 011 — Delivery log link for completed orders
           if (order.status == OrderStatus.completed && order.id != null) ...[
             const SizedBox(height: 12),
@@ -265,6 +289,90 @@ class OrderCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                ],
+              ),
+            ),
+          ],
+
+          // --- Action buttons for confirmed orders (start delivery) ---
+          if (order.status == OrderStatus.confirmed && onStartDelivery != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.only(top: 12),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: onStartDelivery,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.statusBusy,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.local_shipping, size: 16, color: Colors.white),
+                            SizedBox(width: 6),
+                            Text(
+                              'Start Delivery',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // --- Action buttons for in_transit orders (complete delivery) ---
+          if (order.status == OrderStatus.inTransit && onComplete != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.only(top: 12),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: onComplete,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.statusOperating,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle, size: 16, color: Colors.white),
+                            SizedBox(width: 6),
+                            Text(
+                              'Mark Delivered',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -412,7 +520,12 @@ class _StatusBadge extends StatelessWidget {
         bgColor = AppColors.statusAwayLight;
         textColor = AppColors.statusAway;
         break;
+      case OrderStatus.inTransit:
+        bgColor = AppColors.statusBusyLight;
+        textColor = AppColors.statusBusy;
+        break;
       case OrderStatus.cancelled:
+      case OrderStatus.rejected:
         bgColor = AppColors.statusMaintenanceLight;
         textColor = AppColors.statusMaintenance;
         break;

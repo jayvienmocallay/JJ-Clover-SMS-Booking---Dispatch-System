@@ -30,6 +30,37 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }).toList();
   }
 
+  Future<void> _deleteCustomer(int customerId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('Delete Customer', style: TextStyle(color: AppColors.foreground)),
+        content: Text('Delete $name and their orders history?', style: const TextStyle(color: AppColors.mutedForeground)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.statusMaintenance),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await context.read<CustomerProvider>().deleteCustomer(customerId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name deleted')),
+        );
+      }
+    }
+  }
+
   /// Shows the Add Customer bottom sheet form
   void _showAddCustomerSheet() {
     showModalBottomSheet(
@@ -230,6 +261,22 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               ],
                             ),
                           ),
+                          // Edit button
+                          GestureDetector(
+                            onTap: () => _editCustomer(c),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              child: const Icon(Icons.edit, size: 20, color: AppColors.primary),
+                            ),
+                          ),
+                          // Delete button
+                          GestureDetector(
+                            onTap: () => _deleteCustomer(c['id'] as int, name),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              child: const Icon(Icons.delete_outline, size: 20, color: AppColors.statusMaintenance),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -239,6 +286,170 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _editCustomer(Map<String, dynamic> customer) {
+    final nameController = TextEditingController(text: customer['name'] as String? ?? '');
+    final phoneController = TextEditingController(text: customer['contact_number'] as String? ?? '');
+    final addressController = TextEditingController(text: customer['address'] as String? ?? '');
+    final customerId = customer['id'] as int;
+    final currentBarangayId = customer['barangay_id'] as int?;
+    int? selectedBarangayId = currentBarangayId;
+    final List<Map<String, dynamic>> barangays = [];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return FutureBuilder<List<Map<String, dynamic>>>(
+            future: DatabaseHelper.instance.getBarangays(),
+            builder: (ctx, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              barangays.clear();
+              barangays.addAll(snapshot.data!);
+              
+              return Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  20 + MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Edit Customer',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.foreground,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Full Name', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const SizedBox(height: 6),
+                    _buildTextField(nameController, 'Full Name', TextInputType.name),
+                    const SizedBox(height: 16),
+                    const Text('Phone Number', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const SizedBox(height: 6),
+                    _buildTextField(phoneController, 'Phone Number', TextInputType.phone),
+                    const SizedBox(height: 16),
+                    const Text('Full Address', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const SizedBox(height: 6),
+                    _buildTextField(addressController, 'Full Address', TextInputType.streetAddress),
+                    const SizedBox(height: 16),
+                    const Text('Barangay', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int?>(
+                          value: selectedBarangayId,
+                          isExpanded: true,
+                          dropdownColor: AppColors.card,
+                          hint: const Text('Select Barangay...', style: TextStyle(color: AppColors.mutedForeground)),
+                          items: barangays.map((b) => DropdownMenuItem<int?>(
+                            value: b['id'] as int,
+                            child: Text('${b['name']} (${b['delivery_zone']})', style: const TextStyle(color: AppColors.foreground)),
+                          )).toList(),
+                          onChanged: (val) => setSheetState(() => selectedBarangayId = val),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: GestureDetector(
+                        onTap: () async {
+                          final name = nameController.text.trim();
+                          final phone = phoneController.text.trim();
+                          final address = addressController.text.trim();
+
+                          if (name.isEmpty || phone.isEmpty || selectedBarangayId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Name, phone, and barangay are required')),
+                            );
+                            return;
+                          }
+
+                          await context.read<CustomerProvider>().updateCustomer(customerId, {
+                            'name': name,
+                            'contact_number': phone,
+                            'address': address.isNotEmpty ? address : null,
+                            'barangay_id': selectedBarangayId,
+                          });
+
+                          if (context.mounted) Navigator.pop(ctx);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Save Changes',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String hint, TextInputType type) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: type,
+        style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: AppColors.mutedForeground),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+      ),
     );
   }
 }
@@ -301,10 +512,31 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       );
       return;
     }
-    if (_selectedBarangayId == null) {
+
+    final phoneRegex = RegExp(r'^09\d{9}$');
+    if (!phoneRegex.hasMatch(phone)) {
       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid phone format. Use 09XXXXXXXXX')),
+      );
+      return;
+    }
+
+    if (_selectedBarangayId == null) {
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      scaffoldMessenger.showSnackBar(
         const SnackBar(content: Text('Please select a barangay')),
       );
+      return;
+    }
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final existing = await DatabaseHelper.instance.getCustomerByPhone(phone);
+    if (existing != null) {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('A customer with $phone already exists')),
+        );
+      }
       return;
     }
 
@@ -315,8 +547,19 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       'barangay_id': _selectedBarangayId,
     };
 
-    await context.read<CustomerProvider>().addCustomer(customerData);
-    if (mounted) Navigator.pop(context);
+    // ignore: use_build_context_synchronously
+    final customerProv = context.read<CustomerProvider>();
+    // ignore: use_build_context_synchronously
+    final navigator = Navigator.of(context);
+    final snackBarMsg = '$name added successfully';
+    // ignore: use_build_context_synchronously
+    final successSnack = SnackBar(content: Text(snackBarMsg));
+
+    // ignore: use_build_context_synchronously
+    await customerProv.addCustomer(customerData);
+    if (!mounted) return;
+    navigator.pop();
+    scaffoldMessenger.showSnackBar(successSnack);
   }
 
   @override

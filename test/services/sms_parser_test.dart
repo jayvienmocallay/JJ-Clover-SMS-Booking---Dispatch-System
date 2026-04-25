@@ -68,9 +68,9 @@ void main() {
       expect(result.quantity, 5);
     });
 
-    test('handles large quantity', () {
+    test('rejects quantity above maximum', () {
       final result = SmsParser.parse('DELIVER 100');
-      expect(result.command, SmsCommand.deliver);
+      expect(result.command, SmsCommand.unknown);
       expect(result.quantity, 100);
     });
 
@@ -187,9 +187,9 @@ void main() {
       expect(result.quantity, 5);
     });
 
-    test('handles zero quantity', () {
+    test('rejects zero quantity', () {
       final result = SmsParser.parse('DELIVER 0');
-      expect(result.command, SmsCommand.deliver);
+      expect(result.command, SmsCommand.unknown);
       expect(result.quantity, 0);
     });
 

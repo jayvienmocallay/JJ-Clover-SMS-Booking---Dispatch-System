@@ -1,14 +1,54 @@
 // Task 010 — Schedule screen: day-by-day barangay delivery schedule
 // Day-by-day barangay delivery schedule view
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/constants/app_constants.dart';
+import '../../database_helper.dart';
 import '../theme/app_theme.dart';
 
-class ScheduleScreen extends StatelessWidget {
+class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
 
   @override
+  State<ScheduleScreen> createState() => _ScheduleScreenState();
+}
+
+class _ScheduleScreenState extends State<ScheduleScreen> {
+  List<Map<String, dynamic>> _barangays = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBarangays();
+  }
+
+  Future<void> _loadBarangays() async {
+    if (kIsWeb) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+    try {
+      final barangays = await DatabaseHelper.instance.getBarangays();
+      if (mounted) {
+        setState(() {
+          _barangays = barangays;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
     final today = DeliveryDays.getToday();
 
     return ListView(
@@ -33,7 +73,6 @@ class ScheduleScreen extends StatelessWidget {
         // --- Day cards ---
         ...DeliveryDays.days.map((day) {
           final isToday = day == today;
-          // Get all barangays scheduled for this day
           final barangays = _getBarangaysForDay(day);
 
           return Padding(
@@ -101,6 +140,8 @@ class ScheduleScreen extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: barangays.map((brgy) {
+                        final name = brgy['name'] as String? ?? 'Unknown';
+                        final zone = brgy['delivery_zone'] as String? ?? '';
                         return Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -111,7 +152,7 @@ class ScheduleScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            brgy,
+                            '$name ($zone)',
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -130,26 +171,12 @@ class ScheduleScreen extends StatelessWidget {
     );
   }
 
-  /// Gets all barangay names that have delivery on the given day
-  /// by checking ZoneScheduleMap for each zone
-  List<String> _getBarangaysForDay(String day) {
-    final barangays = <String>[];
-
-    // Zone A: Mon-Sat
-    if (ZoneScheduleMap.zoneADays.contains(day)) {
-      barangays.addAll(['San Isidro', 'San Jose']);
-    }
-    // Zone B: Mon/Wed/Fri
-    if (ZoneScheduleMap.zoneBDays.contains(day)) {
-      barangays.addAll(['Poblacion', 'Santa Rosa']);
-    }
-    // Zone C: check each barangay's specific day
-    ZoneScheduleMap.zoneCBarangayDays.forEach((brgy, brgyDay) {
-      if (brgyDay == day) {
-        barangays.add(brgy);
-      }
-    });
-
-    return barangays;
+  List<Map<String, dynamic>> _getBarangaysForDay(String day) {
+    return _barangays.where((b) {
+      final zone = b['delivery_zone'] as String? ?? '';
+      final name = b['name'] as String? ?? '';
+      final days = ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
+      return days.contains(day);
+    }).toList();
   }
 }
