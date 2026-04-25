@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/models/order_model.dart';
+import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/order_card.dart';
 
@@ -197,7 +198,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           Text(
             _filter == 'all'
                 ? 'No orders found.'
-                : 'No ${_filter} orders found.',
+                : 'No $_filter orders found.',
             style: const TextStyle(fontSize: 14, color: AppColors.mutedForeground),
           ),
         ],
@@ -517,7 +518,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
               // Minus button
               GestureDetector(
                 onTap: () {
-                  if (_quantity > 0) setState(() => _quantity--);
+                  if (_quantity > AppConstants.minQuantity) setState(() => _quantity--);
                 },
                 child: Container(
                   width: 44,
@@ -545,7 +546,9 @@ class _AddOrderFormState extends State<_AddOrderForm> {
               ),
               // Plus button
               GestureDetector(
-                onTap: () => setState(() => _quantity++),
+                onTap: () {
+                  if (_quantity < AppConstants.maxQuantity) setState(() => _quantity++);
+                },
                 child: Container(
                   width: 44,
                   height: 44,
