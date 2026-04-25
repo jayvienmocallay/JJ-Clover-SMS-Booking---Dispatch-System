@@ -3,6 +3,7 @@
 // SMS inbox with unread/all filter, smart time formatting, expandable details
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:jj_clover_sms/database_helper.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../theme/app_theme.dart';
@@ -17,10 +18,39 @@ class MessagesScreen extends StatefulWidget {
 class _MessagesScreenState extends State<MessagesScreen> {
   // Filter: 'all' or 'unread'
   String _filter = 'all';
-  // Track read message IDs in memory
-  final Set<int> _readIds = {};
+  // Track read message IDs - persisted to database
+  Set<int> _readIds = {};
   // Track expanded message ID
   int? _expandedId;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReadIds();
+  }
+
+  Future<void> _loadReadIds() async {
+    try {
+      final ids = await DatabaseHelper.instance.getReadMessageIds();
+      if (mounted) {
+        setState(() {
+          _readIds = ids;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _saveReadIds() async {
+    try {
+      await DatabaseHelper.instance.setReadMessageIds(_readIds);
+    } catch (_) {}
+  }
 
   /// Smart time formatting: "Just now", "Xm ago", "Xh ago", or time string
   String _formatTime(String createdAt) {
@@ -46,13 +76,20 @@ class _MessagesScreenState extends State<MessagesScreen> {
     return !_readIds.contains(orderId);
   }
 
-  void _markAsRead(int? orderId) {
+  Future<void> _markAsRead(int? orderId) async {
     if (orderId == null) return;
     setState(() => _readIds.add(orderId));
+    await _saveReadIds();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
     return Consumer2<OrderProvider, CustomerProvider>(
       builder: (context, orderProv, customerProv, _) {
         final orders = orderProv.todayOrders;

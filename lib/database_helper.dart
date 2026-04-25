@@ -118,6 +118,13 @@ class DatabaseHelper {
       )
     ''');
 
+    // Add indexes for query performance
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_number)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)');
+
     // Task 005 — 5. Delivery Logs Table (per-household accountability)
     // Records per-household delivery details for accountability and loss tracking.
     // Each log entry ties a delivery to an order, customer, and staff member.
@@ -191,6 +198,15 @@ class DatabaseHelper {
       if (existingSchedules.isEmpty) {
         await _seedSchedules(db);
       }
+
+      // Add indexes for query performance (idempotent)
+      try {
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_number)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)');
+      } catch (_) {}
     }
 
     if (oldVersion < 3) {
@@ -532,10 +548,10 @@ class DatabaseHelper {
     );
   }
 
-  // App settings CRUD operations
+// App settings CRUD operations
 
   Future<String?> getSetting(String key) async {
-    final db = await instance.database;
+    final db = await database;
     final result = await db.query(
       'app_settings',
       columns: ['value'],
@@ -548,7 +564,7 @@ class DatabaseHelper {
   }
 
   Future<void> setSetting(String key, String value) async {
-    final db = await instance.database;
+    final db = await database;
     await db.insert('app_settings', {
       'key': key,
       'value': value,
@@ -556,7 +572,78 @@ class DatabaseHelper {
   }
 
   Future<void> deleteSetting(String key) async {
-    final db = await instance.database;
+    final db = await database;
     await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+  }
+
+  static const String readMessageIdsKey = 'read_message_ids';
+  static const String preBookPendingKey = 'pre_book_pending';
+  static const String cutoffHourKey = 'cutoff_hour';
+  static const String cutoffMinuteKey = 'cutoff_minute';
+
+  Future<Set<int>> getReadMessageIds() async {
+    final value = await getSetting(readMessageIdsKey);
+    if (value == null || value.isEmpty) return {};
+    try {
+      return value.split(',').where((s) => s.isNotEmpty).map((s) => int.parse(s)).toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> setReadMessageIds(Set<int> ids) async {
+    await setSetting(readMessageIdsKey, ids.join(','));
+  }
+
+  Future<Map<String, Map<String, dynamic>>> getPreBookPending() async {
+    final value = await getSetting(preBookPendingKey);
+    if (value == null || value.isEmpty) return {};
+    try {
+      final Map<String, Map<String, dynamic>> result = {};
+      if (value.contains('|')) {
+        for (final entry in value.split('|')) {
+          if (entry.isEmpty) continue;
+          final parts = entry.split('~');
+          if (parts.length >= 6) {
+            result[parts[0]] = {
+              'customerId': int.tryParse(parts[1]) ?? 0,
+              'phoneNumber': parts[0],
+              'quantity': int.tryParse(parts[2]) ?? 0,
+              'gallonType': parts[3].isEmpty ? null : parts[3],
+              'address': parts[4].isEmpty ? null : parts[4],
+              'deliveryDay': parts[5],
+              'timestamp': int.tryParse(parts.length > 6 ? parts[6] : '0') ?? 0,
+            };
+          }
+        }
+      }
+      return result;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> setPreBookPending(Map<String, Map<String, dynamic>> pending) async {
+    final entries = <String>[];
+    for (final entry in pending.entries) {
+      final v = entry.value;
+      entries.add('${entry.key}~${v['customerId']}~${v['quantity']}~${v['gallonType'] ?? ''}~${v['address'] ?? ''}~${v['deliveryDay']}~${v['timestamp'] ?? 0}');
+    }
+    await setSetting(preBookPendingKey, entries.join('|'));
+  }
+
+  Future<int> getCutoffHour() async {
+    final value = await getSetting(cutoffHourKey);
+    return int.tryParse(value ?? '') ?? 7;
+  }
+
+  Future<int> getCutoffMinute() async {
+    final value = await getSetting(cutoffMinuteKey);
+    return int.tryParse(value ?? '') ?? 0;
+  }
+
+Future<void> setCutoffTime(int hour, int minute) async {
+    await setSetting(cutoffHourKey, hour.toString());
+    await setSetting(cutoffMinuteKey, minute.toString());
   }
 }
