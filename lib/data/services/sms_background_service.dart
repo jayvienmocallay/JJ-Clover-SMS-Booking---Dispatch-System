@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:telephony/telephony.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../../database_helper.dart';
 import '../../core/constants/app_constants.dart';
@@ -16,12 +17,59 @@ import 'zone_validator.dart';
 import 'system_mode_manager.dart';
 import 'alarm_service.dart';
 
+const MethodChannel _nativeSmsBackgroundChannel = MethodChannel(
+  'com.jjclover.smartrelay/sms_background',
+);
+
+/// Dart entry point started directly by Android's default SMS receiver.
+@pragma('vm:entry-point')
+Future<void> smsNativeBackgroundMain() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+
+  _nativeSmsBackgroundChannel.setMethodCallHandler((call) async {
+    if (call.method != 'processSms') {
+      throw MissingPluginException('Unknown native SMS method: ${call.method}');
+    }
+
+    final rawArgs = call.arguments;
+    if (rawArgs is! Map) {
+      throw ArgumentError('Native SMS payload must be a map.');
+    }
+
+    final args = Map<Object?, Object?>.from(rawArgs);
+    final sender = args['sender']?.toString() ?? '';
+    final message = args['message']?.toString() ?? '';
+    final rawTimestamp = args['timestamp'];
+    final timestamp = rawTimestamp is int
+        ? rawTimestamp
+        : int.tryParse(rawTimestamp?.toString() ?? '');
+
+    await _ensureSmsRuntimeReady();
+    await SmsBackgroundService.instance._processIncomingSmsPayload(
+      sender: sender,
+      message: message,
+      timestamp: timestamp,
+      smsSender: Telephony.backgroundInstance,
+    );
+    return true;
+  });
+
+  await _nativeSmsBackgroundChannel.invokeMethod<void>('initialized');
+}
+
+Future<void> _ensureSmsRuntimeReady() async {
+  await DatabaseHelper.instance.database;
+  await DatabaseHelper.instance.ensureSchedulesSeeded();
+}
+
 /// Entry point used by Android when an SMS arrives while Flutter is backgrounded.
 @pragma('vm:entry-point')
 Future<void> smsBackgroundMessageHandler(SmsMessage msg) async {
   WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
 
+  await _ensureSmsRuntimeReady();
   await SmsBackgroundService.instance._processIncomingSms(
     msg,
     smsSender: Telephony.backgroundInstance,
@@ -166,11 +214,27 @@ class SmsBackgroundService {
     final sender = msg.address ?? '';
     final message = msg.body ?? '';
 
+    await _processIncomingSmsPayload(
+      sender: sender,
+      message: message,
+      timestamp: msg.date,
+      smsSender: smsSender,
+    );
+  }
+
+  Future<void> _processIncomingSmsPayload({
+    required String sender,
+    required String message,
+    int? timestamp,
+    Telephony? smsSender,
+  }) async {
     // Ignore messages with no sender (can't reply without a phone number)
     if (sender.isEmpty) return;
 
     // Create unique key for this message to prevent duplicate processing
-    final msgKey = '$sender|$message';
+    final msgKey = timestamp == null
+        ? '$sender|$message'
+        : '$sender|$message|$timestamp';
     if (_processedMessageIds.contains(msgKey)) {
       debugPrint('Duplicate message skipped: $msgKey');
       return;
@@ -215,11 +279,7 @@ class SmsBackgroundService {
         break;
       case SmsCommand.unknown:
         // Save unrecognized message as an order record for visibility in Messages tab
-        await _saveUnrecognizedMessage(
-          sender,
-          message,
-          'Unrecognized',
-        );
+        await _saveUnrecognizedMessage(sender, message, 'Unrecognized');
         // Send help text for unrecognized commands
         await _sendReply(
           sender,
@@ -266,11 +326,7 @@ class SmsBackgroundService {
     final customerData = await _db.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
       // Save unrecognized message for visibility
-      await _saveUnrecognizedMessage(
-        sender,
-        parsed.rawMessage,
-        'Unregistered',
-      );
+      await _saveUnrecognizedMessage(sender, parsed.rawMessage, 'Unregistered');
       // Phone number not registered — prompt them to register
       await _sendReply(
         sender,
@@ -287,11 +343,7 @@ class SmsBackgroundService {
       normalizedSender,
     );
     if (customerJoined == null) {
-      await _saveUnrecognizedMessage(
-        sender,
-        parsed.rawMessage,
-        'Incomplete',
-      );
+      await _saveUnrecognizedMessage(sender, parsed.rawMessage, 'Incomplete');
       await _sendReply(
         sender,
         'Customer profile is incomplete. Please call the station.',
@@ -349,8 +401,7 @@ class SmsBackgroundService {
     final cutoffMinute = await _db.getCutoffMinute();
     final isBeforeCutoff =
         now.hour < cutoffHour ||
-        (now.hour == cutoffHour &&
-            now.minute < cutoffMinute);
+        (now.hour == cutoffHour && now.minute < cutoffMinute);
 
     // Determine delivery day and status based on cutoff
     String? deliveryDay;

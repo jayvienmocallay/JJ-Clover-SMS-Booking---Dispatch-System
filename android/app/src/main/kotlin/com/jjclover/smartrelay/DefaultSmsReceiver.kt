@@ -8,7 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
-import com.shounakmulay.telephony.sms.IncomingSmsReceiver
 
 class DefaultSmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -23,20 +22,31 @@ class DefaultSmsReceiver : BroadcastReceiver() {
                 persistIncomingSms(appContext, intent)
             }
 
-            try {
-                IncomingSmsReceiver().onReceive(appContext, intent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Unable to forward incoming SMS to Dart.", e)
+            SmsBackgroundBridge.processIntent(appContext, intent) { success ->
+                if (!success) {
+                    Log.w(TAG, "Incoming SMS was not fully processed by Dart.")
+                }
+                finishPendingResult(pendingResult, isDeliver)
             }
+            return
+        } catch (e: Exception) {
+            Log.e(TAG, "Unable to hand incoming SMS to Dart.", e)
+            finishPendingResult(pendingResult, isDeliver)
+        }
+    }
 
-            if (isDeliver) {
-                pendingResult.resultCode = Telephony.Sms.Intents.RESULT_SMS_HANDLED
+    private fun finishPendingResult(
+        pendingResult: BroadcastReceiver.PendingResult,
+        isDeliver: Boolean,
+    ) {
+        Handler(Looper.getMainLooper()).post {
+            try {
+                if (isDeliver) {
+                    pendingResult.resultCode = Telephony.Sms.Intents.RESULT_SMS_HANDLED
+                }
+            } finally {
+                pendingResult.finish()
             }
-        } finally {
-            Handler(Looper.getMainLooper()).postDelayed(
-                { pendingResult.finish() },
-                BACKGROUND_HANDLER_GRACE_MS,
-            )
         }
     }
 
@@ -98,6 +108,5 @@ class DefaultSmsReceiver : BroadcastReceiver() {
 
     private companion object {
         const val TAG = "DefaultSmsReceiver"
-        const val BACKGROUND_HANDLER_GRACE_MS = 8_000L
     }
 }
