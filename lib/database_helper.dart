@@ -148,6 +148,23 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_customer ON delivery_logs(customer_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_delivered ON delivery_logs(delivered_at)');
 
+    // --- SMS Messages Table for full send/receive history ---
+    await db.execute('''
+      CREATE TABLE sms_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone_number TEXT NOT NULL,
+        message TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        related_order_id INTEGER,
+        status TEXT,
+        sent_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_phone ON sms_messages(phone_number)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_direction ON sms_messages(direction)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_sent ON sms_messages(sent_at)');
+
     await _createAppSettingsTable(db);
 
     // Task 006 — Seed default data in order: barangays first, then customers, then schedules.
@@ -570,7 +587,63 @@ class DatabaseHelper {
     );
   }
 
-// App settings CRUD operations
+  // --- SMS Messages CRUD ---
+
+  /// Insert an SMS message (incoming or outgoing)
+  Future<int> insertSmsMessage(Map<String, dynamic> messageData) async {
+    final db = await instance.database;
+    return await db.insert('sms_messages', messageData);
+  }
+
+  /// Get all SMS messages for a phone number
+  Future<List<Map<String, dynamic>>> getSmsMessagesForPhone(
+    String phoneNumber, {
+    int? limit,
+  }) async {
+    final db = await instance.database;
+    return await db.query(
+      'sms_messages',
+      where: 'phone_number = ?',
+      whereArgs: [phoneNumber],
+      orderBy: 'sent_at DESC',
+      limit: limit,
+    );
+  }
+
+  /// Get all SMS messages, newest first
+  Future<List<Map<String, dynamic>>> getAllSmsMessages({int? limit}) async {
+    final db = await instance.database;
+    return await db.query(
+      'sms_messages',
+      orderBy: 'sent_at DESC',
+      limit: limit,
+    );
+  }
+
+  /// Get all SMS messages for today
+  Future<List<Map<String, dynamic>>> getTodaySmsMessages() async {
+    final db = await instance.database;
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    return await db.query(
+      'sms_messages',
+      where: 'date(sent_at) = ?',
+      whereArgs: [today],
+      orderBy: 'sent_at DESC',
+    );
+  }
+
+  /// Update customer info
+  Future<int> updateCustomer(int customerId, Map<String, dynamic> customerData) async {
+    final db = await instance.database;
+    return await db.update(
+      'customers',
+      customerData,
+      where: 'id = ?',
+      whereArgs: [customerId],
+    );
+  }
+
+  // App settings CRUD operations
 
   Future<String?> getSetting(String key) async {
     final db = await database;

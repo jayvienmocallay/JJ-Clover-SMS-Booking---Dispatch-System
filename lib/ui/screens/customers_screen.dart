@@ -261,6 +261,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               ],
                             ),
                           ),
+                          // Edit button
+                          GestureDetector(
+                            onTap: () => _editCustomer(c),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              child: const Icon(Icons.edit, size: 20, color: AppColors.primary),
+                            ),
+                          ),
                           // Delete button
                           GestureDetector(
                             onTap: () => _deleteCustomer(c['id'] as int, name),
@@ -278,6 +286,131 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _editCustomer(Map<String, dynamic> customer) {
+    final nameController = TextEditingController(text: customer['name'] as String? ?? '');
+    final phoneController = TextEditingController(text: customer['contact_number'] as String? ?? '');
+    final addressController = TextEditingController(text: customer['address'] as String? ?? '');
+    final customerId = customer['id'] as int;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (_) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Edit Customer',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.foreground,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('Full Name', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+            const SizedBox(height: 6),
+            _buildTextField(nameController, 'Full Name', TextInputType.name),
+            const SizedBox(height: 16),
+            const Text('Phone Number', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+            const SizedBox(height: 6),
+            _buildTextField(phoneController, 'Phone Number', TextInputType.phone),
+            const SizedBox(height: 16),
+            const Text('Full Address', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+            const SizedBox(height: 6),
+            _buildTextField(addressController, 'Full Address', TextInputType.streetAddress),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: GestureDetector(
+                onTap: () async {
+                  final name = nameController.text.trim();
+                  final phone = phoneController.text.trim();
+                  final address = addressController.text.trim();
+
+                  if (name.isEmpty || phone.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Name and phone are required')),
+                    );
+                    return;
+                  }
+
+                  await context.read<CustomerProvider>().updateCustomer(customerId, {
+                    'name': name,
+                    'contact_number': phone,
+                    'address': address.isNotEmpty ? address : null,
+                  });
+
+                  if (mounted) Navigator.pop(context);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Save Changes',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String hint, TextInputType type) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: type,
+        style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: AppColors.mutedForeground),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+      ),
     );
   }
 }

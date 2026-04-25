@@ -183,6 +183,14 @@ class SmsBackgroundService {
 
     debugPrint('SMS received from $sender: $message');
 
+    // Log incoming SMS for history
+    await _db.insertSmsMessage({
+      'phone_number': PhoneNumberUtils.normalize(sender),
+      'message': message,
+      'direction': 'incoming',
+      'sent_at': DateTime.now().toIso8601String(),
+    });
+
     // The background SMS callback can run in a separate Dart isolate, so the
     // singleton's in-memory mode may be stale. Refresh from the shared database
     // before checking delivery/drop gates or replying to STATUS.
@@ -535,9 +543,27 @@ class SmsBackgroundService {
         message: message,
       );
       debugPrint('Reply sent to $phoneNumber: $message');
+
+      // Log outgoing SMS for history
+      await _db.insertSmsMessage({
+        'phone_number': PhoneNumberUtils.normalize(phoneNumber),
+        'message': message,
+        'direction': 'outgoing',
+        'status': 'sent',
+        'sent_at': DateTime.now().toIso8601String(),
+      });
     } catch (e) {
       // Log the failure but don't crash — the background service must stay alive
       debugPrint('Failed to send reply: $e');
+
+      // Log failed SMS
+      await _db.insertSmsMessage({
+        'phone_number': PhoneNumberUtils.normalize(phoneNumber),
+        'message': message,
+        'direction': 'outgoing',
+        'status': 'failed',
+        'sent_at': DateTime.now().toIso8601String(),
+      });
     }
   }
 

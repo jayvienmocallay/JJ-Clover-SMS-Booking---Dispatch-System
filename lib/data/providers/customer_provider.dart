@@ -55,6 +55,18 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
+  /// Updates customer information
+  Future<void> updateCustomer(int customerId, Map<String, dynamic> customerData) async {
+    _error = null;
+    try {
+      await DatabaseHelper.instance.updateCustomer(customerId, customerData);
+      await loadCustomers();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
   /// Returns customer data by ID from cache
   Map<String, dynamic>? getById(int id) {
     try {
