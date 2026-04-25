@@ -48,3 +48,11 @@ app.*.map.json
 # Claude Code
 .claude/
 CLAUDE.md
+skills-lock.json
+.agents/skills/deploy-to-vercel/SKILL.md
+
+# Agents
+.agents/
+
+# Audit
+audit/
