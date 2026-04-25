@@ -1,5 +1,6 @@
 // Task 004 — SMS Parser: regex-based command extraction from incoming messages
 // Task 007 — Updated DELIVER regex to capture gallon type (NEW/OLD)
+// Task 015 — Added zero quantity validation
 /// All recognized SMS command types that the system can process.
 /// Commands are matched via regex in priority order (first match wins).
 enum SmsCommand { deliver, drop, yes, status, unknown }
@@ -119,8 +120,37 @@ class SmsParser {
     return ParsedSms(command: SmsCommand.unknown, rawMessage: message);
   }
 
+  static ParsedSms? tryParseDeliverOnly(String message) {
+    final normalized = message.trim().toUpperCase();
+    final deliverMatch = _deliverRegex.firstMatch(normalized);
+    if (deliverMatch != null) {
+      final qty = int.tryParse(deliverMatch.group(1) ?? '');
+      if (qty == null || qty <= 0) return null;
+      final gallonTypeRaw = deliverMatch.group(2);
+      final gallonType = gallonTypeRaw?.toLowerCase();
+      return ParsedSms(
+        command: SmsCommand.deliver,
+        quantity: qty,
+        gallonType: gallonType,
+        address: deliverMatch.group(3),
+        rawMessage: message,
+      );
+    }
+    final dropMatch = _dropRegex.firstMatch(normalized);
+    if (dropMatch != null) {
+      final qty = int.tryParse(dropMatch.group(1) ?? '');
+      if (qty == null || qty <= 0) return null;
+      return ParsedSms(
+        command: SmsCommand.drop,
+        quantity: qty,
+        rawMessage: message,
+      );
+    }
+    return null;
+  }
+
   /// Returns the help message sent when an unrecognized command is received.
   static String getUnknownCommandReply() {
-    return 'Unrecognized command. Use DELIVER [qty] or DROP [qty].';
+    return 'Invalid. Use DELIVER [qty] or DROP [qty] where qty is 1 or more.';
   }
 }
