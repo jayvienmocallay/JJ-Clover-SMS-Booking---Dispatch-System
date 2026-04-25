@@ -44,7 +44,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           child: const _AddOrderForm(),
         ),
       ),
-);
+    );
   }
 
   void _showDeliveryManifest() {
@@ -97,7 +97,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       SizedBox(height: 4),
                       Text(
                         "Manage today's delivery and walk-in orders.",
-                        style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.mutedForeground,
+                        ),
                       ),
                     ],
                   ),
@@ -107,7 +110,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       GestureDetector(
                         onTap: _showDeliveryManifest,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.statusOperating,
                             borderRadius: BorderRadius.circular(12),
@@ -115,7 +121,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.assignment, size: 16, color: Colors.white),
+                              Icon(
+                                Icons.assignment,
+                                size: 16,
+                                color: Colors.white,
+                              ),
                               SizedBox(width: 4),
                               Text(
                                 'Manifest',
@@ -133,7 +143,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       GestureDetector(
                         onTap: _showAddOrderSheet,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.primary,
                             borderRadius: BorderRadius.circular(12),
@@ -216,7 +229,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           ? () => _showRejectDialog(order.id!, orderProv)
                           : null,
                       onStartDelivery: order.status == OrderStatus.confirmed
-                          ? () => orderProv.updateStatus(order.id!, 'in_transit')
+                          ? () =>
+                                orderProv.updateStatus(order.id!, 'in_transit')
                           : null,
                       onComplete: order.status == OrderStatus.inTransit
                           ? () => orderProv.updateStatus(order.id!, 'completed')
@@ -244,10 +258,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            _filter == 'all'
-                ? 'No orders found.'
-                : 'No $_filter orders found.',
-            style: const TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+            _filter == 'all' ? 'No orders found.' : 'No $_filter orders found.',
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.mutedForeground,
+            ),
           ),
         ],
       ),
@@ -376,9 +391,9 @@ class _AddOrderFormState extends State<_AddOrderForm> {
     final phone = _phoneController.text.trim();
 
     if (_customerMode == 'existing' && _selectedCustomerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a customer')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a customer')));
       return;
     }
     if (_customerMode == 'new' && phone.isEmpty) {
@@ -447,8 +462,10 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           const SizedBox(height: 20),
 
           // Customer mode toggle
-          const Text('Customer',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+          const Text(
+            'Customer',
+            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -470,11 +487,18 @@ class _AddOrderFormState extends State<_AddOrderForm> {
               ),
               child: TextField(
                 onChanged: (val) => setState(() => _customerSearch = val),
-                style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.foreground,
+                ),
                 decoration: const InputDecoration(
                   hintText: 'Search customer...',
                   hintStyle: TextStyle(color: AppColors.mutedForeground),
-                  prefixIcon: Icon(Icons.search, size: 18, color: AppColors.mutedForeground),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    size: 18,
+                    color: AppColors.mutedForeground,
+                  ),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -495,32 +519,50 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                     onTap: () {
                       setState(() {
                         _selectedCustomerId = id;
-                        _phoneController.text = c['contact_number'] as String? ?? '';
+                        _phoneController.text =
+                            c['contact_number'] as String? ?? '';
                       });
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primaryLight : AppColors.background,
+                        color: isSelected
+                            ? AppColors.primaryLight
+                            : AppColors.background,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: isSelected ? AppColors.primary : AppColors.border,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.border,
                         ),
                       ),
                       child: Row(
                         children: [
                           if (isSelected)
-                            const Icon(Icons.check_circle, size: 16, color: AppColors.primary)
+                            const Icon(
+                              Icons.check_circle,
+                              size: 16,
+                              color: AppColors.primary,
+                            )
                           else
-                            const Icon(Icons.radio_button_off, size: 16, color: AppColors.mutedForeground),
+                            const Icon(
+                              Icons.radio_button_off,
+                              size: 16,
+                              color: AppColors.mutedForeground,
+                            ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               '${c['name']} — ${c['contact_number']}',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: isSelected ? AppColors.primary : AppColors.foreground,
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : AppColors.foreground,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -537,16 +579,24 @@ class _AddOrderFormState extends State<_AddOrderForm> {
 
           // New customer: phone number input
           if (_customerMode == 'new') ...[
-            const Text('Phone Number',
-                style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+            const Text(
+              'Phone Number',
+              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+            ),
             const SizedBox(height: 6),
-            _buildTextField(_phoneController, 'e.g. 09171234567', TextInputType.phone),
+            _buildTextField(
+              _phoneController,
+              'e.g. 09171234567',
+              TextInputType.phone,
+            ),
             const SizedBox(height: 16),
           ],
 
           // Type toggle
-          const Text('Order Type',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+          const Text(
+            'Order Type',
+            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -558,15 +608,19 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           const SizedBox(height: 16),
 
           // Quantity with +/- buttons
-          const Text('Quantity (gallons)',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+          const Text(
+            'Quantity (gallons)',
+            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
               // Minus button
               GestureDetector(
                 onTap: () {
-                  if (_quantity > AppConstants.minQuantity) setState(() => _quantity--);
+                  if (_quantity > AppConstants.minQuantity) {
+                    setState(() => _quantity--);
+                  }
                 },
                 child: Container(
                   width: 44,
@@ -576,7 +630,11 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.border),
                   ),
-                  child: const Icon(Icons.remove, size: 18, color: AppColors.mutedForeground),
+                  child: const Icon(
+                    Icons.remove,
+                    size: 18,
+                    color: AppColors.mutedForeground,
+                  ),
                 ),
               ),
               // Quantity display
@@ -595,7 +653,9 @@ class _AddOrderFormState extends State<_AddOrderForm> {
               // Plus button
               GestureDetector(
                 onTap: () {
-                  if (_quantity < AppConstants.maxQuantity) setState(() => _quantity++);
+                  if (_quantity < AppConstants.maxQuantity) {
+                    setState(() => _quantity++);
+                  }
                 },
                 child: Container(
                   width: 44,
@@ -605,7 +665,11 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.primary),
                   ),
-                  child: const Icon(Icons.add, size: 18, color: AppColors.primary),
+                  child: const Icon(
+                    Icons.add,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             ],
@@ -613,8 +677,10 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           const SizedBox(height: 16),
 
           // Gallon type selector
-          const Text('Gallon Type',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+          const Text(
+            'Gallon Type',
+            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -676,8 +742,13 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14,
-                  color: isSelected ? AppColors.primary : AppColors.mutedForeground),
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.mutedForeground,
+              ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
@@ -685,7 +756,9 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: isSelected ? AppColors.primary : AppColors.mutedForeground,
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.mutedForeground,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -697,7 +770,11 @@ class _AddOrderFormState extends State<_AddOrderForm> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, TextInputType type) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint,
+    TextInputType type,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.background,
@@ -712,7 +789,10 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           hintText: hint,
           hintStyle: const TextStyle(color: AppColors.mutedForeground),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
         ),
       ),
     );
@@ -736,15 +816,22 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16,
-                  color: isSelected ? AppColors.primary : AppColors.mutedForeground),
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.mutedForeground,
+              ),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: isSelected ? AppColors.primary : AppColors.mutedForeground,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.mutedForeground,
                 ),
               ),
             ],
@@ -772,15 +859,22 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16,
-                  color: isSelected ? AppColors.primary : AppColors.mutedForeground),
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.mutedForeground,
+              ),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: isSelected ? AppColors.primary : AppColors.mutedForeground,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.mutedForeground,
                 ),
               ),
             ],
@@ -800,7 +894,9 @@ class _DeliveryManifestSheet extends StatelessWidget {
     return Consumer<OrderProvider>(
       builder: (context, orderProv, _) {
         final confirmed = orderProv.todayOrders
-            .where((o) => o['status'] == 'confirmed' || o['status'] == 'in_transit')
+            .where(
+              (o) => o['status'] == 'confirmed' || o['status'] == 'in_transit',
+            )
             .toList();
 
         final Map<String, List<Map<String, dynamic>>> byDay = {};
@@ -811,7 +907,10 @@ class _DeliveryManifestSheet extends StatelessWidget {
         }
 
         final totalOrders = confirmed.length;
-        final totalGallons = confirmed.fold<int>(0, (sum, o) => sum + ((o['quantity'] as int?) ?? 0));
+        final totalGallons = confirmed.fold<int>(
+          0,
+          (sum, o) => sum + ((o['quantity'] as int?) ?? 0),
+        );
 
         return DraggableScrollableSheet(
           initialChildSize: 0.7,
@@ -855,24 +954,39 @@ class _DeliveryManifestSheet extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
-                      _SummaryChip(label: '$totalOrders', sub: 'orders', color: AppColors.primary),
+                      _SummaryChip(
+                        label: '$totalOrders',
+                        sub: 'orders',
+                        color: AppColors.primary,
+                      ),
                       const SizedBox(width: 8),
-                      _SummaryChip(label: '$totalGallons', sub: 'gallons', color: AppColors.statusOperating),
+                      _SummaryChip(
+                        label: '$totalGallons',
+                        sub: 'gallons',
+                        color: AppColors.statusOperating,
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
                   child: confirmed.isEmpty
-                      ? Center(
+                      ? const Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.check_circle, size: 48, color: AppColors.statusOperating),
-                              const SizedBox(height: 12),
-                              const Text(
+                              Icon(
+                                Icons.check_circle,
+                                size: 48,
+                                color: AppColors.statusOperating,
+                              ),
+                              SizedBox(height: 12),
+                              Text(
                                 'All deliveries completed!',
-                                style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.mutedForeground,
+                                ),
                               ),
                             ],
                           ),
@@ -881,38 +995,52 @@ class _DeliveryManifestSheet extends StatelessWidget {
                           controller: scrollController,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           children: [
-                            ...byDay.entries.map((entry) => Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    entry.key,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
+                            ...byDay.entries.map(
+                              (entry) => Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      entry.key,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                ...entry.value.asMap().entries.map((e) => _ManifestItem(
-                                  index: e.key + 1,
-                                  order: e.value,
-                                  onStart: e.value['status'] == 'confirmed'
-                                      ? () => orderProv.updateStatus(e.value['id'] as int, 'in_transit')
-                                      : null,
-                                  onComplete: e.value['status'] == 'in_transit'
-                                      ? () => orderProv.updateStatus(e.value['id'] as int, 'completed')
-                                      : null,
-                                )),
-                                const SizedBox(height: 16),
-                              ],
-                            )),
+                                  const SizedBox(height: 8),
+                                  ...entry.value.asMap().entries.map(
+                                    (e) => _ManifestItem(
+                                      index: e.key + 1,
+                                      order: e.value,
+                                      onStart: e.value['status'] == 'confirmed'
+                                          ? () => orderProv.updateStatus(
+                                              e.value['id'] as int,
+                                              'in_transit',
+                                            )
+                                          : null,
+                                      onComplete:
+                                          e.value['status'] == 'in_transit'
+                                          ? () => orderProv.updateStatus(
+                                              e.value['id'] as int,
+                                              'completed',
+                                            )
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                 ),
@@ -930,7 +1058,11 @@ class _SummaryChip extends StatelessWidget {
   final String sub;
   final Color color;
 
-  const _SummaryChip({required this.label, required this.sub, required this.color});
+  const _SummaryChip({
+    required this.label,
+    required this.sub,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -944,7 +1076,14 @@ class _SummaryChip extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Text(label, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: color)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
             Text(sub, style: TextStyle(fontSize: 11, color: color)),
           ],
         ),
@@ -959,7 +1098,12 @@ class _ManifestItem extends StatelessWidget {
   final VoidCallback? onStart;
   final VoidCallback? onComplete;
 
-  const _ManifestItem({required this.index, required this.order, this.onStart, this.onComplete});
+  const _ManifestItem({
+    required this.index,
+    required this.order,
+    this.onStart,
+    this.onComplete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -973,35 +1117,65 @@ class _ManifestItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: status == 'in_transit' ? AppColors.statusBusy : AppColors.border),
+        border: Border.all(
+          color: status == 'in_transit'
+              ? AppColors.statusBusy
+              : AppColors.border,
+        ),
       ),
       child: Row(
         children: [
           Container(
             width: 28,
             height: 28,
-            decoration: BoxDecoration(color: AppColors.muted, shape: BoxShape.circle),
-            child: Center(child: Text('$index', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+            decoration: const BoxDecoration(
+              color: AppColors.muted,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$index',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(phone, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text('$qty gallon(s)', style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
+                Text(
+                  phone,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  '$qty gallon(s)',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
               ],
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: status == 'in_transit' ? AppColors.statusBusy : AppColors.statusOperating,
+              color: status == 'in_transit'
+                  ? AppColors.statusBusy
+                  : AppColors.statusOperating,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               status == 'in_transit' ? 'Delivering' : 'Ready',
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white),
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
             ),
           ),
           if (onStart != null || onComplete != null) ...[
@@ -1011,8 +1185,15 @@ class _ManifestItem extends StatelessWidget {
                 onTap: onStart,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: AppColors.statusBusy, shape: BoxShape.circle),
-                  child: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
+                  decoration: const BoxDecoration(
+                    color: AppColors.statusBusy,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             if (onComplete != null)
@@ -1020,7 +1201,10 @@ class _ManifestItem extends StatelessWidget {
                 onTap: onComplete,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: AppColors.statusOperating, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                    color: AppColors.statusOperating,
+                    shape: BoxShape.circle,
+                  ),
                   child: const Icon(Icons.check, size: 16, color: Colors.white),
                 ),
               ),
