@@ -88,7 +88,8 @@ class PermissionGate extends StatefulWidget {
   State<PermissionGate> createState() => _PermissionGateState();
 }
 
-class _PermissionGateState extends State<PermissionGate> {
+class _PermissionGateState extends State<PermissionGate>
+    with WidgetsBindingObserver {
   /// Tracks whether all required permissions have been granted
   bool _permissionsGranted = false;
 
@@ -101,11 +102,25 @@ class _PermissionGateState extends State<PermissionGate> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Request permissions after the first frame renders
     // This avoids calling platform channels during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestPermissions();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_isChecking) {
+      _refreshPermissionState();
+    }
   }
 
   /// Requests all runtime permissions required by the app.
@@ -131,6 +146,10 @@ class _PermissionGateState extends State<PermissionGate> {
     var defaultSmsGranted = await DefaultSmsAppService.isDefaultSmsApp();
     if (!defaultSmsGranted) {
       defaultSmsGranted = await DefaultSmsAppService.requestDefaultSmsApp();
+      if (!defaultSmsGranted) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        defaultSmsGranted = await DefaultSmsAppService.isDefaultSmsApp();
+      }
     }
 
     // Step 2: Request SMS permissions.
@@ -177,6 +196,30 @@ class _PermissionGateState extends State<PermissionGate> {
         'WARNING: Battery optimization not exempted. '
         'Background SMS service may be killed by Android.',
       );
+    }
+  }
+
+  /// Re-checks state after returning from Android settings/default-app screens.
+  ///
+  /// Some devices update the default SMS role just after the activity resumes,
+  /// so this keeps the gate from showing stale "Default SMS App Required" text.
+  Future<void> _refreshPermissionState() async {
+    if (kIsWeb) return;
+
+    final defaultSmsGranted = await DefaultSmsAppService.isDefaultSmsApp();
+    final smsGranted = (await Permission.sms.status).isGranted;
+    final allGranted = defaultSmsGranted && smsGranted;
+
+    if (!mounted) return;
+
+    setState(() {
+      _isDefaultSmsApp = defaultSmsGranted;
+      _permissionsGranted = allGranted;
+    });
+
+    if (allGranted) {
+      await SmsBackgroundService.instance.startListening();
+      debugPrint('SMS Background Service started after permissions granted');
     }
   }
 

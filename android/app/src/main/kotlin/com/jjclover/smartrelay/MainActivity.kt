@@ -26,6 +26,13 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun isDefaultSmsApp(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(RoleManager::class.java)
+            if (roleManager?.isRoleHeld(RoleManager.ROLE_SMS) == true) {
+                return true
+            }
+        }
+
         return Telephony.Sms.getDefaultSmsPackage(this) == packageName
     }
 
