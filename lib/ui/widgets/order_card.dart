@@ -165,6 +165,26 @@ class OrderCard extends StatelessWidget {
             ],
           ),
 
+          // Cancel reason display for cancelled/rejected orders
+          if ((order.status == OrderStatus.cancelled || order.status == OrderStatus.rejected) && order.cancelReason != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.statusMaintenanceLight,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Reason: ${order.cancelReason}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.statusMaintenance,
+                  ),
+                ),
+              ),
+            ),
+
           // Task 011 — Delivery log link for completed orders
           if (order.status == OrderStatus.completed && order.id != null) ...[
             const SizedBox(height: 12),
