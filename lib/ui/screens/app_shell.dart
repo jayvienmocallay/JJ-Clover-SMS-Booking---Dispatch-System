@@ -14,6 +14,7 @@ import '../widgets/walk_in_alert.dart';
 import 'dashboard_screen.dart';
 import 'orders_screen.dart';
 import 'messages_screen.dart';
+import 'schedule_screen.dart';
 import 'customers_screen.dart';
 import 'settings_screen.dart';
 
@@ -27,7 +28,7 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
-  // Current tab index (0=Home, 1=Orders, 2=Messages, 3=Customers, 4=Settings)
+  // Current tab index (0=Home, 1=Orders, 2=Messages, 3=Schedule, 4=Customers, 5=Settings)
   int _currentIndex = 0;
 
   // Controls visibility of the walk-in alert overlay (for manual test)
@@ -116,6 +117,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _NavItem(icon: Icons.dashboard, label: 'Home'),
     _NavItem(icon: Icons.list_alt, label: 'Orders'),
     _NavItem(icon: Icons.message, label: 'Messages'),
+    _NavItem(icon: Icons.calendar_month, label: 'Schedule'),
     _NavItem(icon: Icons.people, label: 'Customers'),
     _NavItem(icon: Icons.settings, label: 'Settings'),
   ];
@@ -130,8 +132,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       case 2:
         return const MessagesScreen();
       case 3:
-        return const CustomersScreen();
+        return const ScheduleScreen();
       case 4:
+        return const CustomersScreen();
+      case 5:
         return SettingsScreen(
           // Task 012 — Test alert triggers AlarmService like a real DROP
           onTestAlert: () =>
