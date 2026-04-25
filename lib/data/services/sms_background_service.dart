@@ -53,6 +53,10 @@ class SmsBackgroundService {
   /// Tracks whether the SMS listener is currently active
   bool _isListening = false;
 
+  /// Tracks recently processed message IDs to prevent duplicate processing
+  /// when both foreground and background handlers are triggered
+  final Set<String> _processedMessageIds = {};
+
   /// Stores pre-book context: maps a phone number to the delivery day
   /// that was offered in the "Wrong Day" reply. When the customer replies
   /// YES, we look up this map to know which day to create the pre-book for.
@@ -164,6 +168,18 @@ class SmsBackgroundService {
 
     // Ignore messages with no sender (can't reply without a phone number)
     if (sender.isEmpty) return;
+
+    // Create unique key for this message to prevent duplicate processing
+    final msgKey = '$sender|$message';
+    if (_processedMessageIds.contains(msgKey)) {
+      debugPrint('Duplicate message skipped: $msgKey');
+      return;
+    }
+    _processedMessageIds.add(msgKey);
+    // Clean up old entries (keep only last 100)
+    if (_processedMessageIds.length > 100) {
+      _processedMessageIds.remove(_processedMessageIds.first);
+    }
 
     debugPrint('SMS received from $sender: $message');
 
