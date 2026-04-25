@@ -20,6 +20,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _barangayController = TextEditingController();
   List<Map<String, dynamic>> _barangays = [];
+  String _selectedZone = 'Zone A';
 
   // Editable cutoff time - loaded from persisted settings
   int _cutoffHour = AppConstants.orderCutOffHour;
@@ -67,9 +68,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     await DatabaseHelper.instance.insertBarangay({
       'name': name,
-      'delivery_zone': 'Zone A', // Default zone — can be changed later
+      'delivery_zone': _selectedZone,
     });
     _barangayController.clear();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$name added successfully')),
+      );
+    }
     await _loadData();
   }
 
@@ -320,6 +326,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Row(
             children: [
               Expanded(
+                flex: 2,
                 child: Container(
                   decoration: BoxDecoration(
                     color: AppColors.background,
@@ -338,6 +345,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       contentPadding:
                           EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Zone selector dropdown
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: DropdownButton<String>(
+                    value: _selectedZone,
+                    isExpanded: true,
+                    underline: const SizedBox(),
+                    style: const TextStyle(fontSize: 13, color: AppColors.foreground),
+                    dropdownColor: AppColors.card,
+                    items: ['Zone A', 'Zone B', 'Zone C']
+                        .map((z) => DropdownMenuItem(value: z, child: Text(z)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _selectedZone = v);
+                    },
                   ),
                 ),
               ),
