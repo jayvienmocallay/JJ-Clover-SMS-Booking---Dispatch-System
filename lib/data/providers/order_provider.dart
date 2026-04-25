@@ -39,10 +39,10 @@ class OrderProvider extends ChangeNotifier {
   }
 
   /// Updates an order's status and refreshes the list
-  Future<void> updateStatus(int orderId, String newStatus) async {
+  Future<void> updateStatus(int orderId, String newStatus, {String? reason}) async {
     _error = null;
     try {
-      await DatabaseHelper.instance.updateOrderStatus(orderId, newStatus);
+      await DatabaseHelper.instance.updateOrderStatus(orderId, newStatus, reason: reason);
       await loadOrders();
     } catch (e) {
       _error = e.toString();

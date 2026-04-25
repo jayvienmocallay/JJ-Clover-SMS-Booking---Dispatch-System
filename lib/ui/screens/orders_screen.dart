@@ -18,7 +18,7 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  // Filter: 'all', 'deliver', or 'drop'
+  // Filter: 'all', 'deliver', 'drop', or 'unrecognized'
   String _filter = 'all';
 
   /// Filters orders by type
@@ -138,6 +138,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     isActive: _filter == 'drop',
                     onTap: () => setState(() => _filter = 'drop'),
                   ),
+                  const SizedBox(width: 8),
+                  _FilterTab(
+                    label: 'Invalid',
+                    isActive: _filter == 'unrecognized',
+                    onTap: () => setState(() => _filter = 'unrecognized'),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -164,7 +170,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           ? () => orderProv.updateStatus(order.id!, 'confirmed')
                           : null,
                       onReject: order.status == OrderStatus.pending
-                          ? () => orderProv.updateStatus(order.id!, 'cancelled')
+                          ? () => _showRejectDialog(order.id!, orderProv)
                           : null,
                     ),
                   );
@@ -188,9 +194,66 @@ class _OrdersScreenState extends State<OrdersScreen> {
             color: AppColors.mutedForeground.withValues(alpha: 0.3),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'No orders found.',
-            style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+          Text(
+            _filter == 'all'
+                ? 'No orders found.'
+                : 'No ${_filter} orders found.',
+            style: const TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRejectDialog(int orderId, OrderProvider orderProv) {
+    String? reason;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text(
+          'Reject Order',
+          style: TextStyle(color: AppColors.foreground),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Are you sure you want to reject this order?',
+              style: TextStyle(color: AppColors.mutedForeground),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              onChanged: (v) => reason = v,
+              style: const TextStyle(color: AppColors.foreground),
+              decoration: InputDecoration(
+                hintText: 'Reason (optional)',
+                hintStyle: const TextStyle(color: AppColors.mutedForeground),
+                filled: true,
+                fillColor: AppColors.background,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusMaintenance,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              orderProv.updateStatus(orderId, 'cancelled', reason: reason);
+            },
+            child: const Text('Reject'),
           ),
         ],
       ),

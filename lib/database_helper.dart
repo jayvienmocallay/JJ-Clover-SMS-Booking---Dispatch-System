@@ -177,6 +177,9 @@ class DatabaseHelper {
       // Add staff assignment column for delivery accountability
       await db.execute('ALTER TABLE orders ADD COLUMN staff_id INTEGER');
 
+      // Add cancel reason column for rejected orders
+      await db.execute('ALTER TABLE orders ADD COLUMN cancel_reason TEXT');
+
       // Create the delivery_logs table for per-household tracking
       await db.execute('''
         CREATE TABLE delivery_logs (
@@ -481,11 +484,15 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> updateOrderStatus(int id, String status) async {
+  Future<int> updateOrderStatus(int id, String status, {String? reason}) async {
     final db = await instance.database;
+    final data = <String, dynamic>{'status': status};
+    if (reason != null && reason.isNotEmpty) {
+      data['cancel_reason'] = reason;
+    }
     return await db.update(
       'orders',
-      {'status': status},
+      data,
       where: 'id = ?',
       whereArgs: [id],
     );
