@@ -43,6 +43,18 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
+  /// Deletes a customer by ID
+  Future<void> deleteCustomer(int customerId) async {
+    _error = null;
+    try {
+      await DatabaseHelper.instance.deleteCustomer(customerId);
+      await loadCustomers();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
   /// Returns customer data by ID from cache
   Map<String, dynamic>? getById(int id) {
     try {
