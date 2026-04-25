@@ -25,7 +25,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   // Current tab index (0=Home, 1=Orders, 2=Messages, 3=Customers, 4=Settings)
   int _currentIndex = 0;
 
@@ -35,13 +35,15 @@ class _AppShellState extends State<AppShell> {
   // Task 011 — Periodic refresh timer for auto-updating when background
   // service inserts new orders via SMS
   late final _refreshTimer = !kIsWeb
-      ? Stream.periodic(const Duration(seconds: 15))
-          .listen((_) => _autoRefresh())
+      ? Stream.periodic(
+          const Duration(seconds: 15),
+        ).listen((_) => _autoRefresh())
       : null;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Task 011 — Initial data load for providers (skip on web)
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -51,6 +53,7 @@ class _AppShellState extends State<AppShell> {
     }
     // Task 012 — Listen to AlarmService for DROP command alerts
     AlarmService.instance.addListener(_onAlarmChanged);
+    unawaited(AlarmService.instance.startUiSync());
   }
 
   /// Task 012 — Reacts to alarm state changes from the background service
@@ -67,12 +70,22 @@ class _AppShellState extends State<AppShell> {
     if (!mounted || kIsWeb) return;
     context.read<OrderProvider>().loadOrders();
     context.read<CustomerProvider>().loadCustomers();
+    unawaited(AlarmService.instance.syncPendingAlert());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !kIsWeb) {
+      unawaited(AlarmService.instance.syncPendingAlert());
+    }
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
     AlarmService.instance.removeListener(_onAlarmChanged);
+    AlarmService.instance.stopUiSync();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -104,10 +117,8 @@ class _AppShellState extends State<AppShell> {
       case 4:
         return SettingsScreen(
           // Task 012 — Test alert triggers AlarmService like a real DROP
-          onTestAlert: () => AlarmService.instance.trigger(
-            phone: 'Test Alert',
-            qty: 5,
-          ),
+          onTestAlert: () =>
+              AlarmService.instance.trigger(phone: 'Test Alert', qty: 5),
         );
       default:
         return DashboardScreen(onNavigateToTab: _navigateToTab);
@@ -127,7 +138,7 @@ class _AppShellState extends State<AppShell> {
           if (_showWalkInAlert)
             WalkInAlert(
               onAcknowledge: () {
-                AlarmService.instance.acknowledge();
+                unawaited(AlarmService.instance.acknowledge());
                 setState(() => _showWalkInAlert = false);
               },
             ),

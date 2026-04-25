@@ -22,7 +22,9 @@ class WalkInAlert extends StatelessWidget {
     // Format time
     String timeStr = '';
     if (time != null) {
-      final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+      final hour = time.hour > 12
+          ? time.hour - 12
+          : (time.hour == 0 ? 12 : time.hour);
       final amPm = time.hour >= 12 ? 'PM' : 'AM';
       timeStr = '$hour:${time.minute.toString().padLeft(2, '0')} $amPm';
     }
@@ -87,7 +89,11 @@ class WalkInAlert extends StatelessWidget {
                       // Phone
                       Row(
                         children: [
-                          const Icon(Icons.phone, size: 16, color: AppColors.mutedForeground),
+                          const Icon(
+                            Icons.phone,
+                            size: 16,
+                            color: AppColors.mutedForeground,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             phone,
@@ -104,7 +110,11 @@ class WalkInAlert extends StatelessWidget {
                         // Quantity
                         Row(
                           children: [
-                            const Icon(Icons.water_drop, size: 16, color: AppColors.statusAway),
+                            const Icon(
+                              Icons.water_drop,
+                              size: 16,
+                              color: AppColors.statusAway,
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               '$qty gallon${qty > 1 ? "s" : ""}',
@@ -122,7 +132,11 @@ class WalkInAlert extends StatelessWidget {
                         // Time
                         Row(
                           children: [
-                            const Icon(Icons.access_time, size: 16, color: AppColors.mutedForeground),
+                            const Icon(
+                              Icons.access_time,
+                              size: 16,
+                              color: AppColors.mutedForeground,
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               timeStr,
@@ -144,8 +158,6 @@ class WalkInAlert extends StatelessWidget {
                 width: double.infinity,
                 child: GestureDetector(
                   onTap: () {
-                    // Stop the alarm audio
-                    AlarmService.instance.acknowledge();
                     // Dismiss the overlay
                     onAcknowledge();
                   },
@@ -197,9 +209,10 @@ class _PulsingBellState extends State<_PulsingBell>
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
 
-    _animation = Tween<double>(begin: 0.9, end: 1.1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: 0.9,
+      end: 1.1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override

@@ -53,16 +53,16 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       password: password,
-      // Version 2: Added address to customers, gallon_type/staff_id to orders,
-      // and created delivery_logs table
-      version: 2,
+      // Version 3: Adds app_settings for isolate-safe runtime state such as
+      // the current system mode.
+      version: 3,
       onCreate: _createSchema,
       // Handles upgrading existing v1 databases to v2 schema
       onUpgrade: _upgradeSchema,
     );
   }
 
-  // Task 005 — Create all tables (schema v2)
+  // Task 005 — Create all tables (schema v3)
   Future _createSchema(Database db, int version) async {
     // Task 001 — 1. Barangays Lookup Table (zone mapping from interview)
     await db.execute('''
@@ -136,6 +136,8 @@ class DatabaseHelper {
       )
     ''');
 
+    await _createAppSettingsTable(db);
+
     // Task 006 — Seed default data in order: barangays first, then customers, then schedules.
     // Order matters because of foreign key dependencies:
     // schedules -> customers -> barangays
@@ -144,7 +146,7 @@ class DatabaseHelper {
     await _seedSchedules(db);
   }
 
-  // Task 005 — Database migration: v1 → v2 schema upgrade
+  // Task 005 — Database migration: v1 → current schema upgrade
   /// Handles upgrading the database schema from an older version to the current one.
   ///
   /// v1 → v2 changes:
@@ -153,6 +155,9 @@ class DatabaseHelper {
   /// - Added `staff_id` column to orders (staff assignment & accountability)
   /// - Created `delivery_logs` table (per-household delivery tracking)
   /// - Seeded schedules if missing from v1
+  ///
+  /// v2 → v3 changes:
+  /// - Created `app_settings` table for persisted runtime settings
   Future _upgradeSchema(Database db, int oldVersion, int newVersion) async {
     // Migrate from version 1 to version 2
     if (oldVersion < 2) {
@@ -187,6 +192,19 @@ class DatabaseHelper {
         await _seedSchedules(db);
       }
     }
+
+    if (oldVersion < 3) {
+      await _createAppSettingsTable(db);
+    }
+  }
+
+  Future<void> _createAppSettingsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
   }
 
   // Task 006 — Pre-populate barangays with default data
@@ -658,5 +676,33 @@ class DatabaseHelper {
       whereArgs: [today],
       orderBy: 'delivered_at DESC',
     );
+  }
+
+  // App settings CRUD operations
+
+  Future<String?> getSetting(String key) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+
+    return result.isNotEmpty ? result.first['value'] as String? : null;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    final db = await instance.database;
+    await db.insert('app_settings', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteSetting(String key) async {
+    final db = await instance.database;
+    await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
   }
 }

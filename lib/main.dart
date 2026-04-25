@@ -32,6 +32,7 @@ Future<void> main() async {
     try {
       await DatabaseHelper.instance.database;
       await DatabaseHelper.instance.ensureSchedulesSeeded();
+      await SystemModeManager.instance.loadPersistedMode(notify: false);
       debugPrint('Database initialized successfully');
     } catch (e) {
       debugPrint('Database initialization error: $e');

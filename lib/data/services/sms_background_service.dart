@@ -116,6 +116,11 @@ class SmsBackgroundService {
 
     debugPrint('SMS received from $sender: $message');
 
+    // The background SMS callback can run in a separate Dart isolate, so the
+    // singleton's in-memory mode may be stale. Refresh from the shared database
+    // before checking delivery/drop gates or replying to STATUS.
+    await _modeManager.loadPersistedMode();
+
     // Parse the raw message into a structured command object
     final parsed = SmsParser.parse(message);
 
