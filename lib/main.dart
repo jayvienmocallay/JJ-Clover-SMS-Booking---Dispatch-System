@@ -170,7 +170,9 @@ class _PermissionGateState extends State<PermissionGate>
 
     // Log the results for debugging
     debugPrint('Default SMS app: $defaultSmsGranted');
+    // ignore: prefer_const_constructors
     debugPrint('SMS permission: $smsGranted');
+    // ignore: prefer_const_constructors
     debugPrint('Battery optimization exemption: $batteryGranted');
 
     // Update state — the UI will show the app or a permission prompt
