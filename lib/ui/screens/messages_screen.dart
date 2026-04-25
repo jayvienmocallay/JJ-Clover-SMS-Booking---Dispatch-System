@@ -1,4 +1,5 @@
 // Messages screen: SMS inbox with full send/receive history
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:telephony/telephony.dart';
 import '../../database_helper.dart';
@@ -18,15 +19,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
   List<Map<String, dynamic>> _smsMessages = [];
   String? _selectedPhone;
   final _replyController = TextEditingController();
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadMessages());
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _replyController.dispose();
     super.dispose();
   }
@@ -98,137 +102,138 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final filtered = _getFilteredMessages();
     final uniquePhones = _getUniquePhones();
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Messages',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                color: AppColors.foreground,
+return RefreshIndicator(
+      onRefresh: _loadMessages,
+      color: AppColors.primary,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Messages',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.foreground,
+                ),
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh, color: AppColors.primary),
-              onPressed: _loadMessages,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          filtered.isEmpty ? 'No messages yet' : '${filtered.length} messages today',
-          style: const TextStyle(fontSize: 14, color: AppColors.mutedForeground),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            _FilterTab(label: 'All', isActive: _filter == 'all', onTap: () => setState(() => _filter = 'all')),
-            const SizedBox(width: 8),
-            _FilterTab(label: 'Incoming', isActive: _filter == 'incoming', onTap: () => setState(() => _filter = 'incoming')),
-            const SizedBox(width: 8),
-            _FilterTab(label: 'Outgoing', isActive: _filter == 'outgoing', onTap: () => setState(() => _filter = 'outgoing')),
-          ],
-        ),
-        const SizedBox(height: 16),
-        if (uniquePhones.length > 1 && _filter == 'all')
-          SizedBox(
-            height: 50,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: uniquePhones.length,
-              itemBuilder: (_, i) {
-                final phone = uniquePhones[i];
-                final isSelected = _selectedPhone == phone;
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedPhone = isSelected ? null : phone),
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.primary : AppColors.muted,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      phone,
-                      style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppColors.mutedForeground),
-                    ),
-                  ),
-                );
-              },
-            ),
+              IconButton(
+                icon: const Icon(Icons.refresh, color: AppColors.primary),
+                onPressed: _loadMessages,
+              ),
+            ],
           ),
-        if (uniquePhones.length > 1 && _filter == 'all') const SizedBox(height: 16),
-        if (filtered.isEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 48),
-            child: Column(
-              children: [
-                Icon(Icons.sms, size: 48, color: AppColors.mutedForeground.withValues(alpha: 0.3)),
-                const SizedBox(height: 12),
-                const Text('No SMS messages yet', style: TextStyle(fontSize: 14, color: AppColors.mutedForeground)),
-              ],
-            ),
-          )
-        else
-          ...filtered.map((msg) {
-            final phone = msg['phone_number'] as String? ?? '';
-            final message = msg['message'] as String? ?? '';
-            final direction = msg['direction'] as String? ?? 'incoming';
-            final sentAt = msg['sent_at'] as String? ?? '';
-            final isIncoming = direction == 'incoming';
-
-            if (_selectedPhone != null && phone != _selectedPhone) return const SizedBox.shrink();
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: isIncoming ? AppColors.primary.withValues(alpha: 0.3) : AppColors.statusOperating.withValues(alpha: 0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(isIncoming ? Icons.call_received : Icons.call_made, size: 16, color: isIncoming ? AppColors.primary : AppColors.statusOperating),
-                          const SizedBox(width: 8),
-                          Text(phone, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                        ],
+          const SizedBox(height: 4),
+          Text(
+            filtered.isEmpty ? 'No messages yet' : '${filtered.length} messages today',
+            style: const TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _FilterTab(label: 'All', isActive: _filter == 'all', onTap: () => setState(() => _filter = 'all')),
+              const SizedBox(width: 8),
+              _FilterTab(label: 'Incoming', isActive: _filter == 'incoming', onTap: () => setState(() => _filter = 'incoming')),
+              const SizedBox(width: 8),
+              _FilterTab(label: 'Outgoing', isActive: _filter == 'outgoing', onTap: () => setState(() => _filter = 'outgoing')),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (uniquePhones.length > 1 && _filter == 'all')
+            SizedBox(
+              height: 50,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: uniquePhones.length,
+                itemBuilder: (_, i) {
+                  final phone = uniquePhones[i];
+                  final isSelected = _selectedPhone == phone;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedPhone = isSelected ? null : phone),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.primary : AppColors.muted,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      Text(_formatTime(sentAt), style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(message, style: const TextStyle(fontSize: 14, color: AppColors.foreground)),
-                  const SizedBox(height: 8),
-                  if (isIncoming)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        GestureDetector(
-                          onTap: () => _showReplyDialog(phone),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(16)),
-                            child: const Text('Reply', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                          ),
-                        ),
-                      ],
+                      child: Text(
+                        phone,
+                        style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppColors.mutedForeground),
+                      ),
                     ),
+                  );
+                },
+              ),
+            ),
+          if (uniquePhones.length > 1 && _filter == 'all') const SizedBox(height: 16),
+          if (filtered.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 48),
+              child: Column(
+                children: [
+                  Icon(Icons.sms, size: 48, color: AppColors.mutedForeground.withValues(alpha: 0.3)),
+                  const SizedBox(height: 12),
+                  const Text('No SMS messages yet', style: TextStyle(fontSize: 14, color: AppColors.mutedForeground)),
                 ],
               ),
-            );
-          }),
-      ],
+            )
+          else
+            ...filtered.map((msg) {
+              final phone = msg['phone_number'] as String? ?? '';
+              final message = msg['message'] as String? ?? '';
+              final direction = msg['direction'] as String? ?? 'incoming';
+              final sentAt = msg['sent_at'] as String? ?? '';
+              final isIncoming = direction == 'incoming';
+
+              if (_selectedPhone != null && phone != _selectedPhone) return const SizedBox.shrink();
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isIncoming ? AppColors.primary.withValues(alpha: 0.3) : AppColors.statusOperating.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(isIncoming ? Icons.call_received : Icons.call_made, size: 16, color: isIncoming ? AppColors.primary : AppColors.statusOperating),
+                            const SizedBox(width: 8),
+                            Text(phone, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+                          ],
+                        ),
+                        Text(_formatTime(sentAt), style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(message, style: const TextStyle(fontSize: 14, color: AppColors.foreground)),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: GestureDetector(
+                        onTap: () => _showReplyDialog(phone),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(16)),
+                          child: const Text('Reply', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
     );
   }
 
