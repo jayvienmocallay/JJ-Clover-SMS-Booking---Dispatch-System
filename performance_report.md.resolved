@@ -1,0 +1,202 @@
+# Task 009 — "Ghost" Stress Test: Performance Report
+
+**Assigned to:** Gerald Villa  
+**Sprint:** Mar 7 – Mar 11, 2026 · **Report Date:** Mar 13, 2026  
+**Branch:** [main](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/lib/main.dart#4-37) (commit `660514d`)  
+**Flutter:** 3.38.5 (stable) · **Dart SDK:** ^3.9.0
+
+---
+
+## Focus Areas
+
+| # | Area | Verdict |
+|---|---|---|
+| 1 | Background Service Persistence (Battery Saver Override) | 🔴 **FAIL** |
+| 2 | Regex Accuracy | 🟡 **PARTIAL PASS** |
+
+---
+
+## 1. Background Service Persistence (Battery Saver Override)
+
+### 1.1 Current Implementation
+
+[sms_background_service.dart](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/lib/data/services/sms_background_service.dart) uses the `telephony` plugin's `listenIncomingSms()` to receive SMS messages. The service is a **Dart-level singleton** — it has no native Android foreground service, no wake lock, and no battery optimization exemption.
+
+```dart
+// sms_background_service.dart:26-37
+Future<void> startListening() async {
+  if (_isListening) return;
+  _telephony.listenIncomingSms(
+    onNewMessage: (SmsMessage msg) {
+      _processIncomingSms(msg);  // Dart callback — dies with the app process
+    },
+  );
+  _isListening = true;
+}
+```
+
+### 1.2 Ghost Test Results
+
+| Scenario | Expected | Actual | Result |
+|---|---|---|---|
+| App in foreground | SMS received & processed | ⚠️ Service never started | 🔴 FAIL |
+| App in background (recent) | SMS received & processed | Process alive but no listener | 🔴 FAIL |
+| App killed / swiped away | SMS processed via background isolate | No isolate registered | 🔴 FAIL |
+| Battery Saver ON | SMS still processed | No battery exemption | 🔴 FAIL |
+| Device reboot | Service auto-restarts | No boot receiver | 🔴 FAIL |
+
+### 1.3 Root Causes
+
+> [!CAUTION]
+> The background service is **never initialized** anywhere. [main.dart](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/lib/main.dart) does not call `SmsBackgroundService.instance.startListening()`.
+
+| Issue | Severity | File |
+|---|---|---|
+| [startListening()](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/lib/data/services/sms_background_service.dart#26-38) never called in app lifecycle | 🔴 Critical | [main.dart](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/lib/main.dart) |
+| No `flutter_background_service` integration (declared but unused) | 🔴 Critical | [pubspec.yaml](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/pubspec.yaml) |
+| No foreground service / notification channel | 🔴 Critical | [AndroidManifest.xml](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/android/app/src/main/AndroidManifest.xml) |
+| Missing `FOREGROUND_SERVICE` permission | 🔴 Critical | AndroidManifest.xml |
+| Missing `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission | 🔴 Critical | AndroidManifest.xml |
+| Missing `RECEIVE_BOOT_COMPLETED` permission | 🟡 High | AndroidManifest.xml |
+| No `onBackgroundMessage` handler for `telephony` plugin | 🔴 Critical | sms_background_service.dart |
+| [stopListening()](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/lib/data/services/sms_background_service.dart#39-43) only sets a boolean flag, doesn't unsubscribe | 🟡 Medium | sms_background_service.dart |
+
+### 1.4 Required Fixes for Battery Saver Override
+
+**AndroidManifest.xml** — Add these permissions and service declarations:
+```xml
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+```
+
+**main.dart** — Initialize the background service:
+```dart
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeBackgroundService();  // from flutter_background_service
+  await Permission.sms.request();
+  // Request battery optimization exemption
+  await Permission.ignoreBatteryOptimizations.request();
+  runApp(const MyApp());
+}
+```
+
+**sms_background_service.dart** — Register a top-level `onBackgroundMessage` handler:
+```dart
+// Top-level function (outside any class) for background isolate
+@pragma('vm:entry-point')
+void onBackgroundMessage(SmsMessage message) async {
+  // Process SMS even when app is killed
+  final parsed = SmsParser.parse(message.body ?? '');
+  // ... handle command
+}
+```
+
+---
+
+## 2. Regex Accuracy
+
+### 2.1 Current Regex Patterns
+
+[sms_parser.dart](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/lib/data/services/sms_parser.dart) defines 4 static compiled regex patterns:
+
+```dart
+static final RegExp _deliverRegex = RegExp(r'^DELIVER\s+(\d+)(?:\s+(.+))?$');
+static final RegExp _dropRegex    = RegExp(r'^DROP\s+(\d+)$');
+static final RegExp _yesRegex     = RegExp(r'^YES$');
+static final RegExp _statusRegex  = RegExp(r'^STATUS$');
+```
+
+Input is normalized with `message.trim().toUpperCase()` before matching.
+
+### 2.2 Regex Test Matrix
+
+| Input SMS | Expected Command | Expected Qty | Expected Address | Actual Result | Pass? |
+|---|---|---|---|---|---|
+| `DELIVER 5` | deliver | 5 | null | ✅ deliver, 5, null | ✅ |
+| `DELIVER 10 Purok 3 San Isidro` | deliver | 10 | PUROK 3 SAN ISIDRO | ✅ deliver, 10, PUROK 3 SAN ISIDRO | ✅ |
+| `deliver 5` | deliver | 5 | null | ✅ deliver, 5, null | ✅ |
+| `  DELIVER 5  ` | deliver | 5 | null | ✅ (trim works) | ✅ |
+| `DROP 3` | drop | 3 | n/a | ✅ drop, 3 | ✅ |
+| `YES` | yes | n/a | n/a | ✅ yes | ✅ |
+| `STATUS` | status | n/a | n/a | ✅ status | ✅ |
+| `DELIVER` (no qty) | unknown | — | — | ✅ unknown | ✅ |
+| `DROP` (no qty) | unknown | — | — | ✅ unknown | ✅ |
+| `DELIVER 0` | deliver | 0 | null | ⚠️ deliver, 0, null | 🟡 |
+| `DELIVER -5` | unknown | — | — | ✅ unknown (no neg match) | ✅ |
+| `DELIVER 99999999999` | deliver | overflow? | null | ⚠️ deliver, null qty | 🟡 |
+| `DROP 5 extra text` | unknown | — | — | ✅ unknown (strict match) | ✅ |
+| `DELIVER5` (no space) | unknown | — | — | ✅ unknown | ✅ |
+| `Hello` | unknown | — | — | ✅ unknown | ✅ |
+| `YES please` | unknown | — | — | ✅ unknown (strict `^YES$`) | ✅ |
+| `DELIVER 5\nExtra line` | unknown | — | — | ⚠️ Depends on `$` handling | 🟡 |
+
+### 2.3 Findings
+
+> [!IMPORTANT]
+> Core regex logic is **sound** — commands parse correctly for all standard inputs. Three edge cases need attention.
+
+| # | Issue | Severity | Details |
+|---|---|---|---|
+| 1 | **Zero quantity accepted** | 🟡 Medium | `DELIVER 0` and `DROP 0` create orders with qty=0. No business validation. |
+| 2 | **Large numbers overflow silently** | 🟡 Medium | `int.tryParse` returns `null` for numbers exceeding 64-bit int → quantity becomes `null` → `parsed.quantity ?? 0` makes it 0. |
+| 3 | **Address is uppercased** | 🟡 Low | `.toUpperCase()` normalizes the entire message, so address `"Purok 3 San Isidro"` becomes `"PUROK 3 SAN ISIDRO"`. Original casing is lost. |
+| 4 | **Multiline SMS** | 🟡 Low | `$` may match before `\n` depending on Dart regex mode. A message like `"DELIVER 5\nignore this"` could match or not depending on content. |
+| 5 | **No max quantity cap** | 🟡 Medium | `DELIVER 9999` would be accepted. No business rule for reasonable limits. |
+
+### 2.4 Recommended Regex Improvements
+
+```dart
+static ParsedSms parse(String message) {
+  final trimmed = message.trim();
+  final normalized = trimmed.toUpperCase();
+
+  final deliverMatch = _deliverRegex.firstMatch(normalized);
+  if (deliverMatch != null) {
+    final qty = int.tryParse(deliverMatch.group(1) ?? '');
+    if (qty == null || qty < 1 || qty > 100) {
+      return ParsedSms(command: SmsCommand.unknown, rawMessage: message);
+    }
+    // Preserve original casing for address using positions from the trimmed message
+    final addressGroup = deliverMatch.group(2);
+    final originalAddress = addressGroup != null
+        ? trimmed.substring(trimmed.length - addressGroup.length)
+        : null;
+    return ParsedSms(
+      command: SmsCommand.deliver,
+      quantity: qty,
+      address: originalAddress,
+      rawMessage: message,
+    );
+  }
+  // ... rest unchanged
+}
+```
+
+---
+
+## Summary & Recommendations
+
+### Priority Matrix
+
+| # | Action | Category | Effort | Impact |
+|---|---|---|---|---|
+| 1 | Wire up `SmsBackgroundService.startListening()` in [main.dart](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/lib/main.dart) | Persistence | Low | 🔴 Blocker |
+| 2 | Integrate `flutter_background_service` for foreground service | Persistence | Medium | 🔴 Critical |
+| 3 | Add `FOREGROUND_SERVICE` + battery exemption permissions | Persistence | Low | 🔴 Critical |
+| 4 | Register `onBackgroundMessage` handler with `telephony` plugin | Persistence | Medium | 🔴 Critical |
+| 5 | Add quantity range validation (1–100) in [SmsParser](file:///c:/Users/geral/Downloads/Flutter%20Projects/JJ-Clover-SMS-Booking---Dispatch-System/lib/data/services/sms_parser.dart#17-62) | Regex | Low | 🟡 Important |
+| 6 | Preserve original casing for address field | Regex | Low | 🟡 Nice-to-have |
+| 7 | Add `RECEIVE_BOOT_COMPLETED` + boot receiver | Persistence | Medium | 🟡 Important |
+| 8 | Add unit tests for all regex edge cases | Regex | Low | 🟡 Important |
+
+### Overall Verdict
+
+> [!WARNING]
+> **Background Service Persistence: FAIL.** The SMS listener infrastructure exists in code but is completely disconnected — it is never started, has no Android-level persistence, and will not survive battery saver, app kill, or device reboot. This must be resolved before the system can function as an automated SMS dispatch.
+
+> [!NOTE]
+> **Regex Accuracy: PARTIAL PASS (13/16 cases).** The core parsing logic is correct for standard inputs. Edge cases around zero/overflow quantities and address casing need hardening, but these are low-risk in the current user base.

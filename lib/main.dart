@@ -1,50 +1,319 @@
+// Task 002 — App entry point with runtime permission gate
+// Task 003 — Database initialization on startup
+// Task 009 — Start SMS background service after permissions granted
+// Task 010 — Full dashboard UI with Provider state management
+// Task 011 — Provider/MultiProvider setup for real-time UI
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 import 'package:jj_clover_sms/database_helper.dart';
+import 'package:jj_clover_sms/data/services/default_sms_app_service.dart';
+import 'package:jj_clover_sms/data/services/sms_background_service.dart';
+import 'package:jj_clover_sms/data/services/system_mode_manager.dart';
+import 'package:jj_clover_sms/data/providers/order_provider.dart';
+import 'package:jj_clover_sms/data/providers/customer_provider.dart';
+import 'package:jj_clover_sms/ui/theme/app_theme.dart';
+import 'package:jj_clover_sms/ui/screens/app_shell.dart';
 
+/// Application entry point.
+///
+/// Initializes the encrypted database and requests all required
+/// runtime permissions before launching the UI.
 Future<void> main() async {
+  // Ensure Flutter bindings are ready before calling platform channels
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    final db = await DatabaseHelper.instance.database;
-    debugPrint('Database opened successfully');
-
-    // List seeded barangays
-    final barangays = await DatabaseHelper.instance.getBarangays();
-    debugPrint('Seeded barangays: $barangays');
-
-    // Insert a test customer using a seeded barangay ID
-    final barangayId = barangays.first['id'] as int;
-    final id = await DatabaseHelper.instance.insertCustomer({
-      'name': 'Test Customer',
-      'contact_number': '09171234567',
-      'barangay_id': barangayId,
-    });
-    debugPrint('Inserted test customer with id: $id');
-
-    // Query customers with joined barangay info
-    final results = await DatabaseHelper.instance.getCustomersWithBarangay();
-    debugPrint('Customers in DB: $results');
-
-    // Clean up test data
-    await db.delete('customers', where: 'id = ?', whereArgs: [id]);
-    debugPrint('Test customer deleted. Database is working!');
-  } catch (e) {
-    debugPrint('Database error: $e');
+  // Initialize the encrypted SQLCipher database.
+  // On first run, this creates all tables and seeds default data
+  // (barangays, customers, schedules).
+  // Skip on web — SQLCipher is not available in browsers.
+  if (!kIsWeb) {
+    try {
+      await DatabaseHelper.instance.database;
+      await DatabaseHelper.instance.ensureSchedulesSeeded();
+      await SystemModeManager.instance.loadPersistedMode(notify: false);
+      debugPrint('Database initialized successfully');
+    } catch (e) {
+      debugPrint('Database initialization error: $e');
+    }
   }
 
+  // Launch the app — permissions are requested after the first frame renders
   runApp(const MyApp());
 }
 
+/// Root application widget.
+///
+/// Task 011 — Wraps the app in MultiProvider for real-time state management.
+/// SystemModeManager is provided here so all screens can read/write the
+/// current system mode via Provider.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'JJ Clover',
-      theme: ThemeData.dark(),
-      home: const Scaffold(body: Center(child: Text('JJ Clover SMS Dispatch'))),
-      debugShowCheckedModeBanner: false,
+    return MultiProvider(
+      providers: [
+        // Task 011, 013.2 — SystemModeManager singleton: shared across UI + background service
+        ChangeNotifierProvider.value(value: SystemModeManager.instance),
+        // Task 011 — OrderProvider: reactive order state for dashboard + order screens
+        ChangeNotifierProvider(create: (_) => OrderProvider()),
+        // Task 011 — CustomerProvider: reactive customer state for customer screen + forms
+        ChangeNotifierProvider(create: (_) => CustomerProvider()),
+      ],
+      child: MaterialApp(
+        title: 'JJ Clover',
+        // Task 010 — Use custom dark theme
+        theme: AppTheme.darkTheme,
+        home: const PermissionGate(),
+        debugShowCheckedModeBanner: false,
+      ),
     );
+  }
+}
+
+/// Gate screen that requests all required runtime permissions on startup.
+///
+/// Android requires certain permissions to be explicitly granted by the user
+/// at runtime (not just declared in the manifest). This screen handles:
+/// - Default SMS app role — for receiving SMS_DELIVER broadcasts
+/// - SMS permissions (send, receive, read) — for order processing
+/// - Battery optimization exemption — keeps background service alive
+///
+/// Once all permissions are granted, it navigates to the full dashboard.
+class PermissionGate extends StatefulWidget {
+  const PermissionGate({super.key});
+
+  @override
+  State<PermissionGate> createState() => _PermissionGateState();
+}
+
+class _PermissionGateState extends State<PermissionGate>
+    with WidgetsBindingObserver {
+  /// Tracks whether all required permissions have been granted
+  bool _permissionsGranted = false;
+
+  /// Tracks whether Android has made this app the default SMS handler.
+  bool _isDefaultSmsApp = false;
+
+  /// Tracks whether the permission check is still in progress
+  bool _isChecking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Request permissions after the first frame renders
+    // This avoids calling platform channels during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _requestPermissions();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_isChecking) {
+      _refreshPermissionState();
+    }
+  }
+
+  /// Requests all runtime permissions required by the app.
+  ///
+  /// Permission flow:
+  /// 1. Request default SMS app role
+  /// 2. Request SMS permissions
+  /// 3. Request battery optimization exemption (separate system dialog)
+  /// 4. Update state based on results
+  Future<void> _requestPermissions() async {
+    // On web, skip permission requests — go straight to the dashboard.
+    // Permissions and SMS are Android-only features.
+    if (kIsWeb) {
+      setState(() {
+        _permissionsGranted = true;
+        _isChecking = false;
+      });
+      return;
+    }
+
+    // Step 1: Ask Android to make this app the default SMS handler.
+    // Android only routes SMS_DELIVER broadcasts to the current default SMS app.
+    var defaultSmsGranted = await DefaultSmsAppService.isDefaultSmsApp();
+    if (!defaultSmsGranted) {
+      defaultSmsGranted = await DefaultSmsAppService.requestDefaultSmsApp();
+      if (!defaultSmsGranted) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        defaultSmsGranted = await DefaultSmsAppService.isDefaultSmsApp();
+      }
+    }
+
+    // Step 2: Request SMS permissions.
+    final statuses = await [
+      Permission.sms, // Covers SEND_SMS, RECEIVE_SMS, READ_SMS
+    ].request();
+
+    // Step 3: Check if SMS permission was granted
+    final smsGranted = statuses[Permission.sms]?.isGranted ?? false;
+
+    // Step 4: Request battery optimization exemption.
+    // This shows a separate system dialog asking the user to allow
+    // the app to run unrestricted in the background (bypass Doze mode).
+    // Critical for keeping the SMS listener alive when the screen is off.
+    final batteryStatus = await Permission.ignoreBatteryOptimizations.request();
+    final batteryGranted = batteryStatus.isGranted;
+
+    // Log the results for debugging
+    debugPrint('Default SMS app: $defaultSmsGranted');
+    // ignore: prefer_const_constructors
+    debugPrint('SMS permission: $smsGranted');
+    // ignore: prefer_const_constructors
+    debugPrint('Battery optimization exemption: $batteryGranted');
+
+    // Update state — the UI will show the app or a permission prompt
+    final allGranted = defaultSmsGranted && smsGranted;
+    setState(() {
+      // All critical permissions must be granted for the app to function
+      _isDefaultSmsApp = defaultSmsGranted;
+      _permissionsGranted = allGranted;
+      _isChecking = false;
+    });
+
+    // Task 009 — Start SMS background service once permissions are confirmed.
+    // The service listens for incoming SMS and processes them as commands.
+    // Must start AFTER SMS permissions are granted, otherwise
+    // the telephony plugin will fail silently.
+    if (allGranted) {
+      await SmsBackgroundService.instance.startListening();
+      debugPrint('SMS Background Service started after permissions granted');
+    }
+
+    // Warn if battery optimization was not granted (non-blocking)
+    if (!batteryGranted) {
+      debugPrint(
+        'WARNING: Battery optimization not exempted. '
+        'Background SMS service may be killed by Android.',
+      );
+    }
+  }
+
+  /// Re-checks state after returning from Android settings/default-app screens.
+  ///
+  /// Some devices update the default SMS role just after the activity resumes,
+  /// so this keeps the gate from showing stale "Default SMS App Required" text.
+  Future<void> _refreshPermissionState() async {
+    if (kIsWeb) return;
+
+    final defaultSmsGranted = await DefaultSmsAppService.isDefaultSmsApp();
+    final smsGranted = (await Permission.sms.status).isGranted;
+    final allGranted = defaultSmsGranted && smsGranted;
+
+    if (!mounted) return;
+
+    setState(() {
+      _isDefaultSmsApp = defaultSmsGranted;
+      _permissionsGranted = allGranted;
+    });
+
+    if (allGranted) {
+      await SmsBackgroundService.instance.startListening();
+      debugPrint('SMS Background Service started after permissions granted');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Show loading indicator while checking permissions
+    if (_isChecking) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Spinning indicator while permissions are being requested
+              CircularProgressIndicator(color: AppColors.primary),
+              SizedBox(height: 16),
+              Text(
+                'Requesting permissions...',
+                style: TextStyle(color: AppColors.foreground),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show retry prompt if critical permissions were denied
+    if (!_permissionsGranted) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Warning icon to draw attention
+                const Icon(
+                  Icons.sms_failed,
+                  size: 64,
+                  color: AppColors.statusAway,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _isDefaultSmsApp
+                      ? 'SMS Permissions Required'
+                      : 'Default SMS App Required',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.foreground,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _isDefaultSmsApp
+                      ? 'This app needs SMS permissions to process '
+                            'customer orders. Please grant the permissions to continue.'
+                      : 'Set JJ Clover as the default SMS app so Android can '
+                            'deliver customer order messages to it.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.mutedForeground),
+                ),
+                const SizedBox(height: 24),
+                // Retry button — re-requests all permissions
+                ElevatedButton.icon(
+                  onPressed: () {
+                    setState(() => _isChecking = true);
+                    _requestPermissions();
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+                const SizedBox(height: 12),
+                // Open settings button — in case the user permanently denied
+                TextButton(
+                  onPressed: () => openAppSettings(),
+                  child: const Text(
+                    'Open App Settings',
+                    style: TextStyle(color: AppColors.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Task 010 — All permissions granted — show the full dashboard UI
+    return const AppShell();
   }
 }
