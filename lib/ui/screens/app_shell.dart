@@ -32,6 +32,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   // Controls visibility of the walk-in alert overlay (for manual test)
   bool _showWalkInAlert = false;
 
+  // Track initial loading state
+  bool _isInitialLoading = true;
+
   // Task 011 — Periodic refresh timer for auto-updating when background
   // service inserts new orders via SMS
   late final _refreshTimer = !kIsWeb
@@ -47,13 +50,22 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     // Task 011 — Initial data load for providers (skip on web)
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        context.read<OrderProvider>().loadOrders();
-        context.read<CustomerProvider>().loadCustomers();
+        _loadInitialData();
       });
+    } else {
+      _isInitialLoading = false;
     }
     // Task 012 — Listen to AlarmService for DROP command alerts
     AlarmService.instance.addListener(_onAlarmChanged);
     unawaited(AlarmService.instance.startUiSync());
+  }
+
+  Future<void> _loadInitialData() async {
+    await context.read<OrderProvider>().loadOrders();
+    await context.read<CustomerProvider>().loadCustomers();
+    if (mounted) {
+      setState(() => _isInitialLoading = false);
+    }
   }
 
   /// Task 012 — Reacts to alarm state changes from the background service
@@ -118,7 +130,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         return SettingsScreen(
           // Task 012 — Test alert triggers AlarmService like a real DROP
           onTestAlert: () =>
-              AlarmService.instance.trigger(phone: 'Test Alert', qty: 5),
+              AlarmService.instance.trigger(phone: 'TEST MODE', qty: 5),
         );
       default:
         return DashboardScreen(onNavigateToTab: _navigateToTab);
@@ -127,6 +139,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (_isInitialLoading) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       // Stack allows the walk-in alert to overlay on top of the active screen
