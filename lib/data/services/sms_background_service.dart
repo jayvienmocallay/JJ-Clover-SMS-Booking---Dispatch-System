@@ -139,6 +139,12 @@ class SmsBackgroundService {
         await _handleStatus(sender, smsSender: smsSender);
         break;
       case SmsCommand.unknown:
+        // Save unrecognized message as an order record for visibility in Messages tab
+        await _saveUnrecognizedMessage(
+          sender,
+          message,
+          'Unrecognized',
+        );
         // Send help text for unrecognized commands
         await _sendReply(
           sender,
@@ -168,6 +174,11 @@ class SmsBackgroundService {
     // Step 1: Mode gate — check if deliveries are accepted in current mode
     // Only OPERATING mode accepts deliveries; other modes reject/delay
     if (!_modeManager.canAcceptDelivery()) {
+      await _saveUnrecognizedMessage(
+        sender,
+        'DELIVER ${parsed.quantity ?? 0} - Rejected: ${_modeManager.getDeliveryReply()}',
+        'rejected',
+      );
       await _sendReply(
         sender,
         _modeManager.getDeliveryReply(),
@@ -179,6 +190,12 @@ class SmsBackgroundService {
     // Step 2: Customer lookup — find the sender in the customer database
     final customerData = await _db.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
+      // Save unrecognized message for visibility
+      await _saveUnrecognizedMessage(
+        sender,
+        parsed.rawMessage,
+        'Unregistered',
+      );
       // Phone number not registered — prompt them to register
       await _sendReply(
         sender,
@@ -195,6 +212,11 @@ class SmsBackgroundService {
       normalizedSender,
     );
     if (customerJoined == null) {
+      await _saveUnrecognizedMessage(
+        sender,
+        parsed.rawMessage,
+        'Incomplete',
+      );
       await _sendReply(
         sender,
         'Customer profile is incomplete. Please call the station.',
@@ -220,6 +242,12 @@ class SmsBackgroundService {
 
     // If the customer's zone doesn't match today's schedule
     if (validation.result == ValidationResult.invalidDay) {
+      // Save the pre-book offer for visibility
+      await _saveUnrecognizedMessage(
+        sender,
+        'DELIVER ${parsed.quantity ?? 0} - Wrong Day (${validation.message})',
+        'prebook',
+      );
       // Store the pre-book context so _handleYes knows the details
       // when the customer replies YES to the pre-book offer
       if (validation.correctDay != null) {
@@ -471,6 +499,43 @@ class SmsBackgroundService {
         // Not specified in the SMS — gallon type is optional
         return null;
     }
+  }
+
+  /// Saves an unrecognized/invalid message as an order record for visibility in Messages tab
+  Future<void> _saveUnrecognizedMessage(
+    String sender,
+    String message,
+    String status,
+  ) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+    final customerData = await _db.getCustomerByPhone(normalizedSender);
+    final customerId = customerData?['id'] as int?;
+
+    OrderStatus orderStatus;
+    switch (status) {
+      case 'rejected':
+        orderStatus = OrderStatus.rejected;
+        break;
+      case 'Unregistered':
+      case 'Incomplete':
+      case 'prebook':
+        orderStatus = OrderStatus.pending;
+        break;
+      default:
+        orderStatus = OrderStatus.rejected;
+    }
+
+    final order = Order(
+      customerId: customerId,
+      phoneNumber: normalizedSender,
+      type: OrderType.unrecognized,
+      quantity: 0,
+      address: message,
+      status: orderStatus,
+      createdAt: DateTime.now(),
+    );
+    await _db.insertOrder(order.toMap());
+    debugPrint('Saved message from $normalizedSender: $status');
   }
 }
 

@@ -413,6 +413,7 @@ class _StatusBadge extends StatelessWidget {
         textColor = AppColors.statusAway;
         break;
       case OrderStatus.cancelled:
+      case OrderStatus.rejected:
         bgColor = AppColors.statusMaintenanceLight;
         textColor = AppColors.statusMaintenance;
         break;

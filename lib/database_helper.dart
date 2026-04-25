@@ -229,179 +229,10 @@ class DatabaseHelper {
     }
   }
 
-  // Task 006 — Pre-populate customers with synthetic data
+// Task 006 — Pre-populate customers (no longer seeded with sample data)
+  // Customers are now added via the app UI
   Future<void> _seedCustomers(Database db) async {
-    final defaultCustomers = [
-      // Zone A — San Isidro (barangay_id: 1)
-      // Station vicinity — customers can walk in or request same-day delivery
-      {
-        'name': 'Maria Santos',
-        'contact_number': '09171000001',
-        'address': 'Purok 1, near barangay hall',
-        'barangay_id': 1,
-      },
-      {
-        'name': 'Juan dela Cruz',
-        'contact_number': '09171000002',
-        'address': 'Purok 2, beside sari-sari store',
-        'barangay_id': 1,
-      },
-      {
-        'name': 'Rosa Reyes',
-        'contact_number': '09171000003',
-        'address': 'Purok 3, corner house',
-        'barangay_id': 1,
-      },
-      // Zone A — San Jose (barangay_id: 2)
-      {
-        'name': 'Pedro Garcia',
-        'contact_number': '09171000004',
-        'address': 'Purok 1, near chapel',
-        'barangay_id': 2,
-      },
-      {
-        'name': 'Ana Mendoza',
-        'contact_number': '09171000005',
-        'address': 'Purok 2, along main road',
-        'barangay_id': 2,
-      },
-      // Zone B — Poblacion (barangay_id: 3)
-      // Near barangays — pedicab delivery on scheduled days
-      {
-        'name': 'Carlos Ramos',
-        'contact_number': '09171000006',
-        'address': 'Purok 4, near public market',
-        'barangay_id': 3,
-      },
-      {
-        'name': 'Elena Torres',
-        'contact_number': '09171000007',
-        'address': 'Purok 5, beside health center',
-        'barangay_id': 3,
-      },
-      {
-        'name': 'Roberto Cruz',
-        'contact_number': '09171000008',
-        'address': 'Purok 6, along national highway',
-        'barangay_id': 3,
-      },
-      // Zone B — Santa Rosa (barangay_id: 4)
-      {
-        'name': 'Liza Navarro',
-        'contact_number': '09171000009',
-        'address': 'Purok 1, near elementary school',
-        'barangay_id': 4,
-      },
-      {
-        'name': 'Miguel Aquino',
-        'contact_number': '09171000010',
-        'address': 'Purok 2, end of paved road',
-        'barangay_id': 4,
-      },
-      // Zone C — Santo Niño (barangay_id: 5)
-      // Far/mountain barangays — weekly delivery schedule
-      {
-        'name': 'Teresa Villanueva',
-        'contact_number': '09171000011',
-        'address': 'Sitio Upper, near water tank',
-        'barangay_id': 5,
-      },
-      {
-        'name': 'Ramon Bautista',
-        'contact_number': '09171000012',
-        'address': 'Sitio Lower, along creek',
-        'barangay_id': 5,
-      },
-      // Zone C — Semong (barangay_id: 6)
-      {
-        'name': 'Gloria Pascual',
-        'contact_number': '09171000013',
-        'address': 'Purok 1, hilltop area',
-        'barangay_id': 6,
-      },
-      {
-        'name': 'Ernesto Diaz',
-        'contact_number': '09171000014',
-        'address': 'Purok 2, near barangay outpost',
-        'barangay_id': 6,
-      },
-      // Zone C — Gabuyan (barangay_id: 7)
-      {
-        'name': 'Cynthia Flores',
-        'contact_number': '09171000015',
-        'address': 'Sitio Centro, main junction',
-        'barangay_id': 7,
-      },
-      {
-        'name': 'Alberto Lopez',
-        'contact_number': '09171000016',
-        'address': 'Sitio Riverside, near bridge',
-        'barangay_id': 7,
-      },
-      // Zone C — Bunawan (barangay_id: 8)
-      {
-        'name': 'Nelia Soriano',
-        'contact_number': '09171000017',
-        'address': 'Purok 3, mountain trail entrance',
-        'barangay_id': 8,
-      },
-      {
-        'name': 'Danny Castillo',
-        'contact_number': '09171000018',
-        'address': 'Purok 4, near coconut farm',
-        'barangay_id': 8,
-      },
-      // Zone C — Katipunan (barangay_id: 9)
-      {
-        'name': 'Beatriz Salazar',
-        'contact_number': '09171000019',
-        'address': 'Sitio Bukid, uphill road',
-        'barangay_id': 9,
-      },
-      {
-        'name': 'Fernando Rivera',
-        'contact_number': '09171000020',
-        'address': 'Sitio Crossing, near waiting shed',
-        'barangay_id': 9,
-      },
-      // Zone C — Dagohoy (barangay_id: 10)
-      {
-        'name': 'Josefa Mangubat',
-        'contact_number': '09171000021',
-        'address': 'Purok 1, near day care center',
-        'barangay_id': 10,
-      },
-      {
-        'name': 'Ricky Pelaez',
-        'contact_number': '09171000022',
-        'address': 'Purok 2, end of dirt road',
-        'barangay_id': 10,
-      },
-      // Zone C — Tiburcia (barangay_id: 11)
-      {
-        'name': 'Maricel Tan',
-        'contact_number': '09171000023',
-        'address': 'Sitio Taas, mountain barangay',
-        'barangay_id': 11,
-      },
-      {
-        'name': 'Joel Fernandez',
-        'contact_number': '09171000024',
-        'address': 'Sitio Ubos, lower portion',
-        'barangay_id': 11,
-      },
-      // Zone C — Clementa (barangay_id: 12)
-      {
-        'name': 'Luz Morales',
-        'contact_number': '09171000025',
-        'address': 'Purok 1, near spring source',
-        'barangay_id': 12,
-      },
-    ];
-
-    for (final customer in defaultCustomers) {
-      await db.insert('customers', customer);
-    }
+    // No sample data - customers added via app
   }
 
   /// Seeds the schedules table by assigning delivery days to each customer
@@ -481,7 +312,7 @@ class DatabaseHelper {
 
   // Task 003, Task 005 — Customer CRUD operations
 
-  /// Insert a new customer
+  /// Insert a new customer and automatically create schedules based on barangay zone
   Future<int> insertCustomer(Map<String, dynamic> customerData) async {
     final db = await instance.database;
     final normalizedData = Map<String, dynamic>.from(customerData);
@@ -491,7 +322,30 @@ class DatabaseHelper {
         contactNumber,
       );
     }
-    return await db.insert('customers', normalizedData);
+    final customerId = await db.insert('customers', normalizedData);
+
+    // Auto-create schedules based on barangay's delivery zone
+    final barangayId = normalizedData['barangay_id'] as int?;
+    if (barangayId != null) {
+      final barangay = await getBarangayById(barangayId);
+      if (barangay != null) {
+        final zone = barangay['delivery_zone'] as String;
+        final barangayName = barangay['name'] as String;
+        final deliveryDays = ZoneScheduleMap.getDaysForZone(
+          zone,
+          barangayName: barangayName,
+        );
+        for (final day in deliveryDays) {
+          await db.insert('schedules', {
+            'customer_id': customerId,
+            'delivery_day': day,
+            'status': 'active',
+          });
+        }
+      }
+    }
+
+    return customerId;
   }
 
   /// Get all customers (raw)

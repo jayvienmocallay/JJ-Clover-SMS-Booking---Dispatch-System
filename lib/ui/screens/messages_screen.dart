@@ -209,7 +209,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
                 final timeStr = _formatTime(createdAt);
                 final command =
-                    isDeliver ? 'DELIVER $quantity' : 'DROP $quantity';
+                    isDeliver ? 'DELIVER $quantity' : (type == 'unrecognized' ? 'INVALID' : 'DROP $quantity');
+
+                // Determine if this is an unrecognized message
+                final isUnrecognized = type == 'unrecognized';
 
                 // Look up customer name
                 final customerId = order['customer_id'] as int?;
@@ -252,17 +255,23 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                   width: 40,
                                   height: 40,
                                   decoration: BoxDecoration(
-                                    color: isDeliver
-                                        ? AppColors.primaryLight
-                                        : AppColors.statusAwayLight,
+                                    color: isUnrecognized
+                                        ? AppColors.statusMaintenanceLight
+                                        : (isDeliver
+                                            ? AppColors.primaryLight
+                                            : AppColors.statusAwayLight),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
-                                    Icons.sms,
+                                    isUnrecognized
+                                        ? Icons.error_outline
+                                        : Icons.sms,
                                     size: 18,
-                                    color: isDeliver
-                                        ? AppColors.primary
-                                        : AppColors.statusAway,
+                                    color: isUnrecognized
+                                        ? AppColors.statusMaintenance
+                                        : (isDeliver
+                                            ? AppColors.primary
+                                            : AppColors.statusAway),
                                   ),
                                 ),
                                 if (isUnread)
