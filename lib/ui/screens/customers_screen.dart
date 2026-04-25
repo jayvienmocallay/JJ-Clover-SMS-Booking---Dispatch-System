@@ -30,6 +30,37 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }).toList();
   }
 
+  Future<void> _deleteCustomer(int customerId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('Delete Customer', style: TextStyle(color: AppColors.foreground)),
+        content: Text('Delete $name and their orders history?', style: const TextStyle(color: AppColors.mutedForeground)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.statusMaintenance),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await context.read<CustomerProvider>().deleteCustomer(customerId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name deleted')),
+        );
+      }
+    }
+  }
+
   /// Shows the Add Customer bottom sheet form
   void _showAddCustomerSheet() {
     showModalBottomSheet(
@@ -230,6 +261,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               ],
                             ),
                           ),
+                          // Delete button
+                          GestureDetector(
+                            onTap: () => _deleteCustomer(c['id'] as int, name),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              child: const Icon(Icons.delete_outline, size: 20, color: AppColors.statusMaintenance),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -301,10 +340,31 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       );
       return;
     }
-    if (_selectedBarangayId == null) {
+
+    final phoneRegex = RegExp(r'^09\d{9}$');
+    if (!phoneRegex.hasMatch(phone)) {
       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid phone format. Use 09XXXXXXXXX')),
+      );
+      return;
+    }
+
+    if (_selectedBarangayId == null) {
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      scaffoldMessenger.showSnackBar(
         const SnackBar(content: Text('Please select a barangay')),
       );
+      return;
+    }
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final existing = await DatabaseHelper.instance.getCustomerByPhone(phone);
+    if (existing != null) {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('A customer with $phone already exists')),
+        );
+      }
       return;
     }
 
@@ -315,8 +375,19 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       'barangay_id': _selectedBarangayId,
     };
 
-    await context.read<CustomerProvider>().addCustomer(customerData);
-    if (mounted) Navigator.pop(context);
+    // ignore: use_build_context_synchronously
+    final customerProv = context.read<CustomerProvider>();
+    // ignore: use_build_context_synchronously
+    final navigator = Navigator.of(context);
+    final snackBarMsg = '$name added successfully';
+    // ignore: use_build_context_synchronously
+    final successSnack = SnackBar(content: Text(snackBarMsg));
+
+    // ignore: use_build_context_synchronously
+    await customerProv.addCustomer(customerData);
+    if (!mounted) return;
+    navigator.pop();
+    scaffoldMessenger.showSnackBar(successSnack);
   }
 
   @override
