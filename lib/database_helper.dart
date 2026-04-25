@@ -124,6 +124,7 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)');
 
     // Task 005 — 5. Delivery Logs Table (per-household accountability)
     // Records per-household delivery details for accountability and loss tracking.
@@ -142,6 +143,10 @@ class DatabaseHelper {
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
       )
     ''');
+
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_order ON delivery_logs(order_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_customer ON delivery_logs(customer_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_delivered ON delivery_logs(delivered_at)');
 
     await _createAppSettingsTable(db);
 
@@ -209,6 +214,10 @@ class DatabaseHelper {
         await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_order ON delivery_logs(order_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_customer ON delivery_logs(customer_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_delivered ON delivery_logs(delivered_at)');
       } catch (_) {}
     }
 
@@ -327,6 +336,12 @@ class DatabaseHelper {
   Future<int> deleteBarangay(int id) async {
     final db = await instance.database;
     return await db.delete('barangays', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Delete a customer by ID
+  Future<int> deleteCustomer(int id) async {
+    final db = await instance.database;
+    return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
   }
 
   // Task 003, Task 005 — Customer CRUD operations
