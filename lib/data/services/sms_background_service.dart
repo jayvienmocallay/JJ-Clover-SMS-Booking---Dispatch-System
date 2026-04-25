@@ -388,10 +388,20 @@ class SmsBackgroundService {
     final context = _preBookPending[normalizedSender];
 
     if (context == null) {
-      // No pending pre-book offer found — the customer sent YES unprompted
       await _sendReply(
         sender,
         'No pending pre-book found. Please send a DELIVER command first.',
+        smsSender: smsSender,
+      );
+      return;
+    }
+
+    // Check if pre-book has expired
+    if (context.isExpired) {
+      _preBookPending.remove(normalizedSender);
+      await _sendReply(
+        sender,
+        'Pre-book offer has expired. Please send a new DELIVER command.',
         smsSender: smsSender,
       );
       return;
@@ -564,6 +574,11 @@ class _PreBookContext {
   /// The correct delivery day offered in the "Wrong Day" reply
   final String deliveryDay;
 
+  /// Timestamp when pre-book was created (for expiration)
+  final DateTime createdAt;
+
+  static const expirationHours = 48;
+
   _PreBookContext({
     required this.customerId,
     required this.phoneNumber,
@@ -571,5 +586,10 @@ class _PreBookContext {
     this.gallonType,
     this.address,
     required this.deliveryDay,
-  });
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  bool get isExpired {
+    return DateTime.now().difference(createdAt).inHours > expirationHours;
+  }
 }
