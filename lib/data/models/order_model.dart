@@ -4,7 +4,7 @@
 enum OrderType { deliver, drop, unrecognized }
 
 /// Tracks the lifecycle of an order from creation to completion
-enum OrderStatus { pending, confirmed, completed, cancelled, rejected }
+enum OrderStatus { pending, confirmed, inTransit, completed, cancelled, rejected }
 
 /// Classifies gallons to prevent mixing between household and store use.
 /// Based on Scope & Zone Mapping document business rule:
@@ -114,11 +114,13 @@ class Order {
   /// Converts a status string from the database to an [OrderStatus] enum.
   /// Defaults to [OrderStatus.pending] if the string is unrecognized.
   static OrderStatus _parseStatus(String status) {
-    switch (status) {
+switch (status) {
       case 'pending':
         return OrderStatus.pending;
       case 'confirmed':
         return OrderStatus.confirmed;
+      case 'in_transit':
+        return OrderStatus.inTransit;
       case 'completed':
         return OrderStatus.completed;
       case 'cancelled':
@@ -126,7 +128,6 @@ class Order {
       case 'rejected':
         return OrderStatus.rejected;
       default:
-        // Fallback for any unexpected status value
         return OrderStatus.pending;
     }
   }
@@ -168,6 +169,9 @@ class Order {
         break;
       case OrderStatus.confirmed:
         statusStr = 'confirmed';
+        break;
+      case OrderStatus.inTransit:
+        statusStr = 'in_transit';
         break;
       case OrderStatus.completed:
         statusStr = 'completed';
