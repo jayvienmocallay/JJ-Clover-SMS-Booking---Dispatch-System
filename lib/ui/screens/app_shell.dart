@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/alarm_service.dart';
+import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/walk_in_alert.dart';
 import 'dashboard_screen.dart';
@@ -39,8 +40,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   // service inserts new orders via SMS
   late final _refreshTimer = !kIsWeb
       ? Stream.periodic(
-          const Duration(seconds: 15),
-        ).listen((_) => _autoRefresh())
+          // ignore: prefer_const_constructors - AppConstants is accessed at runtime
+          Duration(seconds: AppConstants.autoRefreshSeconds),
+        )
+          .listen((_) => _autoRefresh())
       : null;
 
   @override
@@ -61,8 +64,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   Future<void> _loadInitialData() async {
-    await context.read<OrderProvider>().loadOrders();
-    await context.read<CustomerProvider>().loadCustomers();
+    final orderProv = context.read<OrderProvider>();
+    final customerProv = context.read<CustomerProvider>();
+    await orderProv.loadOrders();
+    await customerProv.loadCustomers();
     if (mounted) {
       setState(() => _isInitialLoading = false);
     }

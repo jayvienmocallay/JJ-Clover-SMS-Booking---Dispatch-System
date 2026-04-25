@@ -57,7 +57,7 @@ class SmsBackgroundService {
   /// that was offered in the "Wrong Day" reply. When the customer replies
   /// YES, we look up this map to know which day to create the pre-book for.
   /// Key: phone number (String), Value: offered delivery day (String)
-  Map<String, _PreBookContext> _preBookPending = {};
+  final Map<String, _PreBookContext> _preBookPending = {};
 
   /// Private constructor — use [instance] to access
   SmsBackgroundService._internal();
