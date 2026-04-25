@@ -11,14 +11,21 @@ import 'core/utils/phone_number_utils.dart';
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
+  static bool _schemaIntegrityChecked = false;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   DatabaseHelper._init();
 
   Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB('clover_secure.db');
-    return _database!;
+    if (_database != null) {
+      await _ensureSchemaIntegrity(_database!);
+      return _database!;
+    }
+
+    final db = await _initDB('clover_secure.db');
+    _database = db;
+    await _ensureSchemaIntegrity(db);
+    return db;
   }
 
   /// Ensures default schedules exist for databases created before schedule
@@ -110,6 +117,7 @@ class DatabaseHelper {
         gallon_type TEXT,
         address TEXT,
         status TEXT NOT NULL,
+        cancel_reason TEXT,
         created_at TEXT NOT NULL,
         delivery_day TEXT,
         is_pre_book INTEGER DEFAULT 0,
@@ -119,12 +127,24 @@ class DatabaseHelper {
     ''');
 
     // Add indexes for query performance
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_number)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_number)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)',
+    );
 
     // Task 005 — 5. Delivery Logs Table (per-household accountability)
     // Records per-household delivery details for accountability and loss tracking.
@@ -144,27 +164,17 @@ class DatabaseHelper {
       )
     ''');
 
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_order ON delivery_logs(order_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_customer ON delivery_logs(customer_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_delivered ON delivery_logs(delivered_at)');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_delivery_logs_order ON delivery_logs(order_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_delivery_logs_customer ON delivery_logs(customer_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_delivery_logs_delivered ON delivery_logs(delivered_at)',
+    );
 
-    // --- SMS Messages Table for full send/receive history ---
-    await db.execute('''
-      CREATE TABLE sms_messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        phone_number TEXT NOT NULL,
-        message TEXT NOT NULL,
-        direction TEXT NOT NULL,
-        related_order_id INTEGER,
-        status TEXT,
-        sent_at TEXT NOT NULL
-      )
-    ''');
-
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_phone ON sms_messages(phone_number)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_direction ON sms_messages(direction)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_sent ON sms_messages(sent_at)');
-
+    await _createSmsMessagesTable(db);
     await _createAppSettingsTable(db);
 
     // Task 006 — Seed default data in order: barangays first, then customers, then schedules.
@@ -226,15 +236,33 @@ class DatabaseHelper {
 
       // Add indexes for query performance (idempotent)
       try {
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_number)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_order ON delivery_logs(order_id)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_customer ON delivery_logs(customer_id)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_delivery_logs_delivered ON delivery_logs(delivered_at)');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_number)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_delivery_logs_order ON delivery_logs(order_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_delivery_logs_customer ON delivery_logs(customer_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_delivery_logs_delivered ON delivery_logs(delivered_at)',
+        );
       } catch (_) {}
     }
 
@@ -243,22 +271,7 @@ class DatabaseHelper {
     }
 
     // Create sms_messages table if not exists (for old databases)
-    try {
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS sms_messages (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          phone_number TEXT NOT NULL,
-          message TEXT NOT NULL,
-          direction TEXT NOT NULL,
-          related_order_id INTEGER,
-          status TEXT,
-          sent_at TEXT NOT NULL
-        )
-      ''');
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_phone ON sms_messages(phone_number)');
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_direction ON sms_messages(direction)');
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_sent ON sms_messages(sent_at)');
-    } catch (_) {}
+    await _createSmsMessagesTable(db);
   }
 
   Future<void> _createAppSettingsTable(Database db) async {
@@ -268,6 +281,53 @@ class DatabaseHelper {
         value TEXT NOT NULL
       )
     ''');
+  }
+
+  Future<void> _createSmsMessagesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sms_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone_number TEXT NOT NULL,
+        message TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        related_order_id INTEGER,
+        status TEXT,
+        sent_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sms_phone ON sms_messages(phone_number)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sms_direction ON sms_messages(direction)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sms_sent ON sms_messages(sent_at)',
+    );
+  }
+
+  Future<void> _ensureSchemaIntegrity(Database db) async {
+    if (_schemaIntegrityChecked) return;
+
+    await _createAppSettingsTable(db);
+    await _createSmsMessagesTable(db);
+    await _addColumnIfMissing(db, 'orders', 'cancel_reason', 'TEXT');
+
+    _schemaIntegrityChecked = true;
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = columns.any((row) => row['name'] == column);
+    if (!exists) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+    }
   }
 
   // Task 006 — Pre-populate barangays with default data
@@ -292,7 +352,7 @@ class DatabaseHelper {
     }
   }
 
-// Task 006 — Pre-populate customers (no longer seeded with sample data)
+  // Task 006 — Pre-populate customers (no longer seeded with sample data)
   // Customers are now added via the app UI
   Future<void> _seedCustomers(Database db) async {
     // No sample data - customers added via app
@@ -540,12 +600,7 @@ class DatabaseHelper {
     if (reason != null && reason.isNotEmpty) {
       data['cancel_reason'] = reason;
     }
-    return await db.update(
-      'orders',
-      data,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.update('orders', data, where: 'id = ?', whereArgs: [id]);
   }
 
   // Task 005 — Delivery Log CRUD operations
@@ -651,7 +706,10 @@ class DatabaseHelper {
   }
 
   /// Update customer info
-  Future<int> updateCustomer(int customerId, Map<String, dynamic> customerData) async {
+  Future<int> updateCustomer(
+    int customerId,
+    Map<String, dynamic> customerData,
+  ) async {
     final db = await instance.database;
     return await db.update(
       'customers',
@@ -698,7 +756,11 @@ class DatabaseHelper {
     final value = await getSetting(readMessageIdsKey);
     if (value == null || value.isEmpty) return {};
     try {
-      return value.split(',').where((s) => s.isNotEmpty).map((s) => int.parse(s)).toSet();
+      return value
+          .split(',')
+          .where((s) => s.isNotEmpty)
+          .map((s) => int.parse(s))
+          .toSet();
     } catch (_) {
       return {};
     }
@@ -736,11 +798,15 @@ class DatabaseHelper {
     }
   }
 
-  Future<void> setPreBookPending(Map<String, Map<String, dynamic>> pending) async {
+  Future<void> setPreBookPending(
+    Map<String, Map<String, dynamic>> pending,
+  ) async {
     final entries = <String>[];
     for (final entry in pending.entries) {
       final v = entry.value;
-      entries.add('${entry.key}~${v['customerId']}~${v['quantity']}~${v['gallonType'] ?? ''}~${v['address'] ?? ''}~${v['deliveryDay']}~${v['timestamp'] ?? 0}');
+      entries.add(
+        '${entry.key}~${v['customerId']}~${v['quantity']}~${v['gallonType'] ?? ''}~${v['address'] ?? ''}~${v['deliveryDay']}~${v['timestamp'] ?? 0}',
+      );
     }
     await setSetting(preBookPendingKey, entries.join('|'));
   }
@@ -755,7 +821,7 @@ class DatabaseHelper {
     return int.tryParse(value ?? '') ?? 0;
   }
 
-Future<void> setCutoffTime(int hour, int minute) async {
+  Future<void> setCutoffTime(int hour, int minute) async {
     await setSetting(cutoffHourKey, hour.toString());
     await setSetting(cutoffMinuteKey, minute.toString());
   }

@@ -64,7 +64,7 @@
             android:value="2" />
 
         <receiver
-            android:name="com.shounakmulay.telephony.sms.IncomingSmsReceiver"
+            android:name=".DefaultSmsReceiver"
             android:permission="android.permission.BROADCAST_SMS"
             android:exported="true">
             <intent-filter>
