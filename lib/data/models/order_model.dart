@@ -53,6 +53,9 @@ class Order {
   /// The staff member assigned to fulfill this order (null if unassigned)
   final int? staffId;
 
+  /// Reason for cancellation (set when order is rejected)
+  final String? cancelReason;
+
   Order({
     this.id,
     this.customerId,
@@ -66,6 +69,7 @@ class Order {
     this.deliveryDay,
     this.isPreBook = false,
     this.staffId,
+    this.cancelReason,
   });
 
   /// Creates an [Order] instance from a database row map.
@@ -89,6 +93,7 @@ class Order {
       // SQLite stores booleans as 0/1 integers
       isPreBook: (map['is_pre_book'] as int?) == 1,
       staffId: map['staff_id'] as int?,
+      cancelReason: map['cancel_reason'] as String?,
     );
   }
 
@@ -192,6 +197,7 @@ class Order {
       // Store boolean as integer: 1 = true, 0 = false
       'is_pre_book': isPreBook ? 1 : 0,
       if (staffId != null) 'staff_id': staffId,
+      if (cancelReason != null) 'cancel_reason': cancelReason,
     };
   }
 }
