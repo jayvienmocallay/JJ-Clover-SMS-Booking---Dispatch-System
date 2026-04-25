@@ -1,4 +1,3 @@
-// Task 003, Task 006 — Schedule data model (zone-day mapping per customer)
 class Schedule {
   final int? id;
   final int customerId;
