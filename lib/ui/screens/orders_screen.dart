@@ -252,6 +252,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
   final _phoneController = TextEditingController();
   String _type = 'deliver';
   int _quantity = 1;
+  String _gallonType = 'new';
 
   @override
   void dispose() {
@@ -280,7 +281,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
       'phone_number': phone,
       'type': _type,
       'quantity': _quantity,
-      'gallon_type': 'old',
+      'gallon_type': _gallonType,
       'status': 'pending',
       'created_at': DateTime.now().toIso8601String(),
       'is_pre_book': 0,
@@ -453,7 +454,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
               // Minus button
               GestureDetector(
                 onTap: () {
-                  if (_quantity > 1) setState(() => _quantity--);
+                  if (_quantity > 0) setState(() => _quantity--);
                 },
                 child: Container(
                   width: 44,
@@ -493,6 +494,19 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                   child: const Icon(Icons.add, size: 18, color: AppColors.primary),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Gallon type selector
+          const Text('Gallon Type',
+              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              _buildGallonTypeOption('new', 'New', Icons.water_drop),
+              const SizedBox(width: 12),
+              _buildGallonTypeOption('old', 'Old', Icons.local_gas_station),
             ],
           ),
           const SizedBox(height: 24),
@@ -595,6 +609,42 @@ class _AddOrderFormState extends State<_AddOrderForm> {
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _type = value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primaryLight : AppColors.background,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.border,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16,
+                  color: isSelected ? AppColors.primary : AppColors.mutedForeground),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isSelected ? AppColors.primary : AppColors.mutedForeground,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGallonTypeOption(String value, String label, IconData icon) {
+    final isSelected = _gallonType == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _gallonType = value),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
