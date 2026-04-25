@@ -294,6 +294,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final phoneController = TextEditingController(text: customer['contact_number'] as String? ?? '');
     final addressController = TextEditingController(text: customer['address'] as String? ?? '');
     final customerId = customer['id'] as int;
+    final currentBarangayId = customer['barangay_id'] as int?;
+    int? selectedBarangayId = currentBarangayId;
+    final List<Map<String, dynamic>> barangays = [];
 
     showModalBottomSheet(
       context: context,
@@ -302,93 +305,129 @@ class _CustomersScreenState extends State<CustomersScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       isScrollControlled: true,
-      builder: (_) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          20 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return FutureBuilder<List<Map<String, dynamic>>>(
+            future: DatabaseHelper.instance.getBarangays(),
+            builder: (ctx, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              barangays.clear();
+              barangays.addAll(snapshot.data!);
+              
+              return Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  20 + MediaQuery.of(ctx).viewInsets.bottom,
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Edit Customer',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.foreground,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text('Full Name', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
-            const SizedBox(height: 6),
-            _buildTextField(nameController, 'Full Name', TextInputType.name),
-            const SizedBox(height: 16),
-            const Text('Phone Number', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
-            const SizedBox(height: 6),
-            _buildTextField(phoneController, 'Phone Number', TextInputType.phone),
-            const SizedBox(height: 16),
-            const Text('Full Address', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
-            const SizedBox(height: 6),
-            _buildTextField(addressController, 'Full Address', TextInputType.streetAddress),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: GestureDetector(
-                onTap: () async {
-                  final name = nameController.text.trim();
-                  final phone = phoneController.text.trim();
-                  final address = addressController.text.trim();
-
-                  if (name.isEmpty || phone.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Name and phone are required')),
-                    );
-                    return;
-                  }
-
-                  await context.read<CustomerProvider>().updateCustomer(customerId, {
-                    'name': name,
-                    'contact_number': phone,
-                    'address': address.isNotEmpty ? address : null,
-                  });
-
-                  if (mounted) Navigator.pop(context);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Save Changes',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Edit Customer',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.foreground,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Full Name', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const SizedBox(height: 6),
+                    _buildTextField(nameController, 'Full Name', TextInputType.name),
+                    const SizedBox(height: 16),
+                    const Text('Phone Number', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const SizedBox(height: 6),
+                    _buildTextField(phoneController, 'Phone Number', TextInputType.phone),
+                    const SizedBox(height: 16),
+                    const Text('Full Address', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const SizedBox(height: 6),
+                    _buildTextField(addressController, 'Full Address', TextInputType.streetAddress),
+                    const SizedBox(height: 16),
+                    const Text('Barangay', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int?>(
+                          value: selectedBarangayId,
+                          isExpanded: true,
+                          dropdownColor: AppColors.card,
+                          hint: const Text('Select Barangay...', style: TextStyle(color: AppColors.mutedForeground)),
+                          items: barangays.map((b) => DropdownMenuItem<int?>(
+                            value: b['id'] as int,
+                            child: Text('${b['name']} (${b['delivery_zone']})', style: const TextStyle(color: AppColors.foreground)),
+                          )).toList(),
+                          onChanged: (val) => setSheetState(() => selectedBarangayId = val),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: GestureDetector(
+                        onTap: () async {
+                          final name = nameController.text.trim();
+                          final phone = phoneController.text.trim();
+                          final address = addressController.text.trim();
+
+                          if (name.isEmpty || phone.isEmpty || selectedBarangayId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Name, phone, and barangay are required')),
+                            );
+                            return;
+                          }
+
+                          await context.read<CustomerProvider>().updateCustomer(customerId, {
+                            'name': name,
+                            'contact_number': phone,
+                            'address': address.isNotEmpty ? address : null,
+                            'barangay_id': selectedBarangayId,
+                          });
+
+                          if (context.mounted) Navigator.pop(ctx);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Save Changes',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-          ],
-        ),
+              );
+            },
+          );
+        },
       ),
     );
   }

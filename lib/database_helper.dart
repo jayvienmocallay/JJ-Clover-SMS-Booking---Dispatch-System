@@ -241,6 +241,24 @@ class DatabaseHelper {
     if (oldVersion < 3) {
       await _createAppSettingsTable(db);
     }
+
+    // Create sms_messages table if not exists (for old databases)
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS sms_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          phone_number TEXT NOT NULL,
+          message TEXT NOT NULL,
+          direction TEXT NOT NULL,
+          related_order_id INTEGER,
+          status TEXT,
+          sent_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_phone ON sms_messages(phone_number)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_direction ON sms_messages(direction)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_sms_sent ON sms_messages(sent_at)');
+    } catch (_) {}
   }
 
   Future<void> _createAppSettingsTable(Database db) async {
