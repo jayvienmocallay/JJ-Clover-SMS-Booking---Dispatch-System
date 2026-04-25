@@ -57,7 +57,7 @@ class SmsBackgroundService {
   /// that was offered in the "Wrong Day" reply. When the customer replies
   /// YES, we look up this map to know which day to create the pre-book for.
   /// Key: phone number (String), Value: offered delivery day (String)
-  final Map<String, _PreBookContext> _preBookPending = {};
+  Map<String, _PreBookContext> _preBookPending = {};
 
   /// Private constructor — use [instance] to access
   SmsBackgroundService._internal();
@@ -72,6 +72,9 @@ class SmsBackgroundService {
     // Guard: don't register the listener twice
     if (_isListening) return;
 
+    // Load persisted pre-books from database
+    await _loadPreBooksFromDb();
+
     // Register the SMS listener callback with the Telephony API
     _telephony.listenIncomingSms(
       onNewMessage: (SmsMessage msg) {
@@ -82,6 +85,54 @@ class SmsBackgroundService {
 
     _isListening = true;
     debugPrint('SMS Background Service started');
+  }
+
+  Future<void> _loadPreBooksFromDb() async {
+    try {
+      final pending = await _db.getPreBookPending();
+      final now = DateTime.now();
+      for (final entry in pending.entries) {
+        final v = entry.value;
+        final timestamp = v['timestamp'] as int? ?? 0;
+        final createdAt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        // Only load if not expired (48 hours)
+        if (now.difference(createdAt).inHours <= 48) {
+          _preBookPending[entry.key] = _PreBookContext(
+            customerId: v['customerId'] as int,
+            phoneNumber: v['phoneNumber'] as String,
+            quantity: v['quantity'] as int,
+            gallonType: v['gallonType'] as String?,
+            address: v['address'] as String?,
+            deliveryDay: v['deliveryDay'] as String,
+            createdAt: createdAt,
+          );
+        }
+      }
+      debugPrint('Loaded ${_preBookPending.length} pre-books from database');
+    } catch (e) {
+      debugPrint('Failed to load pre-books: $e');
+    }
+  }
+
+  Future<void> _savePreBooksToDb() async {
+    try {
+      final Map<String, Map<String, dynamic>> data = {};
+      for (final entry in _preBookPending.entries) {
+        final c = entry.value;
+        data[entry.key] = {
+          'customerId': c.customerId,
+          'phoneNumber': c.phoneNumber,
+          'quantity': c.quantity,
+          'gallonType': c.gallonType,
+          'address': c.address,
+          'deliveryDay': c.deliveryDay,
+          'timestamp': c.createdAt.millisecondsSinceEpoch,
+        };
+      }
+      await _db.setPreBookPending(data);
+    } catch (e) {
+      debugPrint('Failed to save pre-books: $e');
+    }
   }
 
   /// Stops the SMS listener gracefully.
@@ -251,6 +302,7 @@ class SmsBackgroundService {
       // Store the pre-book context so _handleYes knows the details
       // when the customer replies YES to the pre-book offer
       if (validation.correctDay != null) {
+        final now = DateTime.now();
         _preBookPending[normalizedSender] = _PreBookContext(
           customerId: customer.id!,
           phoneNumber: normalizedSender,
@@ -258,7 +310,9 @@ class SmsBackgroundService {
           gallonType: parsed.gallonType,
           address: parsed.address,
           deliveryDay: validation.correctDay!,
+          createdAt: now,
         );
+        await _savePreBooksToDb();
       }
       // Send the "Wrong Day" reply with pre-book offer
       await _sendReply(sender, validation.message!, smsSender: smsSender);
@@ -429,6 +483,7 @@ class SmsBackgroundService {
 
     // Remove the pending context — each YES is a one-time confirmation
     _preBookPending.remove(normalizedSender);
+    await _savePreBooksToDb();
 
     // Confirm the pre-booking to the customer
     await _sendReply(
