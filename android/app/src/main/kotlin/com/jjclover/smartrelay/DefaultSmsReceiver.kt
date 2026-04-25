@@ -4,26 +4,39 @@ import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
 import com.shounakmulay.telephony.sms.IncomingSmsReceiver
 
 class DefaultSmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val pendingResult = goAsync()
         val isDeliver = intent.action == Telephony.Sms.Intents.SMS_DELIVER_ACTION
-
-        if (isDeliver) {
-            persistIncomingSms(context, intent)
-        }
+        val appContext = context.applicationContext
 
         try {
-            IncomingSmsReceiver().onReceive(context, intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Unable to forward incoming SMS to Dart.", e)
-        }
+            Log.i(TAG, "Received ${intent.action}; forwarding to Dart SMS handler.")
 
-        if (isDeliver) {
-            resultCode = Telephony.Sms.Intents.RESULT_SMS_HANDLED
+            if (isDeliver) {
+                persistIncomingSms(appContext, intent)
+            }
+
+            try {
+                IncomingSmsReceiver().onReceive(appContext, intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Unable to forward incoming SMS to Dart.", e)
+            }
+
+            if (isDeliver) {
+                pendingResult.resultCode = Telephony.Sms.Intents.RESULT_SMS_HANDLED
+            }
+        } finally {
+            Handler(Looper.getMainLooper()).postDelayed(
+                { pendingResult.finish() },
+                BACKGROUND_HANDLER_GRACE_MS,
+            )
         }
     }
 
@@ -85,5 +98,6 @@ class DefaultSmsReceiver : BroadcastReceiver() {
 
     private companion object {
         const val TAG = "DefaultSmsReceiver"
+        const val BACKGROUND_HANDLER_GRACE_MS = 8_000L
     }
 }
