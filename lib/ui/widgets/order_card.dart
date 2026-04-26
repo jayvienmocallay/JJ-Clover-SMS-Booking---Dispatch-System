@@ -78,6 +78,8 @@ class OrderCard extends StatelessWidget {
                         fontSize: 14,
                         color: AppColors.foreground,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     // Phone number
                     if (phone != null)
@@ -87,6 +89,8 @@ class OrderCard extends StatelessWidget {
                           fontSize: 13,
                           color: AppColors.mutedForeground,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     // Address & barangay
                     if (address != null || barangay != null)
@@ -98,35 +102,39 @@ class OrderCard extends StatelessWidget {
                             fontSize: 13,
                             color: AppColors.mutedForeground,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     const SizedBox(height: 8),
                     // Quantity badge + pre-book badge + time
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.muted,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${order.quantity} gallon${order.quantity > 1 ? "s" : ""}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.mutedForeground,
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.muted,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '${order.quantity} gallon${order.quantity > 1 ? "s" : ""}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.mutedForeground,
+                              ),
                             ),
                           ),
-                        ),
-                        // Task 011 — Pre-book badge
-                        if (order.isPreBook) ...[
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Container(
+                          // Task 011 — Pre-book badge
+                          if (order.isPreBook) ...[
+                            const SizedBox(width: 8),
+                            Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 4,
@@ -140,34 +148,28 @@ class OrderCard extends StatelessWidget {
                                 children: [
                                   const Icon(Icons.schedule, size: 10, color: AppColors.primary),
                                   const SizedBox(width: 4),
-                                  Flexible(
-                                    child: Text(
-                                      'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.primary,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
+                                  Text(
+                                    'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.primary,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ),
-                        ],
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
+                          ],
+                          const SizedBox(width: 12),
+                          Text(
                             _formatTime(order.createdAt),
                             style: const TextStyle(
                               fontSize: 12,
                               color: AppColors.mutedForeground,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ),
