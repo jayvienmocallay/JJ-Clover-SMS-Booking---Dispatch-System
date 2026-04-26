@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../database_helper.dart';
 import '../../data/providers/order_provider.dart';
+import '../../data/providers/customer_provider.dart';
 import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -23,6 +24,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _barangayController = TextEditingController();
   List<Map<String, dynamic>> _barangays = [];
   String _selectedZone = 'Zone A';
+  String? _selectedDay; // Required when _selectedZone == 'Zone C'
 
   // Editable cutoff time - loaded from persisted settings
   int _cutoffHour = AppConstants.orderCutOffHour;
@@ -57,6 +59,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final name = _barangayController.text.trim();
     if (name.isEmpty) return;
 
+    if (_selectedZone == 'Zone C' && _selectedDay == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a delivery day for Zone C')),
+      );
+      return;
+    }
+
     // Check for duplicates
     final exists = _barangays.any(
       (b) => (b['name'] as String).toLowerCase() == name.toLowerCase(),
@@ -68,11 +77,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    await DatabaseHelper.instance.insertBarangay({
+    final barangayData = {
       'name': name,
       'delivery_zone': _selectedZone,
-    });
+      if (_selectedZone == 'Zone C' && _selectedDay != null)
+        'delivery_day': _selectedDay,
+    };
+
+    await DatabaseHelper.instance.insertBarangay(barangayData);
     _barangayController.clear();
+    setState(() => _selectedDay = null);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$name added successfully')),
@@ -301,12 +315,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showDeliveryManifest() {
+    final orderProv = context.read<OrderProvider>();
+    final customerProv = context.read<CustomerProvider>();
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.card,
       isScrollControlled: true,
-      builder: (_) => ChangeNotifierProvider.value(
-        value: context.read<OrderProvider>(),
+      builder: (_) => MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: orderProv),
+          ChangeNotifierProvider.value(value: customerProv),
+        ],
         child: const _DeliveryManifestSheet(),
       ),
     );
@@ -410,7 +429,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         .map((z) => DropdownMenuItem(value: z, child: Text(z)))
                         .toList(),
                     onChanged: (v) {
-                      if (v != null) setState(() => _selectedZone = v);
+                      if (v != null) setState(() { _selectedZone = v; _selectedDay = null; });
                     },
                   ),
                 ),
@@ -437,6 +456,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
+          if (_selectedZone == 'Zone C') ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today,
+                    size: 14, color: AppColors.mutedForeground),
+                const SizedBox(width: 8),
+                const Text(
+                  'Delivery day:',
+                  style: TextStyle(
+                      fontSize: 13, color: AppColors.mutedForeground),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _selectedDay == null
+                            ? AppColors.statusMaintenance
+                            : AppColors.border,
+                      ),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _selectedDay,
+                      isExpanded: true,
+                      underline: const SizedBox(),
+                      dropdownColor: AppColors.card,
+                      hint: const Text(
+                        'Select day...',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.mutedForeground),
+                      ),
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.foreground),
+                      items: [
+                        'Monday', 'Tuesday', 'Wednesday',
+                        'Thursday', 'Friday', 'Saturday',
+                      ]
+                          .map((d) =>
+                              DropdownMenuItem(value: d, child: Text(d)))
+                          .toList(),
+                      onChanged: (d) =>
+                          setState(() => _selectedDay = d),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Barangay chips with remove buttons
@@ -567,8 +639,14 @@ class _DeliveryManifestSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<OrderProvider>(
-      builder: (context, orderProv, _) {
+    return Consumer2<OrderProvider, CustomerProvider>(
+      builder: (context, orderProv, customerProv, _) {
+        final customerCache = <int, Map<String, dynamic>>{};
+        for (final c in customerProv.customers) {
+          final id = c['id'] as int?;
+          if (id != null) customerCache[id] = c;
+        }
+
         final confirmed = orderProv.todayOrders
             .where(
               (o) => o['status'] == 'confirmed' || o['status'] == 'in_transit',
@@ -652,13 +730,13 @@ class _DeliveryManifestSheet extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.check_circle,
+                                Icons.assignment_outlined,
                                 size: 48,
-                                color: AppColors.statusOperating,
+                                color: AppColors.mutedForeground,
                               ),
                               SizedBox(height: 12),
                               Text(
-                                'All deliveries completed!',
+                                'No confirmed orders yet.',
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: AppColors.mutedForeground,
@@ -695,23 +773,30 @@ class _DeliveryManifestSheet extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 8),
                                   ...entry.value.asMap().entries.map(
-                                    (e) => _ManifestItem(
-                                      index: e.key + 1,
-                                      order: e.value,
-                                      onStart: e.value['status'] == 'confirmed'
-                                          ? () => orderProv.updateStatus(
-                                              e.value['id'] as int,
-                                              'in_transit',
-                                            )
-                                          : null,
-                                      onComplete:
-                                          e.value['status'] == 'in_transit'
-                                          ? () => orderProv.updateStatus(
-                                              e.value['id'] as int,
-                                              'completed',
-                                            )
-                                          : null,
-                                    ),
+                                    (e) {
+                                      final o = e.value;
+                                      final cid = o['customer_id'] as int?;
+                                      final customerName = cid != null
+                                          ? (customerCache[cid]?['name'] as String?)
+                                          : null;
+                                      return _ManifestItem(
+                                        index: e.key + 1,
+                                        order: o,
+                                        customerName: customerName,
+                                        onStart: o['status'] == 'confirmed'
+                                            ? () => orderProv.updateStatus(
+                                                o['id'] as int,
+                                                'in_transit',
+                                              )
+                                            : null,
+                                        onComplete: o['status'] == 'in_transit'
+                                            ? () => orderProv.updateStatus(
+                                                o['id'] as int,
+                                                'completed',
+                                              )
+                                            : null,
+                                      );
+                                    },
                                   ),
                                   const SizedBox(height: 16),
                                 ],
@@ -771,12 +856,14 @@ class _SummaryChip extends StatelessWidget {
 class _ManifestItem extends StatelessWidget {
   final int index;
   final Map<String, dynamic> order;
+  final String? customerName;
   final VoidCallback? onStart;
   final VoidCallback? onComplete;
 
   const _ManifestItem({
     required this.index,
     required this.order,
+    this.customerName,
     this.onStart,
     this.onComplete,
   });
@@ -824,9 +911,17 @@ class _ManifestItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  phone,
+                  customerName ?? phone,
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
+                if (customerName != null)
+                  Text(
+                    phone,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.mutedForeground,
+                    ),
+                  ),
                 Text(
                   '$qty gallon(s)',
                   style: const TextStyle(

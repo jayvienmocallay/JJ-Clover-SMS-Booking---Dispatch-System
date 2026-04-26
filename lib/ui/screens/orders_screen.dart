@@ -347,14 +347,26 @@ class _AddOrderFormState extends State<_AddOrderForm> {
   }
 
   Future<void> _submit() async {
-    final phone = _phoneController.text.trim();
-
     if (_customerMode == 'existing' && _selectedCustomerId == null) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Please select a customer')));
       return;
     }
+
+    // For existing customers, always derive the phone from the customer record
+    // so a manually cleared controller can't produce an empty phone_number.
+    String phone;
+    if (_customerMode == 'existing' && _selectedCustomerId != null) {
+      final customers = context.read<CustomerProvider>().customers;
+      final match = customers.where((c) => c['id'] == _selectedCustomerId);
+      phone = match.isNotEmpty
+          ? (match.first['contact_number'] as String? ?? '')
+          : '';
+    } else {
+      phone = _phoneController.text.trim();
+    }
+
     if (_customerMode == 'new' && phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a phone number')),

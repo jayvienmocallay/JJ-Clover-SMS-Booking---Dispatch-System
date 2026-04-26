@@ -119,7 +119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 24),
 
               // --- Recent Orders card ---
-              _buildRecentOrders(orderProv),
+              _buildRecentOrders(orderProv, customerProv),
               const SizedBox(height: 16),
             ],
           );
@@ -450,7 +450,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   /// Builds the Recent Orders card showing up to 5 latest orders
-  Widget _buildRecentOrders(OrderProvider orderProv) {
+  Widget _buildRecentOrders(
+    OrderProvider orderProv,
+    CustomerProvider customerProv,
+  ) {
+    final customerCache = <int, Map<String, dynamic>>{};
+    for (final c in customerProv.customers) {
+      final id = c['id'] as int?;
+      if (id != null) customerCache[id] = c;
+    }
+
     final recentOrders = orderProv.todayOrders
         .where((order) => order['type'] != 'unrecognized')
         .take(5)
@@ -516,6 +525,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               final quantity = order['quantity'] as int? ?? 0;
               final status = order['status'] as String? ?? 'pending';
               final phone = order['phone_number'] as String? ?? '';
+              final customerId = order['customer_id'] as int?;
+              final customerName = customerId != null
+                  ? (customerCache[customerId]?['name'] as String?)
+                  : null;
               final isDeliver = type == 'deliver';
 
               return Container(
@@ -554,7 +567,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            phone,
+                            customerName ?? phone,
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,

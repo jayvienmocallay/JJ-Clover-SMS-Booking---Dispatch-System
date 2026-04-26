@@ -819,7 +819,7 @@ class SmsBackgroundService {
       type: OrderType.unrecognized,
       quantity: quantity,
       gallonType: gallonType,
-      address: message,
+      cancelReason: message,
       status: orderStatus,
       createdAt: DateTime.now(),
       sourceMessageId: sourceMessageId,

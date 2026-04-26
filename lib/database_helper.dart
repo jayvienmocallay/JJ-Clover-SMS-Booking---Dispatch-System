@@ -33,7 +33,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
   static bool _schemaIntegrityChecked = false;
-  static const int databaseVersion = 5;
+  static const int databaseVersion = 6;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
   final DatabaseEncryptionKeyRepository _encryptionKeyRepository =
       DatabaseEncryptionKeyRepository();
@@ -111,11 +111,13 @@ class DatabaseHelper {
   // Task 005 — Create all tables (schema v5)
   Future _createSchema(Database db, int version) async {
     // Task 001 — 1. Barangays Lookup Table (zone mapping from interview)
+    // delivery_day stores the fixed weekly day for Zone C barangays (null for A/B).
     await db.execute('''
       CREATE TABLE barangays (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
-        delivery_zone TEXT NOT NULL
+        delivery_zone TEXT NOT NULL,
+        delivery_day TEXT
       )
     ''');
 
@@ -331,6 +333,17 @@ class DatabaseHelper {
       await _createCustomerContactNumberIndex(db);
     }
 
+    if (oldVersion < 6) {
+      await _addColumnIfMissing(db, 'barangays', 'delivery_day', 'TEXT');
+      // Populate delivery_day for existing seeded Zone C barangays.
+      for (final entry in ZoneScheduleMap.zoneCBarangayDays.entries) {
+        await db.rawUpdate(
+          'UPDATE barangays SET delivery_day = ? WHERE name = ? AND delivery_day IS NULL',
+          [entry.value, entry.key],
+        );
+      }
+    }
+
     // Create sms_messages table if not exists (for old databases)
     await _createSmsMessagesTable(db);
     await _createIncomingSmsReceiptsTable(db);
@@ -496,6 +509,13 @@ class DatabaseHelper {
     await _addColumnIfMissing(db, 'orders', 'source_message_id', 'TEXT');
     await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
     await _createSourceMessageIndexes(db);
+    await _addColumnIfMissing(db, 'barangays', 'delivery_day', 'TEXT');
+    for (final entry in ZoneScheduleMap.zoneCBarangayDays.entries) {
+      await db.rawUpdate(
+        'UPDATE barangays SET delivery_day = ? WHERE name = ? AND delivery_day IS NULL',
+        [entry.value, entry.key],
+      );
+    }
 
     _schemaIntegrityChecked = true;
   }
@@ -525,14 +545,14 @@ class DatabaseHelper {
       {'name': 'San Jose', 'delivery_zone': 'Zone A'},
       {'name': 'Poblacion', 'delivery_zone': 'Zone B'},
       {'name': 'Santa Rosa', 'delivery_zone': 'Zone B'},
-      {'name': 'Santo Niño', 'delivery_zone': 'Zone C'},
-      {'name': 'Semong', 'delivery_zone': 'Zone C'},
-      {'name': 'Gabuyan', 'delivery_zone': 'Zone C'},
-      {'name': 'Bunawan', 'delivery_zone': 'Zone C'},
-      {'name': 'Katipunan', 'delivery_zone': 'Zone C'},
-      {'name': 'Dagohoy', 'delivery_zone': 'Zone C'},
-      {'name': 'Tiburcia', 'delivery_zone': 'Zone C'},
-      {'name': 'Clementa', 'delivery_zone': 'Zone C'},
+      {'name': 'Santo Niño', 'delivery_zone': 'Zone C', 'delivery_day': 'Tuesday'},
+      {'name': 'Semong', 'delivery_zone': 'Zone C', 'delivery_day': 'Tuesday'},
+      {'name': 'Gabuyan', 'delivery_zone': 'Zone C', 'delivery_day': 'Thursday'},
+      {'name': 'Bunawan', 'delivery_zone': 'Zone C', 'delivery_day': 'Thursday'},
+      {'name': 'Katipunan', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
+      {'name': 'Dagohoy', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
+      {'name': 'Tiburcia', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
+      {'name': 'Clementa', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
     ];
 
     for (final barangay in defaultBarangays) {
@@ -558,33 +578,42 @@ class DatabaseHelper {
   /// all with 'active' status by default.
   Future<void> _seedSchedules(Database db) async {
     // Step 1: Query all customers joined with their barangay info.
-    // We need the zone and barangay name to determine delivery days.
+    // We need the zone, barangay name, and delivery_day to determine delivery days.
     final customers = await db.rawQuery('''
-      SELECT c.id AS customer_id, b.name AS barangay_name, b.delivery_zone
+      SELECT c.id AS customer_id, b.name AS barangay_name,
+             b.delivery_zone, b.delivery_day AS barangay_delivery_day
       FROM customers c
       INNER JOIN barangays b ON c.barangay_id = b.id
     ''');
 
     // Step 2: For each customer, look up their allowed delivery days
-    // using the ZoneScheduleMap and insert a schedule record per day.
+    // using the ZoneScheduleMap (or the barangay's delivery_day for Zone C)
+    // and insert a schedule record per day.
     for (final customer in customers) {
       // Extract the customer's zone (e.g., 'Zone A') and barangay name
       final zone = customer['delivery_zone'] as String;
       final barangayName = customer['barangay_name'] as String;
       final customerId = customer['customer_id'] as int;
+      final barangayDeliveryDay = customer['barangay_delivery_day'] as String?;
 
-      // Get the list of delivery days for this customer's zone/barangay
-      final deliveryDays = ZoneScheduleMap.getDaysForZone(
-        zone,
-        barangayName: barangayName,
-      );
+      // For Zone C, prefer the DB-stored delivery_day so dynamically added
+      // barangays (not in the hardcoded map) also get schedules.
+      List<String> deliveryDays;
+      if (zone == 'Zone C' && barangayDeliveryDay != null) {
+        deliveryDays = [barangayDeliveryDay];
+      } else {
+        deliveryDays = ZoneScheduleMap.getDaysForZone(
+          zone,
+          barangayName: barangayName,
+        );
+      }
 
       // Insert one schedule record per allowed delivery day
       for (final day in deliveryDays) {
         await db.insert('schedules', {
-          'customer_id': customerId, // Links schedule to this customer
-          'delivery_day': day, // The day they can receive deliveries
-          'status': 'active', // All seeded schedules start as active
+          'customer_id': customerId,
+          'delivery_day': day,
+          'status': 'active',
         });
       }
     }
@@ -645,17 +674,27 @@ class DatabaseHelper {
       rethrow;
     }
 
-    // Auto-create schedules based on barangay's delivery zone
+    // Auto-create schedules based on barangay's delivery zone / delivery_day.
     final barangayId = normalizedData['barangay_id'] as int?;
     if (barangayId != null) {
       final barangay = await getBarangayById(barangayId);
       if (barangay != null) {
         final zone = barangay['delivery_zone'] as String;
         final barangayName = barangay['name'] as String;
-        final deliveryDays = ZoneScheduleMap.getDaysForZone(
-          zone,
-          barangayName: barangayName,
-        );
+        final barangayDeliveryDay = barangay['delivery_day'] as String?;
+
+        // For Zone C, use the DB-stored delivery_day so dynamically added
+        // barangays (absent from the hardcoded map) also get schedules.
+        List<String> deliveryDays;
+        if (zone == 'Zone C' && barangayDeliveryDay != null) {
+          deliveryDays = [barangayDeliveryDay];
+        } else {
+          deliveryDays = ZoneScheduleMap.getDaysForZone(
+            zone,
+            barangayName: barangayName,
+          );
+        }
+
         for (final day in deliveryDays) {
           await db.insert('schedules', {
             'customer_id': customerId,
@@ -819,11 +858,6 @@ class DatabaseHelper {
 
       final order = orders.single;
       final customerId = order['customer_id'] as int?;
-      if (customerId == null) {
-        throw StateError(
-          'Cannot complete order $id because it has no customer_id for a delivery log.',
-        );
-      }
 
       final updated = await txn.update(
         'orders',
@@ -835,37 +869,42 @@ class DatabaseHelper {
         return 0;
       }
 
-      final existingLogs = await txn.query(
-        'delivery_logs',
-        columns: ['id'],
-        where: 'order_id = ?',
-        whereArgs: [id],
-        limit: 1,
-      );
-      if (existingLogs.isEmpty) {
-        final logData = <String, dynamic>{
-          'order_id': id,
-          'customer_id': customerId,
-          'quantity_delivered': order['quantity'] as int? ?? 0,
-          'delivered_at': (deliveredAt ?? DateTime.now()).toIso8601String(),
-        };
+      // Delivery logs require a customer_id (NOT NULL constraint).
+      // Walk-in orders from unregistered customers have no customer_id —
+      // skip log creation for those so completion still succeeds.
+      if (customerId != null) {
+        final existingLogs = await txn.query(
+          'delivery_logs',
+          columns: ['id'],
+          where: 'order_id = ?',
+          whereArgs: [id],
+          limit: 1,
+        );
+        if (existingLogs.isEmpty) {
+          final logData = <String, dynamic>{
+            'order_id': id,
+            'customer_id': customerId,
+            'quantity_delivered': order['quantity'] as int? ?? 0,
+            'delivered_at': (deliveredAt ?? DateTime.now()).toIso8601String(),
+          };
 
-        final staffId = order['staff_id'] as int?;
-        if (staffId != null) {
-          logData['staff_id'] = staffId;
+          final staffId = order['staff_id'] as int?;
+          if (staffId != null) {
+            logData['staff_id'] = staffId;
+          }
+
+          final gallonType = _nonEmptyString(order['gallon_type'] as String?);
+          if (gallonType != null) {
+            logData['gallon_type'] = gallonType;
+          }
+
+          final deliveryNotes = _nonEmptyString(notes);
+          if (deliveryNotes != null) {
+            logData['notes'] = deliveryNotes;
+          }
+
+          await txn.insert('delivery_logs', logData);
         }
-
-        final gallonType = _nonEmptyString(order['gallon_type'] as String?);
-        if (gallonType != null) {
-          logData['gallon_type'] = gallonType;
-        }
-
-        final deliveryNotes = _nonEmptyString(notes);
-        if (deliveryNotes != null) {
-          logData['notes'] = deliveryNotes;
-        }
-
-        await txn.insert('delivery_logs', logData);
       }
 
       return updated;

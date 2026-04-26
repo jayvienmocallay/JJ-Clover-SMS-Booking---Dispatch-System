@@ -16,10 +16,12 @@ class OrderProvider extends ChangeNotifier {
   Iterable<Map<String, dynamic>> get _operationalOrders =>
       _todayOrders.where((o) => o['type'] != 'unrecognized');
 
-  int get totalGallons => _operationalOrders.fold(
-    0,
-    (sum, o) => sum + ((o['quantity'] as int?) ?? 0),
-  );
+  int get totalGallons => _operationalOrders
+      .where((o) {
+        final s = o['status'] as String? ?? '';
+        return s != 'cancelled' && s != 'rejected';
+      })
+      .fold(0, (sum, o) => sum + ((o['quantity'] as int?) ?? 0));
   int get pendingCount =>
       _operationalOrders.where((o) => o['status'] == 'pending').length;
   int get confirmedCount =>
