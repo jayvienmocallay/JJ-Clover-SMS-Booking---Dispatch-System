@@ -13,12 +13,17 @@ class OrderProvider extends ChangeNotifier {
   String? get error => _error;
 
   /// Stats computed from today's orders
-  int get totalGallons =>
-      _todayOrders.fold(0, (sum, o) => sum + ((o['quantity'] as int?) ?? 0));
+  Iterable<Map<String, dynamic>> get _operationalOrders =>
+      _todayOrders.where((o) => o['type'] != 'unrecognized');
+
+  int get totalGallons => _operationalOrders.fold(
+    0,
+    (sum, o) => sum + ((o['quantity'] as int?) ?? 0),
+  );
   int get pendingCount =>
-      _todayOrders.where((o) => o['status'] == 'pending').length;
+      _operationalOrders.where((o) => o['status'] == 'pending').length;
   int get confirmedCount =>
-      _todayOrders.where((o) => o['status'] == 'confirmed').length;
+      _operationalOrders.where((o) => o['status'] == 'confirmed').length;
 
   /// Loads today's orders from the database and notifies listeners
   Future<void> loadOrders() async {
@@ -39,10 +44,18 @@ class OrderProvider extends ChangeNotifier {
   }
 
   /// Updates an order's status and refreshes the list
-  Future<void> updateStatus(int orderId, String newStatus, {String? reason}) async {
+  Future<void> updateStatus(
+    int orderId,
+    String newStatus, {
+    String? reason,
+  }) async {
     _error = null;
     try {
-      await DatabaseHelper.instance.updateOrderStatus(orderId, newStatus, reason: reason);
+      await DatabaseHelper.instance.updateOrderStatus(
+        orderId,
+        newStatus,
+        reason: reason,
+      );
       await loadOrders();
     } catch (e) {
       _error = e.toString();

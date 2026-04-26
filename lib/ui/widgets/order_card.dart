@@ -36,6 +36,22 @@ class OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDeliver = order.type == OrderType.deliver;
+    final isInvalid = order.type == OrderType.unrecognized;
+    final typeColor = isInvalid
+        ? AppColors.statusMaintenance
+        : isDeliver
+        ? AppColors.primary
+        : AppColors.statusAway;
+    final typeBgColor = isInvalid
+        ? AppColors.statusMaintenanceLight
+        : isDeliver
+        ? AppColors.primaryLight
+        : AppColors.statusAwayLight;
+    final typeIcon = isInvalid
+        ? Icons.sms_failed
+        : isDeliver
+        ? Icons.local_shipping
+        : Icons.water_drop;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -55,14 +71,10 @@ class OrderCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: isDeliver ? AppColors.primaryLight : AppColors.statusAwayLight,
+                  color: typeBgColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  isDeliver ? Icons.local_shipping : Icons.water_drop,
-                  size: 20,
-                  color: isDeliver ? AppColors.primary : AppColors.statusAway,
-                ),
+                child: Icon(typeIcon, size: 20, color: typeColor),
               ),
               const SizedBox(width: 12),
               // Customer details
@@ -146,7 +158,11 @@ class OrderCard extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.schedule, size: 10, color: AppColors.primary),
+                                  const Icon(
+                                    Icons.schedule,
+                                    size: 10,
+                                    color: AppColors.primary,
+                                  ),
                                   const SizedBox(width: 4),
                                   Text(
                                     'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
@@ -180,7 +196,9 @@ class OrderCard extends StatelessWidget {
           ),
 
           // Cancel reason display for cancelled/rejected orders
-          if ((order.status == OrderStatus.cancelled || order.status == OrderStatus.rejected) && order.cancelReason != null)
+          if ((order.status == OrderStatus.cancelled ||
+                  order.status == OrderStatus.rejected) &&
+              order.cancelReason != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Container(
@@ -212,7 +230,11 @@ class OrderCard extends StatelessWidget {
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.receipt_long, size: 14, color: AppColors.primary),
+                    Icon(
+                      Icons.receipt_long,
+                      size: 14,
+                      color: AppColors.primary,
+                    ),
                     SizedBox(width: 6),
                     Text(
                       'View Delivery Log',
@@ -305,7 +327,8 @@ class OrderCard extends StatelessWidget {
           ],
 
           // --- Action buttons for confirmed orders (start delivery) ---
-          if (order.status == OrderStatus.confirmed && onStartDelivery != null) ...[
+          if (order.status == OrderStatus.confirmed &&
+              onStartDelivery != null) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.only(top: 12),
@@ -326,7 +349,11 @@ class OrderCard extends StatelessWidget {
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.local_shipping, size: 16, color: Colors.white),
+                            Icon(
+                              Icons.local_shipping,
+                              size: 16,
+                              color: Colors.white,
+                            ),
                             SizedBox(width: 6),
                             Text(
                               'Start Delivery',
@@ -368,7 +395,11 @@ class OrderCard extends StatelessWidget {
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.check_circle, size: 16, color: Colors.white),
+                            Icon(
+                              Icons.check_circle,
+                              size: 16,
+                              color: Colors.white,
+                            ),
                             SizedBox(width: 6),
                             Text(
                               'Mark Delivered',
@@ -437,7 +468,10 @@ class OrderCard extends StatelessWidget {
                   child: Center(
                     child: Text(
                       'No delivery logs recorded.',
-                      style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.mutedForeground,
+                      ),
                     ),
                   ),
                 )
@@ -463,7 +497,11 @@ class OrderCard extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.check_circle, size: 18, color: AppColors.statusOperating),
+                        const Icon(
+                          Icons.check_circle,
+                          size: 18,
+                          color: AppColors.statusOperating,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -480,14 +518,20 @@ class OrderCard extends StatelessWidget {
                               if (notes.isNotEmpty)
                                 Text(
                                   notes,
-                                  style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.mutedForeground,
+                                  ),
                                 ),
                             ],
                           ),
                         ),
                         Text(
                           timeStr,
-                          style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.mutedForeground,
+                          ),
                         ),
                       ],
                     ),

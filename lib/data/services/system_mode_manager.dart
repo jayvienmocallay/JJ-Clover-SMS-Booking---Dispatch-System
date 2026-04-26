@@ -53,8 +53,8 @@ class SystemModeManager extends ChangeNotifier {
   bool canAcceptDelivery() {
     switch (_currentMode) {
       case SystemMode.operating:
-        return true;
       case SystemMode.staffAway:
+        return true;
       case SystemMode.full:
       case SystemMode.maintenance:
         return false;
@@ -72,13 +72,17 @@ class SystemModeManager extends ChangeNotifier {
     }
   }
 
-  String getDeliveryReply() {
+  String getDeliveryReply({String? queuedDeliveryDay}) {
     switch (_currentMode) {
       case SystemMode.operating:
         return 'Order Confirmed. Delivery is being prepared.';
       case SystemMode.staffAway:
-        return 'Order Received. Staff is currently out delivering. '
+        const reply = 'Order Received. Staff is currently out delivering. '
             'We will process this upon return.';
+        if (queuedDeliveryDay == null || queuedDeliveryDay.isEmpty) {
+          return reply;
+        }
+        return '$reply Your order has been queued for $queuedDeliveryDay.';
       case SystemMode.full:
         return 'We are fully booked for today. Please order for the next schedule.';
       case SystemMode.maintenance:

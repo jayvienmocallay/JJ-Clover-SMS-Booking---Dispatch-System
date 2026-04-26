@@ -89,7 +89,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 4),
               const Text(
                 "Here's what's happening at JJ Clover today.",
-                style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.mutedForeground,
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -126,12 +129,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   /// Builds the 2x2 stats grid (Total Gallons, Pending, Confirmed, Customers)
-  Widget _buildStatsGrid(OrderProvider orderProv, CustomerProvider customerProv) {
+  Widget _buildStatsGrid(
+    OrderProvider orderProv,
+    CustomerProvider customerProv,
+  ) {
     final stats = [
-      _StatItem(Icons.water_drop, 'Total Gallons', orderProv.totalGallons, AppColors.primary),
-      _StatItem(Icons.inventory_2, 'Pending', orderProv.pendingCount, AppColors.statusAway),
-      _StatItem(Icons.local_shipping, 'Confirmed', orderProv.confirmedCount, AppColors.statusOperating),
-      _StatItem(Icons.people, 'Customers', customerProv.count, AppColors.primary),
+      _StatItem(
+        Icons.water_drop,
+        'Total Gallons',
+        orderProv.totalGallons,
+        AppColors.primary,
+      ),
+      _StatItem(
+        Icons.inventory_2,
+        'Pending',
+        orderProv.pendingCount,
+        AppColors.statusAway,
+      ),
+      _StatItem(
+        Icons.local_shipping,
+        'Confirmed',
+        orderProv.confirmedCount,
+        AppColors.statusOperating,
+      ),
+      _StatItem(
+        Icons.people,
+        'Customers',
+        customerProv.count,
+        AppColors.primary,
+      ),
     ];
 
     return GridView.count(
@@ -165,7 +191,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               Text(
                 stat.label,
-                style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.mutedForeground,
+                ),
               ),
             ],
           ),
@@ -215,7 +244,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     SizedBox(width: 2),
-                    Icon(Icons.arrow_forward, size: 12, color: AppColors.primary),
+                    Icon(
+                      Icons.arrow_forward,
+                      size: 12,
+                      color: AppColors.primary,
+                    ),
                   ],
                 ),
               ),
@@ -234,7 +267,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               runSpacing: 8,
               children: _todayBarangays.map((brgy) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primaryLight,
                     borderRadius: BorderRadius.circular(20),
@@ -320,20 +356,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: isToday ? AppColors.primary : AppColors.foreground,
+                                color: isToday
+                                    ? AppColors.primary
+                                    : AppColors.foreground,
                               ),
                             ),
                             if (isToday) ...[
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: AppColors.primaryLight,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: const Text(
                                   'Today',
-                                  style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w500),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ],
@@ -341,19 +386,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 8),
                         if (barangays.isEmpty)
-                          const Text('No deliveries', style: TextStyle(fontSize: 12, color: AppColors.mutedForeground))
+                          const Text(
+                            'No deliveries',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.mutedForeground,
+                            ),
+                          )
                         else
                           Wrap(
                             spacing: 6,
                             runSpacing: 6,
-                            children: barangays.map((b) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryLight,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Text(b, style: const TextStyle(fontSize: 12, color: AppColors.primary)),
-                            )).toList(),
+                            children: barangays
+                                .map(
+                                  (b) => Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryLight,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      b,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
                           ),
                       ],
                     ),
@@ -387,7 +451,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   /// Builds the Recent Orders card showing up to 5 latest orders
   Widget _buildRecentOrders(OrderProvider orderProv) {
-    final recentOrders = orderProv.todayOrders.take(5).toList();
+    final recentOrders = orderProv.todayOrders
+        .where((order) => order['type'] != 'unrecognized')
+        .take(5)
+        .toList();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -425,7 +492,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     SizedBox(width: 2),
-                    Icon(Icons.arrow_forward, size: 12, color: AppColors.primary),
+                    Icon(
+                      Icons.arrow_forward,
+                      size: 12,
+                      color: AppColors.primary,
+                    ),
                   ],
                 ),
               ),

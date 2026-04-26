@@ -319,6 +319,8 @@ class SmsBackgroundService {
             message,
             'Unrecognized',
             sourceMessageId: effectiveSourceMessageId,
+            quantity: parsed.quantity ?? 0,
+            gallonType: _mapGallonType(parsed.gallonType),
           );
           // Send help text for unrecognized commands
           await _sendReply(
@@ -354,13 +356,15 @@ class SmsBackgroundService {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
 
     // Step 1: Mode gate — check if deliveries are accepted in current mode
-    // Only OPERATING mode accepts deliveries; other modes reject/delay
+    // Operating and staff-away modes accept deliveries; other modes reject.
     if (!_modeManager.canAcceptDelivery()) {
       await _saveUnrecognizedMessage(
         sender,
         'DELIVER ${parsed.quantity ?? 0} - Rejected: ${_modeManager.getDeliveryReply()}',
         'rejected',
         sourceMessageId: sourceMessageId,
+        quantity: parsed.quantity ?? 0,
+        gallonType: _mapGallonType(parsed.gallonType),
       );
       await _sendReply(
         sender,
@@ -379,6 +383,8 @@ class SmsBackgroundService {
         parsed.rawMessage,
         'Unregistered',
         sourceMessageId: sourceMessageId,
+        quantity: parsed.quantity ?? 0,
+        gallonType: _mapGallonType(parsed.gallonType),
       );
       // Phone number not registered — prompt them to register
       await _sendReply(
@@ -401,6 +407,8 @@ class SmsBackgroundService {
         parsed.rawMessage,
         'Incomplete',
         sourceMessageId: sourceMessageId,
+        quantity: parsed.quantity ?? 0,
+        gallonType: _mapGallonType(parsed.gallonType),
       );
       await _sendReply(
         sender,
@@ -433,6 +441,8 @@ class SmsBackgroundService {
         'DELIVER ${parsed.quantity ?? 0} - Wrong Day (${validation.message})',
         'prebook',
         sourceMessageId: sourceMessageId,
+        quantity: parsed.quantity ?? 0,
+        gallonType: _mapGallonType(parsed.gallonType),
       );
       // Store the pre-book context so _handleYes knows the details
       // when the customer replies YES to the pre-book offer
@@ -465,8 +475,14 @@ class SmsBackgroundService {
     // Determine delivery day and status based on cutoff
     String? deliveryDay;
     OrderStatus orderStatus;
+    final isStaffAway = _modeManager.currentMode == SystemMode.staffAway;
 
-    if (isBeforeCutoff) {
+    if (isStaffAway) {
+      deliveryDay = isBeforeCutoff
+          ? today
+          : _findNextAvailableDay(schedules, today);
+      orderStatus = OrderStatus.pending;
+    } else if (isBeforeCutoff) {
       // Before 7:00 AM → add to Today's Dispatch Manifest (FR-4.2)
       deliveryDay = today;
       orderStatus = OrderStatus.confirmed;
@@ -495,7 +511,15 @@ class SmsBackgroundService {
     await _db.insertOrder(order.toMap());
 
     // Step 7: Send the appropriate auto-reply based on cutoff status
-    if (isBeforeCutoff) {
+    if (isStaffAway) {
+      await _sendReply(
+        sender,
+        _modeManager.getDeliveryReply(
+          queuedDeliveryDay: isBeforeCutoff ? null : deliveryDay,
+        ),
+        smsSender: smsSender,
+      );
+    } else if (isBeforeCutoff) {
       // Order confirmed for today
       await _sendReply(
         sender,
@@ -733,6 +757,8 @@ class SmsBackgroundService {
     String message,
     String status, {
     String? sourceMessageId,
+    int quantity = 0,
+    GallonType? gallonType,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
     final customerData = await _db.getCustomerByPhone(normalizedSender);
@@ -756,7 +782,8 @@ class SmsBackgroundService {
       customerId: customerId,
       phoneNumber: normalizedSender,
       type: OrderType.unrecognized,
-      quantity: 0,
+      quantity: quantity,
+      gallonType: gallonType,
       address: message,
       status: orderStatus,
       createdAt: DateTime.now(),
