@@ -35,6 +35,7 @@ class DatabaseHelper {
   static bool _schemaIntegrityChecked = false;
   static const int databaseVersion = 6;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
+  static const Duration _resubmitCooldownAfter = Duration(hours: 1);
   final DatabaseEncryptionKeyRepository _encryptionKeyRepository =
       DatabaseEncryptionKeyRepository();
 
@@ -975,9 +976,14 @@ class DatabaseHelper {
 
   // --- SMS Messages CRUD ---
 
-  /// Claims an incoming SMS for processing. Returns false for completed or
-  /// recently active duplicate receipts.
-  Future<bool> claimIncomingSmsReceipt({
+  /// Claims an incoming SMS for processing.
+  ///
+  /// Returns (claimed: bool, isDuplicate: bool):
+  /// - (true, false): New message, process normally
+  /// - (true, true): Within 10-min retry window, but allow reprocessing (idempotent)
+  /// - (false, true): Completed within 1 hour, reject with duplicate feedback
+  /// - (false, false): Still processing, skip (shouldn't happen in normal flow)
+  Future<({bool claimed, bool isDuplicate})> claimIncomingSmsReceipt({
     required String messageId,
     required String phoneNumber,
     required String message,
@@ -988,7 +994,7 @@ class DatabaseHelper {
     final nowIso = now.toIso8601String();
     final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
 
-    return await db.transaction<bool>((txn) async {
+    return await db.transaction<({bool claimed, bool isDuplicate})>((txn) async {
       final existing = await txn.query(
         'incoming_sms_receipts',
         where: 'message_id = ?',
@@ -1008,23 +1014,47 @@ class DatabaseHelper {
           'claimed_at': nowIso,
           'updated_at': nowIso,
         });
-        return true;
+        return (claimed: true, isDuplicate: false);
       }
 
       final row = existing.first;
       final status = row['status'] as String? ?? '';
-      if (status == 'completed') {
-        return false;
+      final completedAt = _tryParseDate(row['completed_at'] as String?);
+
+      // If completed, check if within resubmit cooldown (1 hour)
+      if (status == 'completed' && completedAt != null) {
+        final timeSinceCompletion = now.difference(completedAt);
+        if (timeSinceCompletion < _resubmitCooldownAfter) {
+          return (claimed: false, isDuplicate: true);
+        }
+        // After 1 hour, allow resubmit — treat as new message
+        await txn.update(
+          'incoming_sms_receipts',
+          {
+            'status': 'processing',
+            'attempts': 1,
+            'received_at': nowIso,
+            'claimed_at': nowIso,
+            'updated_at': nowIso,
+            'completed_at': null,
+            'last_error': null,
+          },
+          where: 'message_id = ?',
+          whereArgs: [messageId],
+        );
+        return (claimed: true, isDuplicate: false);
       }
 
+      // If still processing within 10-min retry window, skip retry
       if (status == 'processing') {
         final claimedAt = _tryParseDate(row['claimed_at'] as String?);
         if (claimedAt != null &&
             now.difference(claimedAt) < _receiptRetryAfter) {
-          return false;
+          return (claimed: false, isDuplicate: false);
         }
       }
 
+      // Retry after 10 min (but before 1 hour) — reprocess idempotently
       final attempts = (row['attempts'] as num?)?.toInt() ?? 0;
       await txn.update(
         'incoming_sms_receipts',
@@ -1041,7 +1071,7 @@ class DatabaseHelper {
         where: 'message_id = ?',
         whereArgs: [messageId],
       );
-      return true;
+      return (claimed: true, isDuplicate: false);
     });
   }
 
