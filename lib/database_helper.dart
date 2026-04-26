@@ -12,6 +12,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
   static bool _schemaIntegrityChecked = false;
+  static const int databaseVersion = 4;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
@@ -63,11 +64,27 @@ class DatabaseHelper {
       password: password,
       // Version 4: Adds SMS receipt/source-message idempotency for reliable
       // native closed-app processing.
-      version: 4,
+      version: databaseVersion,
+      onConfigure: configureDatabase,
       onCreate: _createSchema,
       // Handles upgrading existing v1 databases to v2 schema
       onUpgrade: _upgradeSchema,
     );
+  }
+
+  static Future<void> configureDatabase(Database db) async {
+    await db.execute('PRAGMA foreign_keys = ON');
+  }
+
+  // Test hooks let in-memory database tests exercise the same helper methods
+  // without touching the encrypted app database or platform storage channels.
+  static void setDatabaseForTesting(Database? database) {
+    _database = database;
+    _schemaIntegrityChecked = false;
+  }
+
+  Future<void> createSchemaForTesting(Database db, int version) async {
+    await _createSchema(db, version);
   }
 
   // Task 005 — Create all tables (schema v4)
