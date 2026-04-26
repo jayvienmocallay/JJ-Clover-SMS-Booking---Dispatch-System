@@ -265,14 +265,24 @@ class SmsBackgroundService {
           subscriptionId: subscriptionId,
         );
 
-    final claimed = await _db.claimIncomingSmsReceipt(
+    final claimResult = await _db.claimIncomingSmsReceipt(
       messageId: effectiveSourceMessageId,
       phoneNumber: sender,
       message: message,
       smsTimestamp: timestamp,
     );
-    if (!claimed) {
-      debugPrint('Duplicate message skipped: $effectiveSourceMessageId');
+
+    if (!claimResult.claimed) {
+      if (claimResult.isDuplicate) {
+        debugPrint('Duplicate order within 1 hour: $effectiveSourceMessageId');
+        await _sendReply(
+          sender,
+          'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
+          smsSender: smsSender,
+        );
+      } else {
+        debugPrint('Message still processing, skipped: $effectiveSourceMessageId');
+      }
       return;
     }
 
