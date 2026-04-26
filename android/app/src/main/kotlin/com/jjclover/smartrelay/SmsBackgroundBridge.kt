@@ -32,20 +32,33 @@ object SmsBackgroundBridge : MethodChannel.MethodCallHandler {
     private var isReady = false
 
     fun processIntent(context: Context, intent: Intent, onComplete: (Boolean) -> Unit) {
-        val appContext = context.applicationContext
-        val tasks = try {
-            buildTasks(intent, onComplete)
+        val payloads = try {
+            buildPayloads(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Unable to read SMS broadcast.", e)
             onComplete(false)
             return
         }
 
-        if (tasks.isEmpty()) {
+        processPayloads(context, payloads, onComplete)
+    }
+
+    fun processPayload(context: Context, payload: SmsPayload, onComplete: (Boolean) -> Unit) {
+        processPayloads(context, listOf(payload), onComplete)
+    }
+
+    private fun processPayloads(
+        context: Context,
+        payloads: List<SmsPayload>,
+        onComplete: (Boolean) -> Unit,
+    ) {
+        val appContext = context.applicationContext
+        if (payloads.isEmpty()) {
             onComplete(false)
             return
         }
 
+        val tasks = buildTasks(payloads, onComplete)
         mainHandler.post {
             tasks.forEach { task ->
                 pendingTasks.add(task)
@@ -67,15 +80,12 @@ object SmsBackgroundBridge : MethodChannel.MethodCallHandler {
         }
     }
 
-    private fun buildTasks(
-        intent: Intent,
-        onComplete: (Boolean) -> Unit,
-    ): List<SmsTask> {
+    private fun buildPayloads(intent: Intent): List<SmsPayload> {
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (messages.isEmpty()) return emptyList()
 
-        val subscriptionId = intent.getIntExtra("subscription", -1)
-        val payloads = messages
+        val subscriptionId = extractSubscriptionId(intent)
+        return messages
             .groupBy { it.originatingAddress.orEmpty() }
             .mapNotNull { (sender, parts) ->
                 val body = parts.joinToString(separator = "") { it.messageBody.orEmpty() }
@@ -83,17 +93,36 @@ object SmsBackgroundBridge : MethodChannel.MethodCallHandler {
                     null
                 } else {
                     val first = parts.first()
-                    SmsPayload(
+                    SmsPayload.create(
                         sender = sender,
                         message = body,
                         timestamp = first.timestampMillis,
-                        status = first.status,
-                        serviceCenterAddress = first.serviceCenterAddress,
                         subscriptionId = subscriptionId,
+                        serviceCenterAddress = first.serviceCenterAddress,
                     )
                 }
             }
+    }
 
+    private fun extractSubscriptionId(intent: Intent): Int? {
+        val candidates = listOf(
+            "subscription",
+            "subscriptionId",
+            "android.telephony.extra.SUBSCRIPTION_INDEX",
+        )
+        for (key in candidates) {
+            if (intent.hasExtra(key)) {
+                val value = intent.getIntExtra(key, -1)
+                if (value >= 0) return value
+            }
+        }
+        return null
+    }
+
+    private fun buildTasks(
+        payloads: List<SmsPayload>,
+        onComplete: (Boolean) -> Unit,
+    ): List<SmsTask> {
         if (payloads.isEmpty()) return emptyList()
 
         var remaining = payloads.size
@@ -222,24 +251,6 @@ object SmsBackgroundBridge : MethodChannel.MethodCallHandler {
         flutterEngine = null
         isStarting = false
         isReady = false
-    }
-
-    private data class SmsPayload(
-        val sender: String,
-        val message: String,
-        val timestamp: Long,
-        val status: Int,
-        val serviceCenterAddress: String?,
-        val subscriptionId: Int,
-    ) {
-        fun toMap(): Map<String, Any?> = mapOf(
-            "sender" to sender,
-            "message" to message,
-            "timestamp" to timestamp,
-            "status" to status,
-            "serviceCenterAddress" to serviceCenterAddress,
-            "subscriptionId" to subscriptionId.takeIf { it >= 0 },
-        )
     }
 
     private class SmsTask(

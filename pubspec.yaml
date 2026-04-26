@@ -10,6 +10,7 @@ dependencies:
   sqflite_sqlcipher: ^3.1.0+1
   path_provider: ^2.1.2
   flutter_secure_storage: ^9.2.4
+  crypto: ^3.0.7
   telephony: ^0.2.0
   flutter_background_service: ^5.0.10
   permission_handler: ^11.3.1

@@ -84,6 +84,11 @@
         </receiver>
 
         <service
+            android:name=".SmsProcessingService"
+            android:exported="false"
+            android:foregroundServiceType="shortService" />
+
+        <service
             android:name=".RespondViaMessageService"
             android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE"
             android:exported="true">

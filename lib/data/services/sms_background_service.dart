@@ -16,6 +16,7 @@ import 'sms_parser.dart';
 import 'zone_validator.dart';
 import 'system_mode_manager.dart';
 import 'alarm_service.dart';
+import 'sms_source_message_id.dart';
 
 const MethodChannel _nativeSmsBackgroundChannel = MethodChannel(
   'com.jjclover.smartrelay/sms_background',
@@ -44,12 +45,20 @@ Future<void> smsNativeBackgroundMain() async {
     final timestamp = rawTimestamp is int
         ? rawTimestamp
         : int.tryParse(rawTimestamp?.toString() ?? '');
+    final rawSubscriptionId = args['subscriptionId'];
+    final subscriptionId = rawSubscriptionId is int
+        ? rawSubscriptionId
+        : int.tryParse(rawSubscriptionId?.toString() ?? '');
+    final sourceMessageId = args['sourceMessageId']?.toString();
 
     await _ensureSmsRuntimeReady();
     await SmsBackgroundService.instance._processIncomingSmsPayload(
       sender: sender,
       message: message,
       timestamp: timestamp,
+      subscriptionId: subscriptionId,
+      serviceCenterAddress: args['serviceCenterAddress']?.toString(),
+      sourceMessageId: sourceMessageId,
       smsSender: Telephony.backgroundInstance,
     );
     return true;
@@ -100,10 +109,6 @@ class SmsBackgroundService {
 
   /// Tracks whether the SMS listener is currently active
   bool _isListening = false;
-
-  /// Tracks recently processed message IDs to prevent duplicate processing
-  /// when both foreground and background handlers are triggered
-  final Set<String> _processedMessageIds = {};
 
   /// Stores pre-book context: maps a phone number to the delivery day
   /// that was offered in the "Wrong Day" reply. When the customer replies
@@ -218,6 +223,8 @@ class SmsBackgroundService {
       sender: sender,
       message: message,
       timestamp: msg.date,
+      subscriptionId: msg.subscriptionId,
+      serviceCenterAddress: msg.serviceCenterAddress,
       smsSender: smsSender,
     );
   }
@@ -226,67 +233,106 @@ class SmsBackgroundService {
     required String sender,
     required String message,
     int? timestamp,
+    int? subscriptionId,
+    String? serviceCenterAddress,
+    String? sourceMessageId,
     Telephony? smsSender,
   }) async {
     // Ignore messages with no sender (can't reply without a phone number)
     if (sender.isEmpty) return;
 
-    // Create unique key for this message to prevent duplicate processing
-    final msgKey = timestamp == null
-        ? '$sender|$message'
-        : '$sender|$message|$timestamp';
-    if (_processedMessageIds.contains(msgKey)) {
-      debugPrint('Duplicate message skipped: $msgKey');
+    final effectiveSourceMessageId =
+        sourceMessageId ??
+        SmsSourceMessageId.build(
+          sender: sender,
+          message: message,
+          timestamp: timestamp,
+          subscriptionId: subscriptionId,
+        );
+
+    final claimed = await _db.claimIncomingSmsReceipt(
+      messageId: effectiveSourceMessageId,
+      phoneNumber: sender,
+      message: message,
+      smsTimestamp: timestamp,
+    );
+    if (!claimed) {
+      debugPrint('Duplicate message skipped: $effectiveSourceMessageId');
       return;
     }
-    _processedMessageIds.add(msgKey);
-    // Clean up old entries (keep only last 100)
-    if (_processedMessageIds.length > 100) {
-      _processedMessageIds.remove(_processedMessageIds.first);
-    }
 
-    debugPrint('SMS received from $sender: $message');
+    try {
+      debugPrint('SMS received from $sender: $message');
+      if (serviceCenterAddress != null && serviceCenterAddress.isNotEmpty) {
+        debugPrint('SMS service center: $serviceCenterAddress');
+      }
 
-    // Log incoming SMS for history
-    await _db.insertSmsMessage({
-      'phone_number': PhoneNumberUtils.normalize(sender),
-      'message': message,
-      'direction': 'incoming',
-      'sent_at': DateTime.now().toIso8601String(),
-    });
+      // Log incoming SMS for history
+      await _db.insertSmsMessage({
+        'phone_number': PhoneNumberUtils.normalize(sender),
+        'message': message,
+        'direction': 'incoming',
+        'source_message_id': effectiveSourceMessageId,
+        'sent_at': DateTime.now().toIso8601String(),
+      });
 
-    // The background SMS callback can run in a separate Dart isolate, so the
-    // singleton's in-memory mode may be stale. Refresh from the shared database
-    // before checking delivery/drop gates or replying to STATUS.
-    await _modeManager.loadPersistedMode();
+      // The background SMS callback can run in a separate Dart isolate, so the
+      // singleton's in-memory mode may be stale. Refresh from the shared database
+      // before checking delivery/drop gates or replying to STATUS.
+      await _modeManager.loadPersistedMode();
 
-    // Parse the raw message into a structured command object
-    final parsed = SmsParser.parse(message);
+      // Parse the raw message into a structured command object
+      final parsed = SmsParser.parse(message);
 
-    // Route to the appropriate handler based on the parsed command type
-    switch (parsed.command) {
-      case SmsCommand.deliver:
-        await _handleDeliver(sender, parsed, smsSender: smsSender);
-        break;
-      case SmsCommand.drop:
-        await _handleDrop(sender, parsed, smsSender: smsSender);
-        break;
-      case SmsCommand.yes:
-        await _handleYes(sender, smsSender: smsSender);
-        break;
-      case SmsCommand.status:
-        await _handleStatus(sender, smsSender: smsSender);
-        break;
-      case SmsCommand.unknown:
-        // Save unrecognized message as an order record for visibility in Messages tab
-        await _saveUnrecognizedMessage(sender, message, 'Unrecognized');
-        // Send help text for unrecognized commands
-        await _sendReply(
-          sender,
-          SmsParser.getUnknownCommandReply(),
-          smsSender: smsSender,
-        );
-        break;
+      // Route to the appropriate handler based on the parsed command type
+      switch (parsed.command) {
+        case SmsCommand.deliver:
+          await _handleDeliver(
+            sender,
+            parsed,
+            sourceMessageId: effectiveSourceMessageId,
+            smsSender: smsSender,
+          );
+          break;
+        case SmsCommand.drop:
+          await _handleDrop(
+            sender,
+            parsed,
+            sourceMessageId: effectiveSourceMessageId,
+            smsSender: smsSender,
+          );
+          break;
+        case SmsCommand.yes:
+          await _handleYes(
+            sender,
+            sourceMessageId: effectiveSourceMessageId,
+            smsSender: smsSender,
+          );
+          break;
+        case SmsCommand.status:
+          await _handleStatus(sender, smsSender: smsSender);
+          break;
+        case SmsCommand.unknown:
+          // Save unrecognized message as an order record for visibility in Messages tab
+          await _saveUnrecognizedMessage(
+            sender,
+            message,
+            'Unrecognized',
+            sourceMessageId: effectiveSourceMessageId,
+          );
+          // Send help text for unrecognized commands
+          await _sendReply(
+            sender,
+            SmsParser.getUnknownCommandReply(),
+            smsSender: smsSender,
+          );
+          break;
+      }
+
+      await _db.completeIncomingSmsReceipt(effectiveSourceMessageId);
+    } catch (e) {
+      await _db.failIncomingSmsReceipt(effectiveSourceMessageId, e);
+      rethrow;
     }
   }
 
@@ -302,6 +348,7 @@ class SmsBackgroundService {
   Future<void> _handleDeliver(
     String sender,
     ParsedSms parsed, {
+    required String sourceMessageId,
     Telephony? smsSender,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
@@ -313,6 +360,7 @@ class SmsBackgroundService {
         sender,
         'DELIVER ${parsed.quantity ?? 0} - Rejected: ${_modeManager.getDeliveryReply()}',
         'rejected',
+        sourceMessageId: sourceMessageId,
       );
       await _sendReply(
         sender,
@@ -326,7 +374,12 @@ class SmsBackgroundService {
     final customerData = await _db.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
       // Save unrecognized message for visibility
-      await _saveUnrecognizedMessage(sender, parsed.rawMessage, 'Unregistered');
+      await _saveUnrecognizedMessage(
+        sender,
+        parsed.rawMessage,
+        'Unregistered',
+        sourceMessageId: sourceMessageId,
+      );
       // Phone number not registered — prompt them to register
       await _sendReply(
         sender,
@@ -343,7 +396,12 @@ class SmsBackgroundService {
       normalizedSender,
     );
     if (customerJoined == null) {
-      await _saveUnrecognizedMessage(sender, parsed.rawMessage, 'Incomplete');
+      await _saveUnrecognizedMessage(
+        sender,
+        parsed.rawMessage,
+        'Incomplete',
+        sourceMessageId: sourceMessageId,
+      );
       await _sendReply(
         sender,
         'Customer profile is incomplete. Please call the station.',
@@ -374,6 +432,7 @@ class SmsBackgroundService {
         sender,
         'DELIVER ${parsed.quantity ?? 0} - Wrong Day (${validation.message})',
         'prebook',
+        sourceMessageId: sourceMessageId,
       );
       // Store the pre-book context so _handleYes knows the details
       // when the customer replies YES to the pre-book offer
@@ -430,6 +489,7 @@ class SmsBackgroundService {
       status: orderStatus,
       createdAt: now,
       deliveryDay: deliveryDay,
+      sourceMessageId: sourceMessageId,
     );
 
     await _db.insertOrder(order.toMap());
@@ -461,6 +521,7 @@ class SmsBackgroundService {
   Future<void> _handleDrop(
     String sender,
     ParsedSms parsed, {
+    required String sourceMessageId,
     Telephony? smsSender,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
@@ -488,6 +549,7 @@ class SmsBackgroundService {
       quantity: parsed.quantity ?? 0,
       status: OrderStatus.pending,
       createdAt: DateTime.now(),
+      sourceMessageId: sourceMessageId,
     );
 
     await _db.insertOrder(order.toMap());
@@ -510,7 +572,11 @@ class SmsBackgroundService {
   /// responds YES, we create a pre-booked order for their correct delivery day.
   /// The pre-book context (quantity, day, etc.) was saved in [_preBookPending]
   /// when the original DELIVER command was processed.
-  Future<void> _handleYes(String sender, {Telephony? smsSender}) async {
+  Future<void> _handleYes(
+    String sender, {
+    required String sourceMessageId,
+    Telephony? smsSender,
+  }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
 
     // Look up the pre-book context for this phone number
@@ -551,6 +617,7 @@ class SmsBackgroundService {
       deliveryDay: context.deliveryDay,
       // Flag this as a pre-booked order for filtering/display
       isPreBook: true,
+      sourceMessageId: sourceMessageId,
     );
 
     // Insert the pre-booked order into the database
@@ -664,8 +731,9 @@ class SmsBackgroundService {
   Future<void> _saveUnrecognizedMessage(
     String sender,
     String message,
-    String status,
-  ) async {
+    String status, {
+    String? sourceMessageId,
+  }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
     final customerData = await _db.getCustomerByPhone(normalizedSender);
     final customerId = customerData?['id'] as int?;
@@ -692,6 +760,7 @@ class SmsBackgroundService {
       address: message,
       status: orderStatus,
       createdAt: DateTime.now(),
+      sourceMessageId: sourceMessageId,
     );
     await _db.insertOrder(order.toMap());
     debugPrint('Saved message from $normalizedSender: $status');

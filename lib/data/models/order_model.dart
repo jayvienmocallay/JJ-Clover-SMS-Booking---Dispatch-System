@@ -4,7 +4,14 @@
 enum OrderType { deliver, drop, unrecognized }
 
 /// Tracks the lifecycle of an order from creation to completion
-enum OrderStatus { pending, confirmed, inTransit, completed, cancelled, rejected }
+enum OrderStatus {
+  pending,
+  confirmed,
+  inTransit,
+  completed,
+  cancelled,
+  rejected,
+}
 
 /// Classifies gallons to prevent mixing between household and store use.
 /// Based on Scope & Zone Mapping document business rule:
@@ -56,6 +63,9 @@ class Order {
   /// Reason for cancellation (set when order is rejected)
   final String? cancelReason;
 
+  /// Stable native SMS source ID used to prevent duplicate SMS-created orders.
+  final String? sourceMessageId;
+
   Order({
     this.id,
     this.customerId,
@@ -70,6 +80,7 @@ class Order {
     this.isPreBook = false,
     this.staffId,
     this.cancelReason,
+    this.sourceMessageId,
   });
 
   /// Creates an [Order] instance from a database row map.
@@ -94,6 +105,7 @@ class Order {
       isPreBook: (map['is_pre_book'] as int?) == 1,
       staffId: map['staff_id'] as int?,
       cancelReason: map['cancel_reason'] as String?,
+      sourceMessageId: map['source_message_id'] as String?,
     );
   }
 
@@ -114,7 +126,7 @@ class Order {
   /// Converts a status string from the database to an [OrderStatus] enum.
   /// Defaults to [OrderStatus.pending] if the string is unrecognized.
   static OrderStatus _parseStatus(String status) {
-switch (status) {
+    switch (status) {
       case 'pending':
         return OrderStatus.pending;
       case 'confirmed':
@@ -202,6 +214,7 @@ switch (status) {
       'is_pre_book': isPreBook ? 1 : 0,
       if (staffId != null) 'staff_id': staffId,
       if (cancelReason != null) 'cancel_reason': cancelReason,
+      if (sourceMessageId != null) 'source_message_id': sourceMessageId,
     };
   }
 }

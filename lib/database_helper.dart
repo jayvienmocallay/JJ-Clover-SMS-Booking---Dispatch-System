@@ -12,6 +12,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
   static bool _schemaIntegrityChecked = false;
+  static const Duration _receiptRetryAfter = Duration(minutes: 10);
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   DatabaseHelper._init();
@@ -60,16 +61,16 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       password: password,
-      // Version 3: Adds app_settings for isolate-safe runtime state such as
-      // the current system mode.
-      version: 3,
+      // Version 4: Adds SMS receipt/source-message idempotency for reliable
+      // native closed-app processing.
+      version: 4,
       onCreate: _createSchema,
       // Handles upgrading existing v1 databases to v2 schema
       onUpgrade: _upgradeSchema,
     );
   }
 
-  // Task 005 — Create all tables (schema v3)
+  // Task 005 — Create all tables (schema v4)
   Future _createSchema(Database db, int version) async {
     // Task 001 — 1. Barangays Lookup Table (zone mapping from interview)
     await db.execute('''
@@ -122,6 +123,7 @@ class DatabaseHelper {
         delivery_day TEXT,
         is_pre_book INTEGER DEFAULT 0,
         staff_id INTEGER,
+        source_message_id TEXT,
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
       )
     ''');
@@ -175,6 +177,7 @@ class DatabaseHelper {
     );
 
     await _createSmsMessagesTable(db);
+    await _createIncomingSmsReceiptsTable(db);
     await _createAppSettingsTable(db);
 
     // Task 006 — Seed default data in order: barangays first, then customers, then schedules.
@@ -270,8 +273,23 @@ class DatabaseHelper {
       await _createAppSettingsTable(db);
     }
 
+    if (oldVersion < 4) {
+      await _createSmsMessagesTable(db);
+      await _addColumnIfMissing(db, 'orders', 'source_message_id', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        'sms_messages',
+        'source_message_id',
+        'TEXT',
+      );
+      await _createIncomingSmsReceiptsTable(db);
+      await _createSourceMessageIndexes(db);
+    }
+
     // Create sms_messages table if not exists (for old databases)
     await _createSmsMessagesTable(db);
+    await _createIncomingSmsReceiptsTable(db);
+    await _createSourceMessageIndexes(db);
   }
 
   Future<void> _createAppSettingsTable(Database db) async {
@@ -292,6 +310,7 @@ class DatabaseHelper {
         direction TEXT NOT NULL,
         related_order_id INTEGER,
         status TEXT,
+        source_message_id TEXT,
         sent_at TEXT NOT NULL
       )
     ''');
@@ -305,6 +324,48 @@ class DatabaseHelper {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sms_sent ON sms_messages(sent_at)',
     );
+    await _createSourceMessageIndexes(db);
+  }
+
+  Future<void> _createIncomingSmsReceiptsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS incoming_sms_receipts (
+        message_id TEXT PRIMARY KEY,
+        phone_number TEXT NOT NULL,
+        message TEXT NOT NULL,
+        sms_timestamp INTEGER,
+        status TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        received_at TEXT NOT NULL,
+        claimed_at TEXT,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL,
+        last_error TEXT
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sms_receipts_status ON incoming_sms_receipts(status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sms_receipts_phone ON incoming_sms_receipts(phone_number)',
+    );
+  }
+
+  Future<void> _createSourceMessageIndexes(Database db) async {
+    await _addColumnIfMissing(db, 'orders', 'source_message_id', 'TEXT');
+    await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
+
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_sms_source_message '
+      'ON sms_messages(source_message_id) '
+      'WHERE source_message_id IS NOT NULL',
+    );
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_source_message '
+      'ON orders(source_message_id) '
+      'WHERE source_message_id IS NOT NULL',
+    );
   }
 
   Future<void> _ensureSchemaIntegrity(Database db) async {
@@ -312,7 +373,11 @@ class DatabaseHelper {
 
     await _createAppSettingsTable(db);
     await _createSmsMessagesTable(db);
+    await _createIncomingSmsReceiptsTable(db);
     await _addColumnIfMissing(db, 'orders', 'cancel_reason', 'TEXT');
+    await _addColumnIfMissing(db, 'orders', 'source_message_id', 'TEXT');
+    await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
+    await _createSourceMessageIndexes(db);
 
     _schemaIntegrityChecked = true;
   }
@@ -331,6 +396,11 @@ class DatabaseHelper {
   }
 
   // Task 006 — Pre-populate barangays with default data
+  DateTime? _tryParseDate(String? value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value);
+  }
+
   Future<void> _seedBarangays(Database db) async {
     final defaultBarangays = [
       {'name': 'San Isidro', 'delivery_zone': 'Zone A'},
@@ -567,7 +637,11 @@ class DatabaseHelper {
     if (phoneNumber != null) {
       normalizedData['phone_number'] = PhoneNumberUtils.normalize(phoneNumber);
     }
-    return await db.insert('orders', normalizedData);
+    return await db.insert(
+      'orders',
+      normalizedData,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getOrders({
@@ -662,10 +736,130 @@ class DatabaseHelper {
 
   // --- SMS Messages CRUD ---
 
+  /// Claims an incoming SMS for processing. Returns false for completed or
+  /// recently active duplicate receipts.
+  Future<bool> claimIncomingSmsReceipt({
+    required String messageId,
+    required String phoneNumber,
+    required String message,
+    int? smsTimestamp,
+  }) async {
+    final db = await instance.database;
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
+
+    return await db.transaction<bool>((txn) async {
+      final existing = await txn.query(
+        'incoming_sms_receipts',
+        where: 'message_id = ?',
+        whereArgs: [messageId],
+        limit: 1,
+      );
+
+      if (existing.isEmpty) {
+        await txn.insert('incoming_sms_receipts', {
+          'message_id': messageId,
+          'phone_number': normalizedPhone,
+          'message': message,
+          'sms_timestamp': smsTimestamp,
+          'status': 'processing',
+          'attempts': 1,
+          'received_at': nowIso,
+          'claimed_at': nowIso,
+          'updated_at': nowIso,
+        });
+        return true;
+      }
+
+      final row = existing.first;
+      final status = row['status'] as String? ?? '';
+      if (status == 'completed') {
+        return false;
+      }
+
+      if (status == 'processing') {
+        final claimedAt = _tryParseDate(row['claimed_at'] as String?);
+        if (claimedAt != null &&
+            now.difference(claimedAt) < _receiptRetryAfter) {
+          return false;
+        }
+      }
+
+      final attempts = (row['attempts'] as num?)?.toInt() ?? 0;
+      await txn.update(
+        'incoming_sms_receipts',
+        {
+          'phone_number': normalizedPhone,
+          'message': message,
+          'sms_timestamp': smsTimestamp,
+          'status': 'processing',
+          'attempts': attempts + 1,
+          'claimed_at': nowIso,
+          'updated_at': nowIso,
+          'last_error': null,
+        },
+        where: 'message_id = ?',
+        whereArgs: [messageId],
+      );
+      return true;
+    });
+  }
+
+  Future<void> completeIncomingSmsReceipt(String messageId) async {
+    final db = await instance.database;
+    final nowIso = DateTime.now().toIso8601String();
+    await db.update(
+      'incoming_sms_receipts',
+      {
+        'status': 'completed',
+        'completed_at': nowIso,
+        'updated_at': nowIso,
+        'last_error': null,
+      },
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  Future<void> failIncomingSmsReceipt(String messageId, Object error) async {
+    final db = await instance.database;
+    await db.update(
+      'incoming_sms_receipts',
+      {
+        'status': 'failed',
+        'updated_at': DateTime.now().toIso8601String(),
+        'last_error': error.toString(),
+      },
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  Future<Map<String, dynamic>?> getIncomingSmsReceipt(String messageId) async {
+    final db = await instance.database;
+    final rows = await db.query(
+      'incoming_sms_receipts',
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   /// Insert an SMS message (incoming or outgoing)
   Future<int> insertSmsMessage(Map<String, dynamic> messageData) async {
     final db = await instance.database;
-    return await db.insert('sms_messages', messageData);
+    final normalizedData = Map<String, dynamic>.from(messageData);
+    final phoneNumber = normalizedData['phone_number'] as String?;
+    if (phoneNumber != null) {
+      normalizedData['phone_number'] = PhoneNumberUtils.normalize(phoneNumber);
+    }
+    return await db.insert(
+      'sms_messages',
+      normalizedData,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
 
   /// Get all SMS messages for a phone number

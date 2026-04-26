@@ -4,10 +4,9 @@ import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
+import java.util.concurrent.Executors
 
 class DefaultSmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -15,23 +14,31 @@ class DefaultSmsReceiver : BroadcastReceiver() {
         val isDeliver = intent.action == Telephony.Sms.Intents.SMS_DELIVER_ACTION
         val appContext = context.applicationContext
 
-        try {
-            Log.i(TAG, "Received ${intent.action}; forwarding to Dart SMS handler.")
+        executor.execute {
+            try {
+                Log.i(TAG, "Received ${intent.action}; enqueueing SMS processing.")
 
-            if (isDeliver) {
-                persistIncomingSms(appContext, intent)
-            }
-
-            SmsBackgroundBridge.processIntent(appContext, intent) { success ->
-                if (!success) {
-                    Log.w(TAG, "Incoming SMS was not fully processed by Dart.")
+                val payloads = buildPayloads(intent)
+                if (isDeliver) {
+                    persistIncomingSms(appContext, payloads)
                 }
+
+                payloads.forEach { payload ->
+                    val started = SmsProcessingService.enqueue(appContext, payload)
+                    if (!started) {
+                        Log.w(TAG, "Falling back to direct Dart bridge processing.")
+                        SmsBackgroundBridge.processPayload(appContext, payload) { success ->
+                            if (!success) {
+                                Log.w(TAG, "Fallback SMS processing failed.")
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Unable to hand incoming SMS to processing service.", e)
+            } finally {
                 finishPendingResult(pendingResult, isDeliver)
             }
-            return
-        } catch (e: Exception) {
-            Log.e(TAG, "Unable to hand incoming SMS to Dart.", e)
-            finishPendingResult(pendingResult, isDeliver)
         }
     }
 
@@ -39,41 +46,70 @@ class DefaultSmsReceiver : BroadcastReceiver() {
         pendingResult: BroadcastReceiver.PendingResult,
         isDeliver: Boolean,
     ) {
-        Handler(Looper.getMainLooper()).post {
-            try {
-                if (isDeliver) {
-                    pendingResult.resultCode = Telephony.Sms.Intents.RESULT_SMS_HANDLED
-                }
-            } finally {
-                pendingResult.finish()
+        try {
+            if (isDeliver) {
+                pendingResult.resultCode = Telephony.Sms.Intents.RESULT_SMS_HANDLED
             }
+        } finally {
+            pendingResult.finish()
         }
     }
 
-    private fun persistIncomingSms(context: Context, intent: Intent) {
-        try {
-            val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            if (messages.isEmpty()) return
+    private fun buildPayloads(intent: Intent): List<SmsPayload> {
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        if (messages.isEmpty()) return emptyList()
 
-            val subscriptionId = intent.getIntExtra("subscription", -1)
-            val grouped = messages.groupBy { it.originatingAddress.orEmpty() }
-
-            grouped.forEach { (address, parts) ->
+        val subscriptionId = extractSubscriptionId(intent)
+        return messages
+            .groupBy { it.originatingAddress.orEmpty() }
+            .mapNotNull { (sender, parts) ->
                 val body = parts.joinToString(separator = "") { it.messageBody.orEmpty() }
-                if (address.isBlank() || body.isBlank()) return@forEach
+                if (sender.isBlank() || body.isBlank()) {
+                    null
+                } else {
+                    val first = parts.first()
+                    SmsPayload.create(
+                        sender = sender,
+                        message = body,
+                        timestamp = first.timestampMillis,
+                        subscriptionId = subscriptionId,
+                        serviceCenterAddress = first.serviceCenterAddress,
+                    )
+                }
+            }
+    }
 
-                val timestamp = parts.first().timestampMillis
-                if (isAlreadyStored(context, address, body, timestamp)) return@forEach
+    private fun extractSubscriptionId(intent: Intent): Int? {
+        val candidates = listOf(
+            "subscription",
+            "subscriptionId",
+            "android.telephony.extra.SUBSCRIPTION_INDEX",
+        )
+        for (key in candidates) {
+            if (intent.hasExtra(key)) {
+                val value = intent.getIntExtra(key, -1)
+                if (value >= 0) return value
+            }
+        }
+        return null
+    }
+
+    private fun persistIncomingSms(context: Context, payloads: List<SmsPayload>) {
+        try {
+            payloads.forEach { payload ->
+                if (isAlreadyStored(context, payload.sender, payload.message, payload.timestamp)) {
+                    return@forEach
+                }
 
                 val values = ContentValues().apply {
-                    put(Telephony.Sms.ADDRESS, address)
-                    put(Telephony.Sms.BODY, body)
-                    put(Telephony.Sms.DATE, timestamp)
+                    put(Telephony.Sms.ADDRESS, payload.sender)
+                    put(Telephony.Sms.BODY, payload.message)
+                    put(Telephony.Sms.DATE, payload.timestamp)
                     put(Telephony.Sms.READ, 0)
                     put(Telephony.Sms.SEEN, 0)
                     put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_INBOX)
-                    if (subscriptionId >= 0) {
-                        put(Telephony.Sms.SUBSCRIPTION_ID, subscriptionId)
+                    payload.subscriptionId?.let {
+                        put(Telephony.Sms.SUBSCRIPTION_ID, it)
                     }
                 }
 
@@ -108,5 +144,6 @@ class DefaultSmsReceiver : BroadcastReceiver() {
 
     private companion object {
         const val TAG = "DefaultSmsReceiver"
+        val executor = Executors.newSingleThreadExecutor()
     }
 }
