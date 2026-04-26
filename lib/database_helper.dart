@@ -3,11 +3,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
 
 import 'core/constants/app_constants.dart';
+import 'core/security/database_encryption_key_repository.dart';
 import 'core/utils/phone_number_utils.dart';
 
 class CustomerPhoneAlreadyExistsException implements Exception {
@@ -35,7 +35,8 @@ class DatabaseHelper {
   static bool _schemaIntegrityChecked = false;
   static const int databaseVersion = 5;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final DatabaseEncryptionKeyRepository _encryptionKeyRepository =
+      DatabaseEncryptionKeyRepository();
 
   DatabaseHelper._init();
 
@@ -63,15 +64,7 @@ class DatabaseHelper {
 
   // Retrieve or generate the database password securely
   Future<String> _getSecurePassword() async {
-    const key = 'db_encryption_key';
-    String? password = await _secureStorage.read(key: key);
-
-    if (password == null) {
-      // Generate a new secure password on first install
-      password = '${DateTime.now().millisecondsSinceEpoch}random_secure_salt';
-      await _secureStorage.write(key: key, value: password);
-    }
-    return password;
+    return _encryptionKeyRepository.readOrCreate();
   }
 
   Future<Database> _initDB(String filePath) async {

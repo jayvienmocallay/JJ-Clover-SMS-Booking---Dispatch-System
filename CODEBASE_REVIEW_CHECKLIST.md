@@ -33,10 +33,10 @@ Use this checklist to track fixes and follow-up work from the April 26, 2026 cod
   - [x] Support migration/fallback from the current delimiter format.
   - [x] Test addresses containing `~` or `|`.
 
-- [ ] Generate the SQLCipher key with secure randomness.
-  - [ ] Replace timestamp-based key text with `Random.secure()`.
-  - [ ] Store the generated key in `flutter_secure_storage`.
-  - [ ] Preserve compatibility for existing installed databases.
+- [x] Generate the SQLCipher key with secure randomness.
+  - [x] Replace timestamp-based key text with `Random.secure()`.
+  - [x] Store the generated key in `flutter_secure_storage`.
+  - [x] Preserve compatibility for existing installed databases.
 
 ## Platform And Build
 
