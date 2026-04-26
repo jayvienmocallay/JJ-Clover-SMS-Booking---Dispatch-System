@@ -40,22 +40,25 @@ Use this checklist to track fixes and follow-up work from the April 26, 2026 cod
 
 ## Platform And Build
 
-- [ ] Decide whether web is supported.
-  - [ ] If web is not supported, remove or hide misleading web paths.
-  - [ ] If web is supported, add conditional imports for database/platform services.
-  - [ ] Verify `flutter build web` behavior after the decision.
+- [x] Decide whether web is supported.
+  - [x] Web is not supported; remove misleading `web/` platform scaffold.
+  - [x] Not applicable: web is unsupported, so no conditional imports were added.
+  - [x] Verify `flutter build web --no-pub` fails with "This project is not configured for the web."
 
-- [ ] Track Gradle deprecation warnings.
-  - [ ] Record that current warnings are from Flutter/dependency build scripts.
-  - [ ] Recheck warnings after dependency upgrades.
-  - [ ] Avoid upgrading to Gradle 10 until warnings are resolved upstream.
+- [x] Track Gradle deprecation warnings.
+  - [x] Recorded April 26, 2026: `.\gradlew.bat :app:compileDebugKotlin --offline --warning-mode all --console=plain` succeeds on Gradle 8.12.
+  - [x] Current Gradle 10 removal warnings are from Flutter/dependency build scripts, not app-owned Gradle files:
+    `audioplayers_android`, `flutter_background_service_android`, `flutter_secure_storage`,
+    `permission_handler_android`, `sqflite_sqlcipher`, `telephony`, and Flutter's `:app:compileFlutterBuildDebug` task.
+  - [x] Recheck warnings with the same command after Flutter or pub dependency upgrades.
+  - [x] Avoid upgrading to Gradle 10 until these upstream warnings are resolved.
 
 ## Tests To Add
 
-- [ ] Database test: foreign key cascades and `ON DELETE SET NULL`.
-- [ ] Database test: duplicate customer phone numbers are rejected.
-- [ ] Database test: edited phone numbers are normalized.
-- [ ] Provider/service test: completing an order creates one delivery log.
+- [x] Database test: foreign key cascades and `ON DELETE SET NULL`.
+- [x] Database test: duplicate customer phone numbers are rejected.
+- [x] Database test: edited phone numbers are normalized.
+- [x] Provider/service test: completing an order creates one delivery log.
 - [x] SMS service test: foreground async processing failures do not crash the listener.
 - [x] Pre-book persistence test: JSON round-trip with special characters in address.
 
@@ -63,7 +66,7 @@ Use this checklist to track fixes and follow-up work from the April 26, 2026 cod
 
 - [x] Run `flutter analyze --no-pub`.
 - [x] Run `flutter test --no-pub`.
-- [ ] Run `.\gradlew.bat :app:compileDebugKotlin --offline` from `android`.
+- [x] Run `.\gradlew.bat :app:compileDebugKotlin --offline` from `android`.
 - [ ] Manually test Android SMS flow on a device:
   - [ ] Default SMS app request.
   - [ ] `DELIVER [qty]`.

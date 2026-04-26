@@ -1,0 +1,94 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:jj_clover_sms/data/providers/order_provider.dart';
+import 'package:jj_clover_sms/database_helper.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late Database db;
+
+  setUpAll(sqfliteFfiInit);
+
+  setUp(() async {
+    db = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(
+        version: DatabaseHelper.databaseVersion,
+        onConfigure: DatabaseHelper.configureDatabase,
+        onCreate: DatabaseHelper.instance.createSchemaForTesting,
+        singleInstance: false,
+      ),
+    );
+    DatabaseHelper.setDatabaseForTesting(db);
+  });
+
+  tearDown(() async {
+    DatabaseHelper.setDatabaseForTesting(null);
+    await db.close();
+  });
+
+  test(
+    'completing an order through OrderProvider creates one delivery log',
+    () async {
+      final helper = DatabaseHelper.instance;
+      final barangay = (await db.query(
+        'barangays',
+        where: 'name = ?',
+        whereArgs: ['San Isidro'],
+        limit: 1,
+      )).single;
+
+      final customerId = await helper.insertCustomer({
+        'name': 'Provider Completion Customer',
+        'contact_number': '09182223333',
+        'address': 'Purok 4',
+        'barangay_id': barangay['id'],
+      });
+      final orderId = await helper.insertOrder({
+        'customer_id': customerId,
+        'phone_number': '09182223333',
+        'type': 'deliver',
+        'quantity': 4,
+        'gallon_type': 'old',
+        'address': 'Purok 4',
+        'status': 'in_transit',
+        'created_at': DateTime.now().toIso8601String(),
+        'delivery_day': 'Monday',
+        'is_pre_book': 0,
+        'staff_id': 3,
+      });
+
+      final provider = OrderProvider();
+
+      await provider.updateStatus(
+        orderId,
+        'completed',
+        notes: 'Provider completion',
+      );
+
+      expect(provider.error, isNull);
+      expect(provider.todayOrders, isNotEmpty);
+      expect(
+        provider.todayOrders.firstWhere(
+          (order) => order['id'] == orderId,
+        )['status'],
+        'completed',
+      );
+
+      final logs = await helper.getDeliveryLogsForOrder(orderId);
+      expect(logs, hasLength(1));
+      expect(logs.single['order_id'], orderId);
+      expect(logs.single['customer_id'], customerId);
+      expect(logs.single['quantity_delivered'], 4);
+      expect(logs.single['gallon_type'], 'old');
+      expect(logs.single['staff_id'], 3);
+      expect(logs.single['notes'], 'Provider completion');
+
+      await provider.updateStatus(orderId, 'completed');
+
+      expect(provider.error, isNull);
+      expect(await helper.getDeliveryLogsForOrder(orderId), hasLength(1));
+    },
+  );
+}
