@@ -153,13 +153,15 @@ class _PermissionGateState extends State<PermissionGate>
       }
     }
 
-    // Step 2: Request SMS permissions.
+    // Step 2: Request SMS and notification permissions.
     final statuses = await [
       Permission.sms, // Covers SEND_SMS, RECEIVE_SMS, READ_SMS
+      Permission.notification, // For walk-in alerts and dispatch notifications
     ].request();
 
-    // Step 3: Check if SMS permission was granted
+    // Step 3: Check if SMS and notification permissions were granted
     final smsGranted = statuses[Permission.sms]?.isGranted ?? false;
+    final notificationGranted = statuses[Permission.notification]?.isGranted ?? false;
 
     // Step 4: Request battery optimization exemption.
     // This shows a separate system dialog asking the user to allow
@@ -172,6 +174,8 @@ class _PermissionGateState extends State<PermissionGate>
     debugPrint('Default SMS app: $defaultSmsGranted');
     // ignore: prefer_const_constructors
     debugPrint('SMS permission: $smsGranted');
+    // ignore: prefer_const_constructors
+    debugPrint('Notification permission: $notificationGranted');
     // ignore: prefer_const_constructors
     debugPrint('Battery optimization exemption: $batteryGranted');
 

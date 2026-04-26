@@ -104,8 +104,9 @@ class OrderCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    // Address & barangay
-                    if (address != null || barangay != null)
+                    // Address & barangay — not shown for unrecognized orders
+                    // (their address field was historically misused for SMS text).
+                    if (!isInvalid && (address != null || barangay != null))
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
@@ -195,9 +196,11 @@ class OrderCard extends StatelessWidget {
             ],
           ),
 
-          // Cancel reason display for cancelled/rejected orders
+          // Cancel reason / rejection message for cancelled, rejected,
+          // or unrecognized orders.
           if ((order.status == OrderStatus.cancelled ||
-                  order.status == OrderStatus.rejected) &&
+                  order.status == OrderStatus.rejected ||
+                  order.type == OrderType.unrecognized) &&
               order.cancelReason != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -596,7 +599,7 @@ class _StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        status.name,
+        status.displayLabel,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,

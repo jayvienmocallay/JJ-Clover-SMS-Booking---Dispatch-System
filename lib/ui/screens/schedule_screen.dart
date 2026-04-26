@@ -51,7 +51,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
     final today = DeliveryDays.getToday();
 
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: _loadBarangays,
+      color: AppColors.primary,
+      child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // --- Header ---
@@ -168,6 +171,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           );
         }),
       ],
+    ),
     );
   }
 
