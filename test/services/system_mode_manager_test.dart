@@ -58,9 +58,9 @@ void main() {
       expect(manager.canAcceptDelivery(), true);
     });
 
-    test('rejects delivery in STAFF AWAY mode', () {
+    test('accepts delivery in STAFF AWAY mode', () {
       manager.setMode(SystemMode.staffAway);
-      expect(manager.canAcceptDelivery(), false);
+      expect(manager.canAcceptDelivery(), true);
     });
 
     test('rejects delivery in FULL mode', () {
@@ -105,6 +105,13 @@ void main() {
     test('STAFF AWAY reply mentions staff out', () {
       manager.setMode(SystemMode.staffAway);
       expect(manager.getDeliveryReply(), contains('Staff'));
+    });
+
+    test('STAFF AWAY queued reply includes delivery day', () {
+      manager.setMode(SystemMode.staffAway);
+      final reply = manager.getDeliveryReply(queuedDeliveryDay: 'Wednesday');
+      expect(reply, contains('Staff'));
+      expect(reply, contains('queued for Wednesday'));
     });
 
     test('FULL reply says fully booked', () {
@@ -161,8 +168,11 @@ void main() {
   group('SystemMode extension — autoReply', () {
     test('each mode has a non-empty auto-reply', () {
       for (final mode in SystemMode.values) {
-        expect(mode.autoReply.isNotEmpty, true,
-            reason: '${mode.name} should have a non-empty autoReply');
+        expect(
+          mode.autoReply.isNotEmpty,
+          true,
+          reason: '${mode.name} should have a non-empty autoReply',
+        );
       }
     });
   });

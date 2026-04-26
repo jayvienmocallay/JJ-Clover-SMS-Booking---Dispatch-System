@@ -104,7 +104,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       ),
                     ],
                   ),
-                  // Task 011 — Add Order button
                   Row(
                     children: [
                       GestureDetector(
@@ -221,18 +220,27 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       customerName: customer?['name'] as String?,
                       phone: order.phoneNumber,
                       barangay: customer?['barangay'] as String?,
-                      address: customer?['address'] as String?,
-                      onConfirm: order.status == OrderStatus.pending
+                      address:
+                          order.address ?? (customer?['address'] as String?),
+                      onConfirm:
+                          order.type != OrderType.unrecognized &&
+                              order.status == OrderStatus.pending
                           ? () => orderProv.updateStatus(order.id!, 'confirmed')
                           : null,
-                      onReject: order.status == OrderStatus.pending
+                      onReject:
+                          order.type != OrderType.unrecognized &&
+                              order.status == OrderStatus.pending
                           ? () => _showRejectDialog(order.id!, orderProv)
                           : null,
-                      onStartDelivery: order.status == OrderStatus.confirmed
+                      onStartDelivery:
+                          order.type != OrderType.unrecognized &&
+                              order.status == OrderStatus.confirmed
                           ? () =>
                                 orderProv.updateStatus(order.id!, 'in_transit')
                           : null,
-                      onComplete: order.status == OrderStatus.inTransit
+                      onComplete:
+                          order.type != OrderType.unrecognized &&
+                              order.status == OrderStatus.inTransit
                           ? () => orderProv.updateStatus(order.id!, 'completed')
                           : null,
                     ),
@@ -895,7 +903,9 @@ class _DeliveryManifestSheet extends StatelessWidget {
       builder: (context, orderProv, _) {
         final confirmed = orderProv.todayOrders
             .where(
-              (o) => o['status'] == 'confirmed' || o['status'] == 'in_transit',
+              (o) =>
+                  o['type'] != 'unrecognized' &&
+                  (o['status'] == 'confirmed' || o['status'] == 'in_transit'),
             )
             .toList();
 
