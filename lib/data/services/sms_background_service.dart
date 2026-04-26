@@ -135,7 +135,7 @@ class SmsBackgroundService {
     // Register the SMS listener callback with the Telephony API
     _telephony.listenIncomingSms(
       onNewMessage: (SmsMessage msg) {
-        _processIncomingSms(msg);
+        unawaited(_guardForegroundSmsProcessing(_processIncomingSms(msg)));
       },
       onBackgroundMessage: smsBackgroundMessageHandler,
     );
@@ -196,6 +196,20 @@ class SmsBackgroundService {
   void stopListening() {
     _isListening = false;
     debugPrint('SMS Background Service stopped');
+  }
+
+  @visibleForTesting
+  Future<void> guardForegroundSmsProcessingForTesting(Future<void> processing) {
+    return _guardForegroundSmsProcessing(processing);
+  }
+
+  Future<void> _guardForegroundSmsProcessing(Future<void> processing) async {
+    try {
+      await processing;
+    } catch (error, stackTrace) {
+      debugPrint('Foreground SMS processing failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   /// Changes the system operational mode.
@@ -336,6 +350,27 @@ class SmsBackgroundService {
       await _db.failIncomingSmsReceipt(effectiveSourceMessageId, e);
       rethrow;
     }
+  }
+
+  @visibleForTesting
+  Future<void> processIncomingSmsPayloadForTesting({
+    required String sender,
+    required String message,
+    int? timestamp,
+    int? subscriptionId,
+    String? serviceCenterAddress,
+    String? sourceMessageId,
+    Telephony? smsSender,
+  }) {
+    return _processIncomingSmsPayload(
+      sender: sender,
+      message: message,
+      timestamp: timestamp,
+      subscriptionId: subscriptionId,
+      serviceCenterAddress: serviceCenterAddress,
+      sourceMessageId: sourceMessageId,
+      smsSender: smsSender,
+    );
   }
 
   /// Handles the DELIVER command — the core order processing flow.
