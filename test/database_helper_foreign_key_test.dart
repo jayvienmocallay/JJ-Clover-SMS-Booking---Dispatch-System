@@ -115,4 +115,94 @@ void main() {
     expect(remainingOrders.single['status'], 'completed');
     expect(remainingOrders.single['created_at'], orderCreatedAt);
   });
+
+  test(
+    'completing an order creates its delivery log transactionally',
+    () async {
+      final helper = DatabaseHelper.instance;
+      final barangay = (await db.query(
+        'barangays',
+        where: 'name = ?',
+        whereArgs: ['San Isidro'],
+        limit: 1,
+      )).single;
+
+      final customerId = await helper.insertCustomer({
+        'name': 'Completion Log Customer',
+        'contact_number': '09181234567',
+        'address': 'Purok 2',
+        'barangay_id': barangay['id'],
+      });
+      final orderId = await helper.insertOrder({
+        'customer_id': customerId,
+        'phone_number': '09181234567',
+        'type': 'deliver',
+        'quantity': 2,
+        'gallon_type': 'new',
+        'address': 'Purok 2',
+        'status': 'in_transit',
+        'created_at': DateTime(2026, 4, 26, 8).toIso8601String(),
+        'delivery_day': 'Monday',
+        'is_pre_book': 0,
+        'staff_id': 12,
+      });
+      final deliveredAt = DateTime(2026, 4, 26, 9, 30);
+
+      expect(
+        await helper.updateOrderStatus(
+          orderId,
+          'completed',
+          notes: 'Delivered in full',
+          deliveredAt: deliveredAt,
+        ),
+        1,
+      );
+
+      final order = (await db.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [orderId],
+      )).single;
+      expect(order['status'], 'completed');
+
+      final logs = await helper.getDeliveryLogsForOrder(orderId);
+      expect(logs, hasLength(1));
+      expect(logs.single['order_id'], orderId);
+      expect(logs.single['customer_id'], customerId);
+      expect(logs.single['quantity_delivered'], 2);
+      expect(logs.single['gallon_type'], 'new');
+      expect(logs.single['staff_id'], 12);
+      expect(logs.single['notes'], 'Delivered in full');
+      expect(logs.single['delivered_at'], deliveredAt.toIso8601String());
+
+      await helper.updateOrderStatus(orderId, 'completed');
+      expect(await helper.getDeliveryLogsForOrder(orderId), hasLength(1));
+    },
+  );
+
+  test('completion rolls back if a delivery log cannot be created', () async {
+    final helper = DatabaseHelper.instance;
+    final orderId = await helper.insertOrder({
+      'phone_number': '09189998888',
+      'type': 'deliver',
+      'quantity': 1,
+      'gallon_type': 'new',
+      'status': 'in_transit',
+      'created_at': DateTime(2026, 4, 26, 8).toIso8601String(),
+      'is_pre_book': 0,
+    });
+
+    await expectLater(
+      helper.updateOrderStatus(orderId, 'completed'),
+      throwsA(isA<StateError>()),
+    );
+
+    final order = (await db.query(
+      'orders',
+      where: 'id = ?',
+      whereArgs: [orderId],
+    )).single;
+    expect(order['status'], 'in_transit');
+    expect(await helper.getDeliveryLogsForOrder(orderId), isEmpty);
+  });
 }

@@ -48,6 +48,7 @@ class OrderProvider extends ChangeNotifier {
     int orderId,
     String newStatus, {
     String? reason,
+    String? notes,
   }) async {
     _error = null;
     try {
@@ -55,6 +56,7 @@ class OrderProvider extends ChangeNotifier {
         orderId,
         newStatus,
         reason: reason,
+        notes: notes,
       );
       await loadOrders();
     } catch (e) {

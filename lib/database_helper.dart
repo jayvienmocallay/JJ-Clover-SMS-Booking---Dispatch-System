@@ -794,13 +794,91 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> updateOrderStatus(int id, String status, {String? reason}) async {
+  Future<int> updateOrderStatus(
+    int id,
+    String status, {
+    String? reason,
+    String? notes,
+    DateTime? deliveredAt,
+  }) async {
     final db = await instance.database;
     final data = <String, dynamic>{'status': status};
     if (reason != null && reason.isNotEmpty) {
       data['cancel_reason'] = reason;
     }
-    return await db.update('orders', data, where: 'id = ?', whereArgs: [id]);
+    if (status != 'completed') {
+      return await db.update('orders', data, where: 'id = ?', whereArgs: [id]);
+    }
+
+    return await db.transaction<int>((txn) async {
+      final orders = await txn.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (orders.isEmpty) {
+        return 0;
+      }
+
+      final order = orders.single;
+      final customerId = order['customer_id'] as int?;
+      if (customerId == null) {
+        throw StateError(
+          'Cannot complete order $id because it has no customer_id for a delivery log.',
+        );
+      }
+
+      final updated = await txn.update(
+        'orders',
+        data,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (updated == 0) {
+        return 0;
+      }
+
+      final existingLogs = await txn.query(
+        'delivery_logs',
+        columns: ['id'],
+        where: 'order_id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (existingLogs.isEmpty) {
+        final logData = <String, dynamic>{
+          'order_id': id,
+          'customer_id': customerId,
+          'quantity_delivered': order['quantity'] as int? ?? 0,
+          'delivered_at': (deliveredAt ?? DateTime.now()).toIso8601String(),
+        };
+
+        final staffId = order['staff_id'] as int?;
+        if (staffId != null) {
+          logData['staff_id'] = staffId;
+        }
+
+        final gallonType = _nonEmptyString(order['gallon_type'] as String?);
+        if (gallonType != null) {
+          logData['gallon_type'] = gallonType;
+        }
+
+        final deliveryNotes = _nonEmptyString(notes);
+        if (deliveryNotes != null) {
+          logData['notes'] = deliveryNotes;
+        }
+
+        await txn.insert('delivery_logs', logData);
+      }
+
+      return updated;
+    });
+  }
+
+  String? _nonEmptyString(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   // Task 005 — Delivery Log CRUD operations
