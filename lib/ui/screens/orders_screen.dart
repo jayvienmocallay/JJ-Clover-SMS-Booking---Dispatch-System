@@ -47,18 +47,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  void _showDeliveryManifest() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.card,
-      isScrollControlled: true,
-      builder: (_) => ChangeNotifierProvider.value(
-        value: context.read<OrderProvider>(),
-        child: const _DeliveryManifestSheet(),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer2<OrderProvider, CustomerProvider>(
@@ -104,71 +92,34 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       ),
                     ],
                   ),
-                  // Task 011 — Add Order button
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: _showDeliveryManifest,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.statusOperating,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.assignment,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                'Manifest',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                  // Add Order button
+                  GestureDetector(
+                    onTap: _showAddOrderSheet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
                       ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: _showAddOrderSheet,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add, size: 16, color: Colors.white),
-                              SizedBox(width: 4),
-                              Text(
-                                'Add Order',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add, size: 16, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text(
+                            'Add Order',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -880,336 +831,6 @@ class _AddOrderFormState extends State<_AddOrderForm> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Delivery Manifest - shows confirmed orders ready for delivery grouped by day
-class _DeliveryManifestSheet extends StatelessWidget {
-  const _DeliveryManifestSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<OrderProvider>(
-      builder: (context, orderProv, _) {
-        final confirmed = orderProv.todayOrders
-            .where(
-              (o) => o['status'] == 'confirmed' || o['status'] == 'in_transit',
-            )
-            .toList();
-
-        final Map<String, List<Map<String, dynamic>>> byDay = {};
-        for (final o in confirmed) {
-          final day = o['delivery_day'] as String? ?? 'Today';
-          byDay[day] ??= [];
-          byDay[day]!.add(o);
-        }
-
-        final totalOrders = confirmed.length;
-        final totalGallons = confirmed.fold<int>(
-          0,
-          (sum, o) => sum + ((o['quantity'] as int?) ?? 0),
-        );
-
-        return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (context, scrollController) => Container(
-            decoration: const BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Icon(Icons.assignment, color: AppColors.primary),
-                      SizedBox(width: 12),
-                      Text(
-                        'Delivery Manifest',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.foreground,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      _SummaryChip(
-                        label: '$totalOrders',
-                        sub: 'orders',
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      _SummaryChip(
-                        label: '$totalGallons',
-                        sub: 'gallons',
-                        color: AppColors.statusOperating,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: confirmed.isEmpty
-                      ? const Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.check_circle,
-                                size: 48,
-                                color: AppColors.statusOperating,
-                              ),
-                              SizedBox(height: 12),
-                              Text(
-                                'All deliveries completed!',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: AppColors.mutedForeground,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView(
-                          controller: scrollController,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          children: [
-                            ...byDay.entries.map(
-                              (entry) => Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      entry.key,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ...entry.value.asMap().entries.map(
-                                    (e) => _ManifestItem(
-                                      index: e.key + 1,
-                                      order: e.value,
-                                      onStart: e.value['status'] == 'confirmed'
-                                          ? () => orderProv.updateStatus(
-                                              e.value['id'] as int,
-                                              'in_transit',
-                                            )
-                                          : null,
-                                      onComplete:
-                                          e.value['status'] == 'in_transit'
-                                          ? () => orderProv.updateStatus(
-                                              e.value['id'] as int,
-                                              'completed',
-                                            )
-                                          : null,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _SummaryChip extends StatelessWidget {
-  final String label;
-  final String sub;
-  final Color color;
-
-  const _SummaryChip({
-    required this.label,
-    required this.sub,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-            Text(sub, style: TextStyle(fontSize: 11, color: color)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ManifestItem extends StatelessWidget {
-  final int index;
-  final Map<String, dynamic> order;
-  final VoidCallback? onStart;
-  final VoidCallback? onComplete;
-
-  const _ManifestItem({
-    required this.index,
-    required this.order,
-    this.onStart,
-    this.onComplete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final status = order['status'] as String? ?? '';
-    final phone = order['phone_number'] as String? ?? '';
-    final qty = order['quantity'] as int? ?? 0;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: status == 'in_transit'
-              ? AppColors.statusBusy
-              : AppColors.border,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: const BoxDecoration(
-              color: AppColors.muted,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                '$index',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  phone,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  '$qty gallon(s)',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.mutedForeground,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: status == 'in_transit'
-                  ? AppColors.statusBusy
-                  : AppColors.statusOperating,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              status == 'in_transit' ? 'Delivering' : 'Ready',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          if (onStart != null || onComplete != null) ...[
-            const SizedBox(width: 8),
-            if (onStart != null)
-              GestureDetector(
-                onTap: onStart,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: AppColors.statusBusy,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.play_arrow,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            if (onComplete != null)
-              GestureDetector(
-                onTap: onComplete,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: AppColors.statusOperating,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.check, size: 16, color: Colors.white),
-                ),
-              ),
-          ],
-        ],
       ),
     );
   }
