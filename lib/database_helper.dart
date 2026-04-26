@@ -7,12 +7,30 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/constants/app_constants.dart';
 import 'core/utils/phone_number_utils.dart';
 
+class CustomerPhoneAlreadyExistsException implements Exception {
+  final String contactNumber;
+
+  const CustomerPhoneAlreadyExistsException(this.contactNumber);
+
+  @override
+  String toString() => 'A customer with $contactNumber already exists';
+}
+
+class CustomerPhoneIdentityMigrationException implements Exception {
+  final String message;
+
+  const CustomerPhoneIdentityMigrationException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 // Task 005 — Singleton DatabaseHelper for encrypted SQLCipher access
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
   static bool _schemaIntegrityChecked = false;
-  static const int databaseVersion = 4;
+  static const int databaseVersion = 5;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
@@ -62,8 +80,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       password: password,
-      // Version 4: Adds SMS receipt/source-message idempotency for reliable
-      // native closed-app processing.
+      // Version 5: Enforces normalized, unique customer phone identity.
       version: databaseVersion,
       onConfigure: configureDatabase,
       onCreate: _createSchema,
@@ -87,7 +104,15 @@ class DatabaseHelper {
     await _createSchema(db, version);
   }
 
-  // Task 005 — Create all tables (schema v4)
+  Future<void> upgradeSchemaForTesting(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    await _upgradeSchema(db, oldVersion, newVersion);
+  }
+
+  // Task 005 — Create all tables (schema v5)
   Future _createSchema(Database db, int version) async {
     // Task 001 — 1. Barangays Lookup Table (zone mapping from interview)
     await db.execute('''
@@ -111,6 +136,8 @@ class DatabaseHelper {
         FOREIGN KEY (barangay_id) REFERENCES barangays (id)
       )
     ''');
+
+    await _createCustomerContactNumberIndex(db);
 
     // Task 005, Task 006 — 3. Schedules Table (zone-day mapping per customer)
     await db.execute('''
@@ -303,10 +330,16 @@ class DatabaseHelper {
       await _createSourceMessageIndexes(db);
     }
 
+    if (oldVersion < 5) {
+      await _normalizeCustomerContactNumbers(db);
+      await _createCustomerContactNumberIndex(db);
+    }
+
     // Create sms_messages table if not exists (for old databases)
     await _createSmsMessagesTable(db);
     await _createIncomingSmsReceiptsTable(db);
     await _createSourceMessageIndexes(db);
+    await _createCustomerContactNumberIndex(db);
   }
 
   Future<void> _createAppSettingsTable(Database db) async {
@@ -385,9 +418,81 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> _createCustomerContactNumberIndex(Database db) async {
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS '
+      'idx_customers_contact_number_unique '
+      'ON customers(contact_number)',
+    );
+  }
+
+  Future<void> _normalizeCustomerContactNumbers(Database db) async {
+    final customers = await db.query(
+      'customers',
+      columns: ['id', 'contact_number'],
+      orderBy: 'id ASC',
+    );
+    final idsByPhone = <String, List<int>>{};
+    final normalizedById = <int, String>{};
+
+    for (final customer in customers) {
+      final id = customer['id'] as int;
+      final currentPhone = customer['contact_number'] as String? ?? '';
+      final normalizedPhone = PhoneNumberUtils.normalize(currentPhone);
+      normalizedById[id] = normalizedPhone;
+      idsByPhone.putIfAbsent(normalizedPhone, () => <int>[]).add(id);
+    }
+
+    final duplicates = idsByPhone.entries
+        .where((entry) => entry.value.length > 1)
+        .map((entry) => '${entry.key}: customer IDs ${entry.value.join(', ')}')
+        .toList();
+
+    if (duplicates.isNotEmpty) {
+      throw CustomerPhoneIdentityMigrationException(
+        'Duplicate customer phone numbers after normalization: '
+        '${duplicates.join('; ')}',
+      );
+    }
+
+    for (final customer in customers) {
+      final id = customer['id'] as int;
+      final currentPhone = customer['contact_number'] as String? ?? '';
+      final normalizedPhone = normalizedById[id]!;
+      if (currentPhone != normalizedPhone) {
+        await db.update(
+          'customers',
+          {'contact_number': normalizedPhone},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
+    }
+  }
+
+  Map<String, dynamic> _normalizeCustomerData(Map<String, dynamic> data) {
+    final normalizedData = Map<String, dynamic>.from(data);
+    final contactNumber = normalizedData['contact_number'] as String?;
+    if (contactNumber != null) {
+      normalizedData['contact_number'] = PhoneNumberUtils.normalize(
+        contactNumber,
+      );
+    }
+    return normalizedData;
+  }
+
+  bool _isCustomerContactNumberUniqueError(DatabaseException error) {
+    final message = error.toString().toLowerCase();
+    return error.isUniqueConstraintError('customers.contact_number') ||
+        (error.isUniqueConstraintError() &&
+            message.contains('customers.contact_number'));
+  }
+
   Future<void> _ensureSchemaIntegrity(Database db) async {
     if (_schemaIntegrityChecked) return;
 
+    await _normalizeCustomerContactNumbers(db);
+    await _createCustomerContactNumberIndex(db);
     await _createAppSettingsTable(db);
     await _createSmsMessagesTable(db);
     await _createIncomingSmsReceiptsTable(db);
@@ -531,14 +636,18 @@ class DatabaseHelper {
   /// Insert a new customer and automatically create schedules based on barangay zone
   Future<int> insertCustomer(Map<String, dynamic> customerData) async {
     final db = await instance.database;
-    final normalizedData = Map<String, dynamic>.from(customerData);
-    final contactNumber = normalizedData['contact_number'] as String?;
-    if (contactNumber != null) {
-      normalizedData['contact_number'] = PhoneNumberUtils.normalize(
-        contactNumber,
-      );
+    final normalizedData = _normalizeCustomerData(customerData);
+    late final int customerId;
+    try {
+      customerId = await db.insert('customers', normalizedData);
+    } on DatabaseException catch (error) {
+      if (_isCustomerContactNumberUniqueError(error)) {
+        throw CustomerPhoneAlreadyExistsException(
+          normalizedData['contact_number'] as String? ?? '',
+        );
+      }
+      rethrow;
     }
-    final customerId = await db.insert('customers', normalizedData);
 
     // Auto-create schedules based on barangay's delivery zone
     final barangayId = normalizedData['barangay_id'] as int?;
@@ -922,12 +1031,22 @@ class DatabaseHelper {
     Map<String, dynamic> customerData,
   ) async {
     final db = await instance.database;
-    return await db.update(
-      'customers',
-      customerData,
-      where: 'id = ?',
-      whereArgs: [customerId],
-    );
+    final normalizedData = _normalizeCustomerData(customerData);
+    try {
+      return await db.update(
+        'customers',
+        normalizedData,
+        where: 'id = ?',
+        whereArgs: [customerId],
+      );
+    } on DatabaseException catch (error) {
+      if (_isCustomerContactNumberUniqueError(error)) {
+        throw CustomerPhoneAlreadyExistsException(
+          normalizedData['contact_number'] as String? ?? '',
+        );
+      }
+      rethrow;
+    }
   }
 
   // App settings CRUD operations
