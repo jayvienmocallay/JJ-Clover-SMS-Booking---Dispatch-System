@@ -125,38 +125,46 @@ class OrderCard extends StatelessWidget {
                         // Task 011 — Pre-book badge
                         if (order.isPreBook) ...[
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryLight,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.schedule, size: 10, color: AppColors.primary),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppColors.primary,
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryLight,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.schedule, size: 10, color: AppColors.primary),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.primary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ],
                         const SizedBox(width: 12),
-                        Text(
-                          _formatTime(order.createdAt),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.mutedForeground,
+                        Flexible(
+                          child: Text(
+                            _formatTime(order.createdAt),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.mutedForeground,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
