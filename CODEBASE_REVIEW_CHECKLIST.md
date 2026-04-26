@@ -28,10 +28,10 @@ Use this checklist to track fixes and follow-up work from the April 26, 2026 cod
   - [x] Ensure failed receipts are recorded without uncaught async errors.
   - [x] Add a regression test or manual test note for malformed SMS/background failures.
 
-- [ ] Replace pre-book pending string serialization with JSON.
-  - [ ] Store pending pre-book contexts as JSON in `app_settings`.
-  - [ ] Support migration/fallback from the current delimiter format.
-  - [ ] Test addresses containing `~` or `|`.
+- [x] Replace pre-book pending string serialization with JSON.
+  - [x] Store pending pre-book contexts as JSON in `app_settings`.
+  - [x] Support migration/fallback from the current delimiter format.
+  - [x] Test addresses containing `~` or `|`.
 
 - [ ] Generate the SQLCipher key with secure randomness.
   - [ ] Replace timestamp-based key text with `Random.secure()`.
@@ -57,12 +57,12 @@ Use this checklist to track fixes and follow-up work from the April 26, 2026 cod
 - [ ] Database test: edited phone numbers are normalized.
 - [ ] Provider/service test: completing an order creates one delivery log.
 - [x] SMS service test: foreground async processing failures do not crash the listener.
-- [ ] Pre-book persistence test: JSON round-trip with special characters in address.
+- [x] Pre-book persistence test: JSON round-trip with special characters in address.
 
 ## Verification Commands
 
-- [ ] Run `flutter analyze --no-pub`.
-- [ ] Run `flutter test --no-pub`.
+- [x] Run `flutter analyze --no-pub`.
+- [x] Run `flutter test --no-pub`.
 - [ ] Run `.\gradlew.bat :app:compileDebugKotlin --offline` from `android`.
 - [ ] Manually test Android SMS flow on a device:
   - [ ] Default SMS app request.

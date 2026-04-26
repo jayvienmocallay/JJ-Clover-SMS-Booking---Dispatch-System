@@ -1,9 +1,12 @@
 // Task 005 — Data Layer: SQLCipher encrypted database with full CRUD operations
 // Task 006 — Data seeding: barangays, customers, and schedules
-import 'package:sqflite_sqlcipher/sqflite.dart';
+import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
+
 import 'core/constants/app_constants.dart';
 import 'core/utils/phone_number_utils.dart';
 
@@ -1182,25 +1185,13 @@ class DatabaseHelper {
     final value = await getSetting(preBookPendingKey);
     if (value == null || value.isEmpty) return {};
     try {
-      final Map<String, Map<String, dynamic>> result = {};
-      if (value.contains('|')) {
-        for (final entry in value.split('|')) {
-          if (entry.isEmpty) continue;
-          final parts = entry.split('~');
-          if (parts.length >= 6) {
-            result[parts[0]] = {
-              'customerId': int.tryParse(parts[1]) ?? 0,
-              'phoneNumber': parts[0],
-              'quantity': int.tryParse(parts[2]) ?? 0,
-              'gallonType': parts[3].isEmpty ? null : parts[3],
-              'address': parts[4].isEmpty ? null : parts[4],
-              'deliveryDay': parts[5],
-              'timestamp': int.tryParse(parts.length > 6 ? parts[6] : '0') ?? 0,
-            };
-          }
-        }
+      return _decodePreBookPendingJson(value);
+    } on FormatException {
+      final legacyPending = _decodeLegacyPreBookPending(value);
+      if (legacyPending.isNotEmpty) {
+        await setPreBookPending(legacyPending);
       }
-      return result;
+      return legacyPending;
     } catch (_) {
       return {};
     }
@@ -1209,14 +1200,115 @@ class DatabaseHelper {
   Future<void> setPreBookPending(
     Map<String, Map<String, dynamic>> pending,
   ) async {
-    final entries = <String>[];
+    final serialized = <String, Map<String, dynamic>>{};
     for (final entry in pending.entries) {
-      final v = entry.value;
-      entries.add(
-        '${entry.key}~${v['customerId']}~${v['quantity']}~${v['gallonType'] ?? ''}~${v['address'] ?? ''}~${v['deliveryDay']}~${v['timestamp'] ?? 0}',
-      );
+      final context = _coercePreBookPendingContext(entry.key, entry.value);
+      if (context != null) {
+        serialized[entry.key] = context;
+      }
     }
-    await setSetting(preBookPendingKey, entries.join('|'));
+    await setSetting(preBookPendingKey, jsonEncode(serialized));
+  }
+
+  Map<String, Map<String, dynamic>> _decodePreBookPendingJson(String value) {
+    final decoded = jsonDecode(value);
+    if (decoded is! Map) return {};
+
+    final result = <String, Map<String, dynamic>>{};
+    for (final entry in decoded.entries) {
+      final key = entry.key;
+      if (key is! String) continue;
+
+      final context = _coercePreBookPendingContext(key, entry.value);
+      if (context != null) {
+        result[key] = context;
+      }
+    }
+    return result;
+  }
+
+  Map<String, Map<String, dynamic>> _decodeLegacyPreBookPending(String value) {
+    final result = <String, Map<String, dynamic>>{};
+    final entries = value.split(RegExp(r'\|(?=\+?\d+~\d+~\d+~)'));
+
+    for (final entry in entries) {
+      final context = _decodeLegacyPreBookPendingEntry(entry);
+      if (context != null) {
+        result[context['phoneNumber'] as String] = context;
+      }
+    }
+    return result;
+  }
+
+  Map<String, dynamic>? _decodeLegacyPreBookPendingEntry(String value) {
+    if (value.isEmpty) return null;
+
+    final parts = value.split('~');
+    if (parts.length < 6) return null;
+
+    final phoneNumber = parts[0];
+    final customerId = int.tryParse(parts[1]);
+    final quantity = int.tryParse(parts[2]);
+    if (phoneNumber.isEmpty || customerId == null || quantity == null) {
+      return null;
+    }
+
+    final timestamp = int.tryParse(parts.last);
+    final deliveryDayIndex = timestamp == null
+        ? parts.length - 1
+        : parts.length - 2;
+    if (deliveryDayIndex < 5) return null;
+
+    final address = parts.sublist(4, deliveryDayIndex).join('~');
+    final deliveryDay = parts[deliveryDayIndex];
+    if (deliveryDay.isEmpty) return null;
+
+    return {
+      'customerId': customerId,
+      'phoneNumber': phoneNumber,
+      'quantity': quantity,
+      'gallonType': parts[3].isEmpty ? null : parts[3],
+      'address': address.isEmpty ? null : address,
+      'deliveryDay': deliveryDay,
+      'timestamp': timestamp ?? 0,
+    };
+  }
+
+  Map<String, dynamic>? _coercePreBookPendingContext(
+    String phoneKey,
+    Object? value,
+  ) {
+    if (value is! Map) return null;
+
+    final customerId = _asInt(value['customerId']);
+    final quantity = _asInt(value['quantity']);
+    final deliveryDay = _asNonEmptyString(value['deliveryDay']);
+    if (customerId == null || quantity == null || deliveryDay == null) {
+      return null;
+    }
+
+    return {
+      'customerId': customerId,
+      'phoneNumber': _asNonEmptyString(value['phoneNumber']) ?? phoneKey,
+      'quantity': quantity,
+      'gallonType': _asNonEmptyString(value['gallonType']),
+      'address': _asNonEmptyString(value['address']),
+      'deliveryDay': deliveryDay,
+      'timestamp': _asInt(value['timestamp']) ?? 0,
+    };
+  }
+
+  int? _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value == null) return null;
+    return int.tryParse(value.toString());
+  }
+
+  String? _asNonEmptyString(Object? value) {
+    if (value == null) return null;
+    final stringValue = value.toString();
+    return stringValue.isEmpty ? null : stringValue;
   }
 
   Future<int> getCutoffHour() async {
