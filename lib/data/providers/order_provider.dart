@@ -1,16 +1,35 @@
 // Task 011 — OrderProvider: ChangeNotifier wrapping order queries
 // Provides reactive order state to all screens via Provider
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../database_helper.dart';
+import '../services/app_event_bus.dart';
 
 class OrderProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _todayOrders = [];
   bool _isLoading = false;
   String? _error;
+  StreamSubscription? _orderEventSubscription;
 
   List<Map<String, dynamic>> get todayOrders => _todayOrders;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  OrderProvider() {
+    _subscribeToOrderEvents();
+  }
+
+  void _subscribeToOrderEvents() {
+    _orderEventSubscription = AppEventBus().onOrderReceived.listen((_) {
+      loadOrders();
+    });
+  }
+
+  @override
+  void dispose() {
+    _orderEventSubscription?.cancel();
+    super.dispose();
+  }
 
   /// Stats computed from today's orders
   Iterable<Map<String, dynamic>> get _operationalOrders =>

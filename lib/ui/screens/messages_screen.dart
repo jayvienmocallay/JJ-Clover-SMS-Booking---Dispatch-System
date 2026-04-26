@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:telephony/telephony.dart';
 import '../../database_helper.dart';
 import '../../core/utils/phone_number_utils.dart';
+import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
 
 class MessagesScreen extends StatefulWidget {
@@ -27,6 +28,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
     super.initState();
     _loadMessages();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadMessages());
+    AppEventBus().onMessageReceived.listen((_) {
+      _loadMessages();
+    });
   }
 
   @override
