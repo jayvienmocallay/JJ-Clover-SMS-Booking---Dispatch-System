@@ -156,8 +156,6 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: ChatHeader(
         contactName: widget.contactName ?? 'Unknown',
         phoneNumber: widget.phoneNumber,
-        onCallPressed: () {},
-        onInfoPressed: () {},
       ),
       body: Column(
         children: [

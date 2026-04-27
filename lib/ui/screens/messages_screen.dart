@@ -249,23 +249,3 @@ return RefreshIndicator(
     }
   }
 }
-
-class _FilterTab extends StatelessWidget {
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _FilterTab({required this.label, required this.isActive, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(color: isActive ? AppColors.primary : AppColors.muted, borderRadius: BorderRadius.circular(12)),
-        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: isActive ? Colors.white : AppColors.mutedForeground)),
-      ),
-    );
-  }
-}

@@ -59,17 +59,6 @@ class MessageInput extends StatelessWidget {
                     horizontal: 16,
                     vertical: 12,
                   ),
-                  suffixIcon: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () {},
-                      child: Icon(
-                        Icons.emoji_emotions_outlined,
-                        color: AppColors.mutedForeground.withValues(alpha: 0.4),
-                        size: 20,
-                      ),
-                    ),
-                  ),
                 ),
               ),
             ),
