@@ -32,6 +32,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _refreshTimer;
   bool _isComposing = false;
   int _lastMessageCount = 0;
+  final _expandedTimestamps = <String>{};
 
   @override
   void initState() {
@@ -126,22 +127,31 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  List<Map<String, dynamic>> _groupMessagesByTime(List<Map<String, dynamic>> messages) {
-    final grouped = <Map<String, dynamic>>[];
-    for (int i = 0; i < messages.length; i++) {
-      grouped.add(messages[i]);
-
-      if (i < messages.length - 1) {
-        final current = DateTime.parse(messages[i]['sent_at'] as String? ?? '');
-        final next = DateTime.parse(messages[i + 1]['sent_at'] as String? ?? '');
-        final diff = next.difference(current);
-
-        if (diff.inMinutes > 15) {
-          grouped.add({'_isTimestamp': true, 'sent_at': next.toIso8601String()});
-        }
+  void _toggleTimestamp(String sentAt) {
+    setState(() {
+      if (_expandedTimestamps.contains(sentAt)) {
+        _expandedTimestamps.remove(sentAt);
+      } else {
+        _expandedTimestamps.add(sentAt);
       }
+    });
+  }
+
+  List<Map<String, dynamic>> _buildDisplayList(List<Map<String, dynamic>> messages) {
+    final result = <Map<String, dynamic>>[];
+    DateTime? lastDate;
+
+    for (final msg in messages) {
+      final dt = DateTime.parse(msg['sent_at'] as String? ?? '');
+      final msgDate = DateTime(dt.year, dt.month, dt.day);
+
+      if (lastDate == null || msgDate != lastDate) {
+        result.add({'_isDateDivider': true, 'sent_at': msg['sent_at']});
+        lastDate = msgDate;
+      }
+      result.add(msg);
     }
-    return grouped;
+    return result;
   }
 
   @override
@@ -156,7 +166,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
 
-    final groupedMessages = _groupMessagesByTime(_messages);
+    final displayList = _buildDisplayList(_messages);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -199,12 +209,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    itemCount: groupedMessages.length,
+                    itemCount: displayList.length,
                     itemBuilder: (context, index) {
-                      final item = groupedMessages[index];
+                      final item = displayList[index];
 
-                      if (item['_isTimestamp'] == true) {
-                        return _buildTimestampDivider(item['sent_at'] as String);
+                      if (item['_isDateDivider'] == true) {
+                        return _buildDateDivider(item['sent_at'] as String);
                       }
 
                       final message = item['message'] as String? ?? '';
@@ -212,39 +222,38 @@ class _ChatScreenState extends State<ChatScreen> {
                       final sentAt = item['sent_at'] as String? ?? '';
                       final status = item['status'] as String? ?? '';
                       final isIncoming = direction == 'incoming';
-
-                      bool showTimestamp = true;
-                      if (index > 0) {
-                        final prev = groupedMessages[index - 1];
-                        if (prev['_isTimestamp'] != true) {
-                          final prevTime = DateTime.parse(prev['sent_at'] as String? ?? '');
-                          final currTime = DateTime.parse(sentAt);
-                          showTimestamp = currTime.difference(prevTime).inMinutes > 5;
-                        }
-                      }
+                      final isExpanded = _expandedTimestamps.contains(sentAt);
 
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.only(bottom: 8),
                         child: Column(
                           crossAxisAlignment: isIncoming ? CrossAxisAlignment.start : CrossAxisAlignment.end,
                           children: [
-                            ChatBubble(
-                              message: message,
-                              isIncoming: isIncoming,
-                              timestamp: sentAt,
-                              status: status,
-                            ),
-                            if (showTimestamp)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  _formatTime(sentAt),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.mutedForeground.withValues(alpha: 0.6),
-                                  ),
-                                ),
+                            GestureDetector(
+                              onTap: () => _toggleTimestamp(sentAt),
+                              child: ChatBubble(
+                                message: message,
+                                isIncoming: isIncoming,
+                                timestamp: sentAt,
+                                status: status,
                               ),
+                            ),
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOut,
+                              child: isExpanded
+                                  ? Padding(
+                                      padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+                                      child: Text(
+                                        _formatTime(sentAt),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.mutedForeground.withValues(alpha: 0.6),
+                                        ),
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
                           ],
                         ),
                       );
@@ -262,20 +271,35 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildTimestampDivider(String sentAt) {
+  Widget _buildDateDivider(String sentAt) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 20),
       child: Row(
         children: [
-          Expanded(child: Container(height: 1, color: AppColors.border.withValues(alpha: 0.3))),
+          Expanded(
+            child: Divider(color: AppColors.border.withValues(alpha: 0.4), thickness: 1),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              _formatDateOnly(sentAt),
-              style: TextStyle(fontSize: 12, color: AppColors.mutedForeground.withValues(alpha: 0.6)),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.muted,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _formatDateOnly(sentAt),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.mutedForeground,
+                ),
+              ),
             ),
           ),
-          Expanded(child: Container(height: 1, color: AppColors.border.withValues(alpha: 0.3))),
+          Expanded(
+            child: Divider(color: AppColors.border.withValues(alpha: 0.4), thickness: 1),
+          ),
         ],
       ),
     );
