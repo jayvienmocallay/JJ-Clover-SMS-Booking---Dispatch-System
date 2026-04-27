@@ -27,8 +27,6 @@ class PushNotificationService {
   /// Prevents notification spam from the same sender within this window
   static const int _notificationRateLimitMs = 5000; // 5 seconds
 
-  /// Counter for unique notification IDs (per sender)
-  static final Map<String, int> _notificationIdPerSender = {};
 
   /// Whether the service has been initialized
   static bool _isInitialized = false;
