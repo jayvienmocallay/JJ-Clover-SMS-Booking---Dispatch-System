@@ -1,11 +1,10 @@
 // Messages screen: SMS inbox with full send/receive history
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:telephony/telephony.dart';
 import '../../database_helper.dart';
-import '../../core/utils/phone_number_utils.dart';
 import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
+import './chat_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
@@ -15,12 +14,9 @@ class MessagesScreen extends StatefulWidget {
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
-  String _filter = 'all';
   bool _isLoading = true;
   List<Map<String, dynamic>> _smsMessages = [];
   Map<String, String> _phoneToName = {};
-  String? _selectedPhone;
-  final _replyController = TextEditingController();
   Timer? _refreshTimer;
 
   @override
@@ -36,7 +32,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _replyController.dispose();
     super.dispose();
   }
 
@@ -66,48 +61,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
     }
   }
 
-  Future<void> _sendReply(String phoneNumber) async {
-    final message = _replyController.text.trim();
-    if (message.isEmpty) return;
-
-    try {
-      await Telephony.instance.sendSms(to: phoneNumber, message: message);
-      await DatabaseHelper.instance.insertSmsMessage({
-        'phone_number': PhoneNumberUtils.normalize(phoneNumber),
-        'message': message,
-        'direction': 'outgoing',
-        'status': 'sent',
-        'sent_at': DateTime.now().toIso8601String(),
-      });
-      _replyController.clear();
-      await _loadMessages();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Message sent')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send: $e')),
-        );
-      }
-    }
-  }
-
-  List<Map<String, dynamic>> _getFilteredMessages() {
-    var msgs = _smsMessages;
-    if (_filter == 'incoming') {
-      msgs = msgs.where((m) => m['direction'] == 'incoming').toList();
-    } else if (_filter == 'outgoing') {
-      msgs = msgs.where((m) => m['direction'] == 'outgoing').toList();
-    }
-    if (_selectedPhone != null) {
-      msgs = msgs.where((m) => m['phone_number'] == _selectedPhone).toList();
-    }
-    return msgs;
-  }
-
   List<String> _getUniquePhones() {
     return _smsMessages.map((m) => m['phone_number'] as String).toSet().toList();
   }
@@ -120,7 +73,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
       );
     }
 
-    final filtered = _getFilteredMessages();
     final uniquePhones = _getUniquePhones();
 
 return RefreshIndicator(
@@ -148,117 +100,130 @@ return RefreshIndicator(
           ),
           const SizedBox(height: 4),
           Text(
-            filtered.isEmpty ? 'No messages yet' : '${filtered.length} messages today',
+            uniquePhones.isEmpty ? 'No conversations' : '${uniquePhones.length} ${uniquePhones.length == 1 ? 'conversation' : 'conversations'}',
             style: const TextStyle(fontSize: 14, color: AppColors.mutedForeground),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              _FilterTab(label: 'All', isActive: _filter == 'all', onTap: () => setState(() { _filter = 'all'; _selectedPhone = null; })),
-              const SizedBox(width: 8),
-              _FilterTab(label: 'Incoming', isActive: _filter == 'incoming', onTap: () => setState(() { _filter = 'incoming'; _selectedPhone = null; })),
-              const SizedBox(width: 8),
-              _FilterTab(label: 'Outgoing', isActive: _filter == 'outgoing', onTap: () => setState(() { _filter = 'outgoing'; _selectedPhone = null; })),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (uniquePhones.length > 1 && _filter == 'all')
-            SizedBox(
-              height: 50,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: uniquePhones.length,
-                itemBuilder: (_, i) {
-                  final phone = uniquePhones[i];
-                  final isSelected = _selectedPhone == phone;
-                  final label = _phoneToName[phone] ?? phone;
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedPhone = isSelected ? null : phone),
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary : AppColors.muted,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        label,
-                        style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppColors.mutedForeground),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          if (uniquePhones.length > 1 && _filter == 'all') const SizedBox(height: 16),
-          if (filtered.isEmpty)
+          if (uniquePhones.isEmpty)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 48),
               child: Column(
                 children: [
-                  Icon(Icons.sms, size: 48, color: AppColors.mutedForeground.withValues(alpha: 0.3)),
+                  Icon(Icons.forum_outlined, size: 48, color: AppColors.mutedForeground.withValues(alpha: 0.3)),
                   const SizedBox(height: 12),
-                  const Text('No SMS messages yet', style: TextStyle(fontSize: 14, color: AppColors.mutedForeground)),
+                  const Text('No SMS conversations yet', style: TextStyle(fontSize: 14, color: AppColors.mutedForeground)),
                 ],
               ),
             )
           else
-            ...filtered.map((msg) {
-              final phone = msg['phone_number'] as String? ?? '';
-              final message = msg['message'] as String? ?? '';
-              final direction = msg['direction'] as String? ?? 'incoming';
-              final sentAt = msg['sent_at'] as String? ?? '';
-              final isIncoming = direction == 'incoming';
+            ...uniquePhones.map((phone) {
+              final phoneMsgs = _smsMessages.where((m) => m['phone_number'] == phone).toList();
+              if (phoneMsgs.isEmpty) return const SizedBox.shrink();
+
+              phoneMsgs.sort((a, b) {
+                final timeA = DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime.now();
+                final timeB = DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime.now();
+                return timeB.compareTo(timeA);
+              });
+
+              final lastMsg = phoneMsgs.first;
               final displayName = _phoneToName[phone];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: isIncoming ? AppColors.primary.withValues(alpha: 0.3) : AppColors.statusOperating.withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
+              final message = lastMsg['message'] as String? ?? '';
+              final direction = lastMsg['direction'] as String? ?? 'incoming';
+              final sentAt = lastMsg['sent_at'] as String? ?? '';
+              final isIncoming = direction == 'incoming';
+
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChatScreen(
+                        phoneNumber: phone,
+                        contactName: displayName,
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border.withValues(alpha: 0.3), width: 0.5),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            (displayName ?? phone).substring(0, 1).toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(isIncoming ? Icons.call_received : Icons.call_made, size: 16, color: isIncoming ? AppColors.primary : AppColors.statusOperating),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  displayName ?? phone,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground),
-                                ),
-                                if (displayName != null)
-                                  Text(phone, style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
-                              ],
+                            Text(
+                              displayName ?? phone,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.foreground,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              message,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.mutedForeground.withValues(alpha: 0.8),
+                                height: 1.3,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
-                        Text(_formatTime(sentAt), style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(message, style: const TextStyle(fontSize: 14, color: AppColors.foreground)),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: GestureDetector(
-                        onTap: () => _showReplyDialog(phone),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(16)),
-                          child: const Text('Reply', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _formatTimeShort(sentAt),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.mutedForeground.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Icon(
+                            isIncoming ? Icons.call_received : Icons.call_made,
+                            size: 14,
+                            color: isIncoming ? AppColors.primary : AppColors.statusOperating,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               );
             }),
@@ -267,91 +232,20 @@ return RefreshIndicator(
     );
   }
 
-  void _showReplyDialog(String phoneNumber) {
-    final name = _phoneToName[phoneNumber];
-    final replyTitle = name != null ? 'Reply to $name' : 'Reply to $phoneNumber';
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      isScrollControlled: true,
-      builder: (_) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
-            Text(replyTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-            const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: TextField(
-                controller: _replyController,
-                maxLines: 3,
-                style: const TextStyle(fontSize: 14, color: AppColors.foreground),
-                decoration: const InputDecoration(hintText: 'Type your reply...', hintStyle: TextStyle(color: AppColors.mutedForeground), border: InputBorder.none, contentPadding: EdgeInsets.all(12)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  _sendReply(phoneNumber);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
-                  child: const Center(child: Text('Send', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white))),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatTime(String sentAt) {
+  String _formatTimeShort(String sentAt) {
     try {
       final dt = DateTime.parse(sentAt);
       final now = DateTime.now();
       final diff = now.difference(dt);
-      if (diff.inMinutes < 1) return 'Just now';
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      if (diff.inMinutes < 1) return 'Now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+      if (diff.inHours < 24) return '${diff.inHours}h';
+      if (diff.inDays < 7) return '${diff.inDays}d';
       final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
       final amPm = dt.hour >= 12 ? 'PM' : 'AM';
       return '$hour:${dt.minute.toString().padLeft(2, '0')} $amPm';
     } catch (_) {
       return '';
     }
-  }
-}
-
-class _FilterTab extends StatelessWidget {
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _FilterTab({required this.label, required this.isActive, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(color: isActive ? AppColors.primary : AppColors.muted, borderRadius: BorderRadius.circular(12)),
-        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: isActive ? Colors.white : AppColors.mutedForeground)),
-      ),
-    );
   }
 }

@@ -11,6 +11,7 @@ import 'package:jj_clover_sms/database_helper.dart';
 import 'package:jj_clover_sms/data/services/default_sms_app_service.dart';
 import 'package:jj_clover_sms/data/services/sms_background_service.dart';
 import 'package:jj_clover_sms/data/services/system_mode_manager.dart';
+import 'package:jj_clover_sms/data/services/push_notification_service.dart';
 import 'package:jj_clover_sms/data/providers/order_provider.dart';
 import 'package:jj_clover_sms/data/providers/customer_provider.dart';
 import 'package:jj_clover_sms/ui/theme/app_theme.dart';
@@ -33,6 +34,7 @@ Future<void> main() async {
       await DatabaseHelper.instance.database;
       await DatabaseHelper.instance.ensureSchedulesSeeded();
       await SystemModeManager.instance.loadPersistedMode(notify: false);
+      await PushNotificationService.instance.initialize();
       debugPrint('Database initialized successfully');
     } catch (e) {
       debugPrint('Database initialization error: $e');
