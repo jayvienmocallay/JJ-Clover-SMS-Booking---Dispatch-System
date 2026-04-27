@@ -13,6 +13,25 @@ enum OrderStatus {
   rejected,
 }
 
+extension OrderStatusLabel on OrderStatus {
+  String get displayLabel {
+    switch (this) {
+      case OrderStatus.pending:
+        return 'Pending';
+      case OrderStatus.confirmed:
+        return 'Confirmed';
+      case OrderStatus.inTransit:
+        return 'In Transit';
+      case OrderStatus.completed:
+        return 'Completed';
+      case OrderStatus.cancelled:
+        return 'Cancelled';
+      case OrderStatus.rejected:
+        return 'Rejected';
+    }
+  }
+}
+
 /// Classifies gallons to prevent mixing between household and store use.
 /// Based on Scope & Zone Mapping document business rule:
 /// - [newGallon]: For household delivery (sealed, new water)

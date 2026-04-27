@@ -1,20 +1,43 @@
 // Task 005 — Data Layer: SQLCipher encrypted database with full CRUD operations
 // Task 006 — Data seeding: barangays, customers, and schedules
-import 'package:sqflite_sqlcipher/sqflite.dart';
+import 'dart:convert';
 import 'dart:io';
+
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
+
 import 'core/constants/app_constants.dart';
+import 'core/security/database_encryption_key_repository.dart';
 import 'core/utils/phone_number_utils.dart';
+
+class CustomerPhoneAlreadyExistsException implements Exception {
+  final String contactNumber;
+
+  const CustomerPhoneAlreadyExistsException(this.contactNumber);
+
+  @override
+  String toString() => 'A customer with $contactNumber already exists';
+}
+
+class CustomerPhoneIdentityMigrationException implements Exception {
+  final String message;
+
+  const CustomerPhoneIdentityMigrationException(this.message);
+
+  @override
+  String toString() => message;
+}
 
 // Task 005 — Singleton DatabaseHelper for encrypted SQLCipher access
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
   static bool _schemaIntegrityChecked = false;
-  static const int databaseVersion = 4;
+  static const int databaseVersion = 6;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const Duration _resubmitCooldownAfter = Duration(hours: 1);
+  final DatabaseEncryptionKeyRepository _encryptionKeyRepository =
+      DatabaseEncryptionKeyRepository();
 
   DatabaseHelper._init();
 
@@ -42,15 +65,7 @@ class DatabaseHelper {
 
   // Retrieve or generate the database password securely
   Future<String> _getSecurePassword() async {
-    const key = 'db_encryption_key';
-    String? password = await _secureStorage.read(key: key);
-
-    if (password == null) {
-      // Generate a new secure password on first install
-      password = '${DateTime.now().millisecondsSinceEpoch}random_secure_salt';
-      await _secureStorage.write(key: key, value: password);
-    }
-    return password;
+    return _encryptionKeyRepository.readOrCreate();
   }
 
   Future<Database> _initDB(String filePath) async {
@@ -62,8 +77,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       password: password,
-      // Version 4: Adds SMS receipt/source-message idempotency for reliable
-      // native closed-app processing.
+      // Version 5: Enforces normalized, unique customer phone identity.
       version: databaseVersion,
       onConfigure: configureDatabase,
       onCreate: _createSchema,
@@ -87,14 +101,24 @@ class DatabaseHelper {
     await _createSchema(db, version);
   }
 
-  // Task 005 — Create all tables (schema v4)
+  Future<void> upgradeSchemaForTesting(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    await _upgradeSchema(db, oldVersion, newVersion);
+  }
+
+  // Task 005 — Create all tables (schema v5)
   Future _createSchema(Database db, int version) async {
     // Task 001 — 1. Barangays Lookup Table (zone mapping from interview)
+    // delivery_day stores the fixed weekly day for Zone C barangays (null for A/B).
     await db.execute('''
       CREATE TABLE barangays (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
-        delivery_zone TEXT NOT NULL
+        delivery_zone TEXT NOT NULL,
+        delivery_day TEXT
       )
     ''');
 
@@ -111,6 +135,8 @@ class DatabaseHelper {
         FOREIGN KEY (barangay_id) REFERENCES barangays (id)
       )
     ''');
+
+    await _createCustomerContactNumberIndex(db);
 
     // Task 005, Task 006 — 3. Schedules Table (zone-day mapping per customer)
     await db.execute('''
@@ -303,10 +329,27 @@ class DatabaseHelper {
       await _createSourceMessageIndexes(db);
     }
 
+    if (oldVersion < 5) {
+      await _normalizeCustomerContactNumbers(db);
+      await _createCustomerContactNumberIndex(db);
+    }
+
+    if (oldVersion < 6) {
+      await _addColumnIfMissing(db, 'barangays', 'delivery_day', 'TEXT');
+      // Populate delivery_day for existing seeded Zone C barangays.
+      for (final entry in ZoneScheduleMap.zoneCBarangayDays.entries) {
+        await db.rawUpdate(
+          'UPDATE barangays SET delivery_day = ? WHERE name = ? AND delivery_day IS NULL',
+          [entry.value, entry.key],
+        );
+      }
+    }
+
     // Create sms_messages table if not exists (for old databases)
     await _createSmsMessagesTable(db);
     await _createIncomingSmsReceiptsTable(db);
     await _createSourceMessageIndexes(db);
+    await _createCustomerContactNumberIndex(db);
   }
 
   Future<void> _createAppSettingsTable(Database db) async {
@@ -385,9 +428,81 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> _createCustomerContactNumberIndex(Database db) async {
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS '
+      'idx_customers_contact_number_unique '
+      'ON customers(contact_number)',
+    );
+  }
+
+  Future<void> _normalizeCustomerContactNumbers(Database db) async {
+    final customers = await db.query(
+      'customers',
+      columns: ['id', 'contact_number'],
+      orderBy: 'id ASC',
+    );
+    final idsByPhone = <String, List<int>>{};
+    final normalizedById = <int, String>{};
+
+    for (final customer in customers) {
+      final id = customer['id'] as int;
+      final currentPhone = customer['contact_number'] as String? ?? '';
+      final normalizedPhone = PhoneNumberUtils.normalize(currentPhone);
+      normalizedById[id] = normalizedPhone;
+      idsByPhone.putIfAbsent(normalizedPhone, () => <int>[]).add(id);
+    }
+
+    final duplicates = idsByPhone.entries
+        .where((entry) => entry.value.length > 1)
+        .map((entry) => '${entry.key}: customer IDs ${entry.value.join(', ')}')
+        .toList();
+
+    if (duplicates.isNotEmpty) {
+      throw CustomerPhoneIdentityMigrationException(
+        'Duplicate customer phone numbers after normalization: '
+        '${duplicates.join('; ')}',
+      );
+    }
+
+    for (final customer in customers) {
+      final id = customer['id'] as int;
+      final currentPhone = customer['contact_number'] as String? ?? '';
+      final normalizedPhone = normalizedById[id]!;
+      if (currentPhone != normalizedPhone) {
+        await db.update(
+          'customers',
+          {'contact_number': normalizedPhone},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
+    }
+  }
+
+  Map<String, dynamic> _normalizeCustomerData(Map<String, dynamic> data) {
+    final normalizedData = Map<String, dynamic>.from(data);
+    final contactNumber = normalizedData['contact_number'] as String?;
+    if (contactNumber != null) {
+      normalizedData['contact_number'] = PhoneNumberUtils.normalize(
+        contactNumber,
+      );
+    }
+    return normalizedData;
+  }
+
+  bool _isCustomerContactNumberUniqueError(DatabaseException error) {
+    final message = error.toString().toLowerCase();
+    return error.isUniqueConstraintError('customers.contact_number') ||
+        (error.isUniqueConstraintError() &&
+            message.contains('customers.contact_number'));
+  }
+
   Future<void> _ensureSchemaIntegrity(Database db) async {
     if (_schemaIntegrityChecked) return;
 
+    await _normalizeCustomerContactNumbers(db);
+    await _createCustomerContactNumberIndex(db);
     await _createAppSettingsTable(db);
     await _createSmsMessagesTable(db);
     await _createIncomingSmsReceiptsTable(db);
@@ -395,6 +510,13 @@ class DatabaseHelper {
     await _addColumnIfMissing(db, 'orders', 'source_message_id', 'TEXT');
     await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
     await _createSourceMessageIndexes(db);
+    await _addColumnIfMissing(db, 'barangays', 'delivery_day', 'TEXT');
+    for (final entry in ZoneScheduleMap.zoneCBarangayDays.entries) {
+      await db.rawUpdate(
+        'UPDATE barangays SET delivery_day = ? WHERE name = ? AND delivery_day IS NULL',
+        [entry.value, entry.key],
+      );
+    }
 
     _schemaIntegrityChecked = true;
   }
@@ -424,14 +546,14 @@ class DatabaseHelper {
       {'name': 'San Jose', 'delivery_zone': 'Zone A'},
       {'name': 'Poblacion', 'delivery_zone': 'Zone B'},
       {'name': 'Santa Rosa', 'delivery_zone': 'Zone B'},
-      {'name': 'Santo Niño', 'delivery_zone': 'Zone C'},
-      {'name': 'Semong', 'delivery_zone': 'Zone C'},
-      {'name': 'Gabuyan', 'delivery_zone': 'Zone C'},
-      {'name': 'Bunawan', 'delivery_zone': 'Zone C'},
-      {'name': 'Katipunan', 'delivery_zone': 'Zone C'},
-      {'name': 'Dagohoy', 'delivery_zone': 'Zone C'},
-      {'name': 'Tiburcia', 'delivery_zone': 'Zone C'},
-      {'name': 'Clementa', 'delivery_zone': 'Zone C'},
+      {'name': 'Santo Niño', 'delivery_zone': 'Zone C', 'delivery_day': 'Tuesday'},
+      {'name': 'Semong', 'delivery_zone': 'Zone C', 'delivery_day': 'Tuesday'},
+      {'name': 'Gabuyan', 'delivery_zone': 'Zone C', 'delivery_day': 'Thursday'},
+      {'name': 'Bunawan', 'delivery_zone': 'Zone C', 'delivery_day': 'Thursday'},
+      {'name': 'Katipunan', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
+      {'name': 'Dagohoy', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
+      {'name': 'Tiburcia', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
+      {'name': 'Clementa', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
     ];
 
     for (final barangay in defaultBarangays) {
@@ -457,33 +579,42 @@ class DatabaseHelper {
   /// all with 'active' status by default.
   Future<void> _seedSchedules(Database db) async {
     // Step 1: Query all customers joined with their barangay info.
-    // We need the zone and barangay name to determine delivery days.
+    // We need the zone, barangay name, and delivery_day to determine delivery days.
     final customers = await db.rawQuery('''
-      SELECT c.id AS customer_id, b.name AS barangay_name, b.delivery_zone
+      SELECT c.id AS customer_id, b.name AS barangay_name,
+             b.delivery_zone, b.delivery_day AS barangay_delivery_day
       FROM customers c
       INNER JOIN barangays b ON c.barangay_id = b.id
     ''');
 
     // Step 2: For each customer, look up their allowed delivery days
-    // using the ZoneScheduleMap and insert a schedule record per day.
+    // using the ZoneScheduleMap (or the barangay's delivery_day for Zone C)
+    // and insert a schedule record per day.
     for (final customer in customers) {
       // Extract the customer's zone (e.g., 'Zone A') and barangay name
       final zone = customer['delivery_zone'] as String;
       final barangayName = customer['barangay_name'] as String;
       final customerId = customer['customer_id'] as int;
+      final barangayDeliveryDay = customer['barangay_delivery_day'] as String?;
 
-      // Get the list of delivery days for this customer's zone/barangay
-      final deliveryDays = ZoneScheduleMap.getDaysForZone(
-        zone,
-        barangayName: barangayName,
-      );
+      // For Zone C, prefer the DB-stored delivery_day so dynamically added
+      // barangays (not in the hardcoded map) also get schedules.
+      List<String> deliveryDays;
+      if (zone == 'Zone C' && barangayDeliveryDay != null) {
+        deliveryDays = [barangayDeliveryDay];
+      } else {
+        deliveryDays = ZoneScheduleMap.getDaysForZone(
+          zone,
+          barangayName: barangayName,
+        );
+      }
 
       // Insert one schedule record per allowed delivery day
       for (final day in deliveryDays) {
         await db.insert('schedules', {
-          'customer_id': customerId, // Links schedule to this customer
-          'delivery_day': day, // The day they can receive deliveries
-          'status': 'active', // All seeded schedules start as active
+          'customer_id': customerId,
+          'delivery_day': day,
+          'status': 'active',
         });
       }
     }
@@ -531,26 +662,40 @@ class DatabaseHelper {
   /// Insert a new customer and automatically create schedules based on barangay zone
   Future<int> insertCustomer(Map<String, dynamic> customerData) async {
     final db = await instance.database;
-    final normalizedData = Map<String, dynamic>.from(customerData);
-    final contactNumber = normalizedData['contact_number'] as String?;
-    if (contactNumber != null) {
-      normalizedData['contact_number'] = PhoneNumberUtils.normalize(
-        contactNumber,
-      );
+    final normalizedData = _normalizeCustomerData(customerData);
+    late final int customerId;
+    try {
+      customerId = await db.insert('customers', normalizedData);
+    } on DatabaseException catch (error) {
+      if (_isCustomerContactNumberUniqueError(error)) {
+        throw CustomerPhoneAlreadyExistsException(
+          normalizedData['contact_number'] as String? ?? '',
+        );
+      }
+      rethrow;
     }
-    final customerId = await db.insert('customers', normalizedData);
 
-    // Auto-create schedules based on barangay's delivery zone
+    // Auto-create schedules based on barangay's delivery zone / delivery_day.
     final barangayId = normalizedData['barangay_id'] as int?;
     if (barangayId != null) {
       final barangay = await getBarangayById(barangayId);
       if (barangay != null) {
         final zone = barangay['delivery_zone'] as String;
         final barangayName = barangay['name'] as String;
-        final deliveryDays = ZoneScheduleMap.getDaysForZone(
-          zone,
-          barangayName: barangayName,
-        );
+        final barangayDeliveryDay = barangay['delivery_day'] as String?;
+
+        // For Zone C, use the DB-stored delivery_day so dynamically added
+        // barangays (absent from the hardcoded map) also get schedules.
+        List<String> deliveryDays;
+        if (zone == 'Zone C' && barangayDeliveryDay != null) {
+          deliveryDays = [barangayDeliveryDay];
+        } else {
+          deliveryDays = ZoneScheduleMap.getDaysForZone(
+            zone,
+            barangayName: barangayName,
+          );
+        }
+
         for (final day in deliveryDays) {
           await db.insert('schedules', {
             'customer_id': customerId,
@@ -685,13 +830,91 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> updateOrderStatus(int id, String status, {String? reason}) async {
+  Future<int> updateOrderStatus(
+    int id,
+    String status, {
+    String? reason,
+    String? notes,
+    DateTime? deliveredAt,
+  }) async {
     final db = await instance.database;
     final data = <String, dynamic>{'status': status};
     if (reason != null && reason.isNotEmpty) {
       data['cancel_reason'] = reason;
     }
-    return await db.update('orders', data, where: 'id = ?', whereArgs: [id]);
+    if (status != 'completed') {
+      return await db.update('orders', data, where: 'id = ?', whereArgs: [id]);
+    }
+
+    return await db.transaction<int>((txn) async {
+      final orders = await txn.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (orders.isEmpty) {
+        return 0;
+      }
+
+      final order = orders.single;
+      final customerId = order['customer_id'] as int?;
+
+      final updated = await txn.update(
+        'orders',
+        data,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (updated == 0) {
+        return 0;
+      }
+
+      // Delivery logs require a customer_id (NOT NULL constraint).
+      // Walk-in orders from unregistered customers have no customer_id —
+      // skip log creation for those so completion still succeeds.
+      if (customerId != null) {
+        final existingLogs = await txn.query(
+          'delivery_logs',
+          columns: ['id'],
+          where: 'order_id = ?',
+          whereArgs: [id],
+          limit: 1,
+        );
+        if (existingLogs.isEmpty) {
+          final logData = <String, dynamic>{
+            'order_id': id,
+            'customer_id': customerId,
+            'quantity_delivered': order['quantity'] as int? ?? 0,
+            'delivered_at': (deliveredAt ?? DateTime.now()).toIso8601String(),
+          };
+
+          final staffId = order['staff_id'] as int?;
+          if (staffId != null) {
+            logData['staff_id'] = staffId;
+          }
+
+          final gallonType = _nonEmptyString(order['gallon_type'] as String?);
+          if (gallonType != null) {
+            logData['gallon_type'] = gallonType;
+          }
+
+          final deliveryNotes = _nonEmptyString(notes);
+          if (deliveryNotes != null) {
+            logData['notes'] = deliveryNotes;
+          }
+
+          await txn.insert('delivery_logs', logData);
+        }
+      }
+
+      return updated;
+    });
+  }
+
+  String? _nonEmptyString(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   // Task 005 — Delivery Log CRUD operations
@@ -753,9 +976,14 @@ class DatabaseHelper {
 
   // --- SMS Messages CRUD ---
 
-  /// Claims an incoming SMS for processing. Returns false for completed or
-  /// recently active duplicate receipts.
-  Future<bool> claimIncomingSmsReceipt({
+  /// Claims an incoming SMS for processing.
+  ///
+  /// Returns (claimed: bool, isDuplicate: bool):
+  /// - (true, false): New message, process normally
+  /// - (true, true): Within 10-min retry window, but allow reprocessing (idempotent)
+  /// - (false, true): Completed within 1 hour, reject with duplicate feedback
+  /// - (false, false): Still processing, skip (shouldn't happen in normal flow)
+  Future<({bool claimed, bool isDuplicate})> claimIncomingSmsReceipt({
     required String messageId,
     required String phoneNumber,
     required String message,
@@ -766,7 +994,7 @@ class DatabaseHelper {
     final nowIso = now.toIso8601String();
     final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
 
-    return await db.transaction<bool>((txn) async {
+    return await db.transaction<({bool claimed, bool isDuplicate})>((txn) async {
       final existing = await txn.query(
         'incoming_sms_receipts',
         where: 'message_id = ?',
@@ -786,23 +1014,47 @@ class DatabaseHelper {
           'claimed_at': nowIso,
           'updated_at': nowIso,
         });
-        return true;
+        return (claimed: true, isDuplicate: false);
       }
 
       final row = existing.first;
       final status = row['status'] as String? ?? '';
-      if (status == 'completed') {
-        return false;
+      final completedAt = _tryParseDate(row['completed_at'] as String?);
+
+      // If completed, check if within resubmit cooldown (1 hour)
+      if (status == 'completed' && completedAt != null) {
+        final timeSinceCompletion = now.difference(completedAt);
+        if (timeSinceCompletion < _resubmitCooldownAfter) {
+          return (claimed: false, isDuplicate: true);
+        }
+        // After 1 hour, allow resubmit — treat as new message
+        await txn.update(
+          'incoming_sms_receipts',
+          {
+            'status': 'processing',
+            'attempts': 1,
+            'received_at': nowIso,
+            'claimed_at': nowIso,
+            'updated_at': nowIso,
+            'completed_at': null,
+            'last_error': null,
+          },
+          where: 'message_id = ?',
+          whereArgs: [messageId],
+        );
+        return (claimed: true, isDuplicate: false);
       }
 
+      // If still processing within 10-min retry window, skip retry
       if (status == 'processing') {
         final claimedAt = _tryParseDate(row['claimed_at'] as String?);
         if (claimedAt != null &&
             now.difference(claimedAt) < _receiptRetryAfter) {
-          return false;
+          return (claimed: false, isDuplicate: false);
         }
       }
 
+      // Retry after 10 min (but before 1 hour) — reprocess idempotently
       final attempts = (row['attempts'] as num?)?.toInt() ?? 0;
       await txn.update(
         'incoming_sms_receipts',
@@ -819,7 +1071,7 @@ class DatabaseHelper {
         where: 'message_id = ?',
         whereArgs: [messageId],
       );
-      return true;
+      return (claimed: true, isDuplicate: false);
     });
   }
 
@@ -922,12 +1174,22 @@ class DatabaseHelper {
     Map<String, dynamic> customerData,
   ) async {
     final db = await instance.database;
-    return await db.update(
-      'customers',
-      customerData,
-      where: 'id = ?',
-      whereArgs: [customerId],
-    );
+    final normalizedData = _normalizeCustomerData(customerData);
+    try {
+      return await db.update(
+        'customers',
+        normalizedData,
+        where: 'id = ?',
+        whereArgs: [customerId],
+      );
+    } on DatabaseException catch (error) {
+      if (_isCustomerContactNumberUniqueError(error)) {
+        throw CustomerPhoneAlreadyExistsException(
+          normalizedData['contact_number'] as String? ?? '',
+        );
+      }
+      rethrow;
+    }
   }
 
   // App settings CRUD operations
@@ -985,25 +1247,13 @@ class DatabaseHelper {
     final value = await getSetting(preBookPendingKey);
     if (value == null || value.isEmpty) return {};
     try {
-      final Map<String, Map<String, dynamic>> result = {};
-      if (value.contains('|')) {
-        for (final entry in value.split('|')) {
-          if (entry.isEmpty) continue;
-          final parts = entry.split('~');
-          if (parts.length >= 6) {
-            result[parts[0]] = {
-              'customerId': int.tryParse(parts[1]) ?? 0,
-              'phoneNumber': parts[0],
-              'quantity': int.tryParse(parts[2]) ?? 0,
-              'gallonType': parts[3].isEmpty ? null : parts[3],
-              'address': parts[4].isEmpty ? null : parts[4],
-              'deliveryDay': parts[5],
-              'timestamp': int.tryParse(parts.length > 6 ? parts[6] : '0') ?? 0,
-            };
-          }
-        }
+      return _decodePreBookPendingJson(value);
+    } on FormatException {
+      final legacyPending = _decodeLegacyPreBookPending(value);
+      if (legacyPending.isNotEmpty) {
+        await setPreBookPending(legacyPending);
       }
-      return result;
+      return legacyPending;
     } catch (_) {
       return {};
     }
@@ -1012,14 +1262,115 @@ class DatabaseHelper {
   Future<void> setPreBookPending(
     Map<String, Map<String, dynamic>> pending,
   ) async {
-    final entries = <String>[];
+    final serialized = <String, Map<String, dynamic>>{};
     for (final entry in pending.entries) {
-      final v = entry.value;
-      entries.add(
-        '${entry.key}~${v['customerId']}~${v['quantity']}~${v['gallonType'] ?? ''}~${v['address'] ?? ''}~${v['deliveryDay']}~${v['timestamp'] ?? 0}',
-      );
+      final context = _coercePreBookPendingContext(entry.key, entry.value);
+      if (context != null) {
+        serialized[entry.key] = context;
+      }
     }
-    await setSetting(preBookPendingKey, entries.join('|'));
+    await setSetting(preBookPendingKey, jsonEncode(serialized));
+  }
+
+  Map<String, Map<String, dynamic>> _decodePreBookPendingJson(String value) {
+    final decoded = jsonDecode(value);
+    if (decoded is! Map) return {};
+
+    final result = <String, Map<String, dynamic>>{};
+    for (final entry in decoded.entries) {
+      final key = entry.key;
+      if (key is! String) continue;
+
+      final context = _coercePreBookPendingContext(key, entry.value);
+      if (context != null) {
+        result[key] = context;
+      }
+    }
+    return result;
+  }
+
+  Map<String, Map<String, dynamic>> _decodeLegacyPreBookPending(String value) {
+    final result = <String, Map<String, dynamic>>{};
+    final entries = value.split(RegExp(r'\|(?=\+?\d+~\d+~\d+~)'));
+
+    for (final entry in entries) {
+      final context = _decodeLegacyPreBookPendingEntry(entry);
+      if (context != null) {
+        result[context['phoneNumber'] as String] = context;
+      }
+    }
+    return result;
+  }
+
+  Map<String, dynamic>? _decodeLegacyPreBookPendingEntry(String value) {
+    if (value.isEmpty) return null;
+
+    final parts = value.split('~');
+    if (parts.length < 6) return null;
+
+    final phoneNumber = parts[0];
+    final customerId = int.tryParse(parts[1]);
+    final quantity = int.tryParse(parts[2]);
+    if (phoneNumber.isEmpty || customerId == null || quantity == null) {
+      return null;
+    }
+
+    final timestamp = int.tryParse(parts.last);
+    final deliveryDayIndex = timestamp == null
+        ? parts.length - 1
+        : parts.length - 2;
+    if (deliveryDayIndex < 5) return null;
+
+    final address = parts.sublist(4, deliveryDayIndex).join('~');
+    final deliveryDay = parts[deliveryDayIndex];
+    if (deliveryDay.isEmpty) return null;
+
+    return {
+      'customerId': customerId,
+      'phoneNumber': phoneNumber,
+      'quantity': quantity,
+      'gallonType': parts[3].isEmpty ? null : parts[3],
+      'address': address.isEmpty ? null : address,
+      'deliveryDay': deliveryDay,
+      'timestamp': timestamp ?? 0,
+    };
+  }
+
+  Map<String, dynamic>? _coercePreBookPendingContext(
+    String phoneKey,
+    Object? value,
+  ) {
+    if (value is! Map) return null;
+
+    final customerId = _asInt(value['customerId']);
+    final quantity = _asInt(value['quantity']);
+    final deliveryDay = _asNonEmptyString(value['deliveryDay']);
+    if (customerId == null || quantity == null || deliveryDay == null) {
+      return null;
+    }
+
+    return {
+      'customerId': customerId,
+      'phoneNumber': _asNonEmptyString(value['phoneNumber']) ?? phoneKey,
+      'quantity': quantity,
+      'gallonType': _asNonEmptyString(value['gallonType']),
+      'address': _asNonEmptyString(value['address']),
+      'deliveryDay': deliveryDay,
+      'timestamp': _asInt(value['timestamp']) ?? 0,
+    };
+  }
+
+  int? _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value == null) return null;
+    return int.tryParse(value.toString());
+  }
+
+  String? _asNonEmptyString(Object? value) {
+    if (value == null) return null;
+    final stringValue = value.toString();
+    return stringValue.isEmpty ? null : stringValue;
   }
 
   Future<int> getCutoffHour() async {

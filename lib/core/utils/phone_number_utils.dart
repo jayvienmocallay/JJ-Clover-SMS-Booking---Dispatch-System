@@ -1,6 +1,8 @@
 class PhoneNumberUtils {
   const PhoneNumberUtils._();
 
+  static final RegExp _acceptedCustomerPhone = RegExp(r'^09\d{9}$');
+
   /// Normalizes Philippine mobile numbers to the local 09XXXXXXXXX format.
   ///
   /// Accepts common forms such as +639171234567, 639171234567,
@@ -17,5 +19,10 @@ class PhoneNumberUtils {
     }
 
     return digits;
+  }
+
+  /// Returns true for customer-entered phone numbers accepted by the UI.
+  static bool isAcceptedCustomerPhone(String value) {
+    return _acceptedCustomerPhone.hasMatch(value);
   }
 }

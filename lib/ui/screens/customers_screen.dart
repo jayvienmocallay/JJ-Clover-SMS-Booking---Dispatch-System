@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
+import '../../core/utils/phone_number_utils.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../database_helper.dart';
 import '../theme/app_theme.dart';
@@ -35,15 +36,23 @@ class _CustomersScreenState extends State<CustomersScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: const Text('Delete Customer', style: TextStyle(color: AppColors.foreground)),
-        content: Text('Delete $name and their orders history?', style: const TextStyle(color: AppColors.mutedForeground)),
+        title: const Text(
+          'Delete Customer',
+          style: TextStyle(color: AppColors.foreground),
+        ),
+        content: Text(
+          'Delete $name and their orders history?',
+          style: const TextStyle(color: AppColors.mutedForeground),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.statusMaintenance),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusMaintenance,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -54,9 +63,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
     if (confirmed == true && mounted) {
       await context.read<CustomerProvider>().deleteCustomer(customerId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$name deleted')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$name deleted')));
       }
     }
   }
@@ -120,7 +129,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   GestureDetector(
                     onTap: _showAddCustomerSheet,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.primary,
                         borderRadius: BorderRadius.circular(12),
@@ -155,10 +167,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 ),
                 child: TextField(
                   onChanged: (val) => setState(() => _search = val),
-                  style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.foreground,
+                  ),
                   decoration: const InputDecoration(
                     hintText: 'Search by name, phone, or barangay...',
-                    prefixIcon: Icon(Icons.search, size: 18, color: AppColors.mutedForeground),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 18,
+                      color: AppColors.mutedForeground,
+                    ),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -180,7 +199,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       const SizedBox(height: 12),
                       const Text(
                         'No customers found.',
-                        style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.mutedForeground,
+                        ),
                       ),
                     ],
                   ),
@@ -240,19 +262,33 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
-                                    const Icon(Icons.phone, size: 12, color: AppColors.mutedForeground),
+                                    const Icon(
+                                      Icons.phone,
+                                      size: 12,
+                                      color: AppColors.mutedForeground,
+                                    ),
                                     const SizedBox(width: 4),
                                     Text(
                                       phone,
-                                      style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.mutedForeground,
+                                      ),
                                     ),
                                     const SizedBox(width: 12),
-                                    const Icon(Icons.location_on, size: 12, color: AppColors.mutedForeground),
+                                    const Icon(
+                                      Icons.location_on,
+                                      size: 12,
+                                      color: AppColors.mutedForeground,
+                                    ),
                                     const SizedBox(width: 4),
                                     Flexible(
                                       child: Text(
                                         barangay,
-                                        style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.mutedForeground,
+                                        ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
@@ -266,7 +302,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             onTap: () => _editCustomer(c),
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              child: const Icon(Icons.edit, size: 20, color: AppColors.primary),
+                              child: const Icon(
+                                Icons.edit,
+                                size: 20,
+                                color: AppColors.primary,
+                              ),
                             ),
                           ),
                           // Delete button
@@ -274,7 +314,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             onTap: () => _deleteCustomer(c['id'] as int, name),
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              child: const Icon(Icons.delete_outline, size: 20, color: AppColors.statusMaintenance),
+                              child: const Icon(
+                                Icons.delete_outline,
+                                size: 20,
+                                color: AppColors.statusMaintenance,
+                              ),
                             ),
                           ),
                         ],
@@ -290,9 +334,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _editCustomer(Map<String, dynamic> customer) {
-    final nameController = TextEditingController(text: customer['name'] as String? ?? '');
-    final phoneController = TextEditingController(text: customer['contact_number'] as String? ?? '');
-    final addressController = TextEditingController(text: customer['address'] as String? ?? '');
+    final nameController = TextEditingController(
+      text: customer['name'] as String? ?? '',
+    );
+    final phoneController = TextEditingController(
+      text: customer['contact_number'] as String? ?? '',
+    );
+    final addressController = TextEditingController(
+      text: customer['address'] as String? ?? '',
+    );
     final customerId = customer['id'] as int;
     final currentBarangayId = customer['barangay_id'] as int?;
     int? selectedBarangayId = currentBarangayId;
@@ -315,7 +365,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               }
               barangays.clear();
               barangays.addAll(snapshot.data!);
-              
+
               return Padding(
                 padding: EdgeInsets.fromLTRB(
                   20,
@@ -347,19 +397,55 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Text('Full Name', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const Text(
+                      'Full Name',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    _buildTextField(nameController, 'Full Name', TextInputType.name),
+                    _buildTextField(
+                      nameController,
+                      'Full Name',
+                      TextInputType.name,
+                    ),
                     const SizedBox(height: 16),
-                    const Text('Phone Number', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const Text(
+                      'Phone Number',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    _buildTextField(phoneController, 'Phone Number', TextInputType.phone),
+                    _buildTextField(
+                      phoneController,
+                      'Phone Number',
+                      TextInputType.phone,
+                    ),
                     const SizedBox(height: 16),
-                    const Text('Full Address', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const Text(
+                      'Full Address',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    _buildTextField(addressController, 'Full Address', TextInputType.streetAddress),
+                    _buildTextField(
+                      addressController,
+                      'Full Address',
+                      TextInputType.streetAddress,
+                    ),
                     const SizedBox(height: 16),
-                    const Text('Barangay', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                    const Text(
+                      'Barangay',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -373,12 +459,25 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           value: selectedBarangayId,
                           isExpanded: true,
                           dropdownColor: AppColors.card,
-                          hint: const Text('Select Barangay...', style: TextStyle(color: AppColors.mutedForeground)),
-                          items: barangays.map((b) => DropdownMenuItem<int?>(
-                            value: b['id'] as int,
-                            child: Text('${b['name']} (${b['delivery_zone']})', style: const TextStyle(color: AppColors.foreground)),
-                          )).toList(),
-                          onChanged: (val) => setSheetState(() => selectedBarangayId = val),
+                          hint: const Text(
+                            'Select Barangay...',
+                            style: TextStyle(color: AppColors.mutedForeground),
+                          ),
+                          items: barangays
+                              .map(
+                                (b) => DropdownMenuItem<int?>(
+                                  value: b['id'] as int,
+                                  child: Text(
+                                    '${b['name']} (${b['delivery_zone']})',
+                                    style: const TextStyle(
+                                      color: AppColors.foreground,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) =>
+                              setSheetState(() => selectedBarangayId = val),
                         ),
                       ),
                     ),
@@ -391,21 +490,57 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           final phone = phoneController.text.trim();
                           final address = addressController.text.trim();
 
-                          if (name.isEmpty || phone.isEmpty || selectedBarangayId == null) {
+                          if (name.isEmpty ||
+                              phone.isEmpty ||
+                              selectedBarangayId == null) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Name, phone, and barangay are required')),
+                              const SnackBar(
+                                content: Text(
+                                  'Name, phone, and barangay are required',
+                                ),
+                              ),
                             );
                             return;
                           }
 
-                          await context.read<CustomerProvider>().updateCustomer(customerId, {
-                            'name': name,
-                            'contact_number': phone,
-                            'address': address.isNotEmpty ? address : null,
-                            'barangay_id': selectedBarangayId,
-                          });
+                          if (!PhoneNumberUtils.isAcceptedCustomerPhone(
+                            phone,
+                          )) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Invalid phone format. Use 09XXXXXXXXX',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
 
-                          if (context.mounted) Navigator.pop(ctx);
+                          final customerProvider = context
+                              .read<CustomerProvider>();
+                          final scaffoldMessenger = ScaffoldMessenger.of(
+                            context,
+                          );
+
+                          try {
+                            await customerProvider.updateCustomer(customerId, {
+                              'name': name,
+                              'contact_number': phone,
+                              'address': address.isNotEmpty ? address : null,
+                              'barangay_id': selectedBarangayId,
+                            });
+                          } on CustomerPhoneAlreadyExistsException {
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'A customer with $phone already exists',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (ctx.mounted) Navigator.pop(ctx);
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -416,7 +551,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           child: const Center(
                             child: Text(
                               'Save Changes',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
@@ -432,7 +571,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, TextInputType type) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint,
+    TextInputType type,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.background,
@@ -447,7 +590,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
           hintText: hint,
           hintStyle: const TextStyle(color: AppColors.mutedForeground),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
         ),
       ),
     );
@@ -501,9 +647,9 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
     final address = _addressController.text.trim();
 
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a name')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter a name')));
       return;
     }
     if (phone.isEmpty) {
@@ -513,8 +659,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       return;
     }
 
-    final phoneRegex = RegExp(r'^09\d{9}$');
-    if (!phoneRegex.hasMatch(phone)) {
+    if (!PhoneNumberUtils.isAcceptedCustomerPhone(phone)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid phone format. Use 09XXXXXXXXX')),
       );
@@ -627,11 +772,19 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                   'address, and barangay), you consent to the collection, '
                   'storage, and use of this information solely for the '
                   'purpose of:\n',
-                  style: TextStyle(fontSize: 13, color: AppColors.foreground, height: 1.5),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.foreground,
+                    height: 1.5,
+                  ),
                 ),
-                _PolicyBullet('Processing and delivering your water refill orders'),
+                _PolicyBullet(
+                  'Processing and delivering your water refill orders',
+                ),
                 SizedBox(height: 6),
-                _PolicyBullet('Contacting you regarding your orders and delivery schedule'),
+                _PolicyBullet(
+                  'Contacting you regarding your orders and delivery schedule',
+                ),
                 SizedBox(height: 6),
                 _PolicyBullet('Improving our service quality'),
                 SizedBox(height: 12),
@@ -640,7 +793,11 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                   'your explicit consent. You may request access, correction, '
                   'or deletion of your personal data at any time by '
                   'contacting us.',
-                  style: TextStyle(fontSize: 13, color: AppColors.foreground, height: 1.5),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.foreground,
+                    height: 1.5,
+                  ),
                 ),
               ],
             ),
@@ -658,10 +815,14 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                 width: 22,
                 height: 22,
                 decoration: BoxDecoration(
-                  color: _privacyConsent ? AppColors.primary : Colors.transparent,
+                  color: _privacyConsent
+                      ? AppColors.primary
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: _privacyConsent ? AppColors.primary : AppColors.mutedForeground,
+                    color: _privacyConsent
+                        ? AppColors.primary
+                        : AppColors.mutedForeground,
                     width: 1.5,
                   ),
                 ),
@@ -675,7 +836,11 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                   'I have read and agree to the Data Privacy Policy. '
                   'I consent to the collection and processing of my '
                   'personal information.',
-                  style: TextStyle(fontSize: 12, color: AppColors.mutedForeground, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.mutedForeground,
+                    height: 1.4,
+                  ),
                 ),
               ),
             ],
@@ -692,9 +857,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
-                color: _privacyConsent
-                    ? AppColors.primary
-                    : AppColors.muted,
+                color: _privacyConsent ? AppColors.primary : AppColors.muted,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
@@ -739,7 +902,11 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
             // Back button to return to privacy consent
             GestureDetector(
               onTap: () => setState(() => _step = 0),
-              child: const Icon(Icons.arrow_back, size: 20, color: AppColors.mutedForeground),
+              child: const Icon(
+                Icons.arrow_back,
+                size: 20,
+                color: AppColors.mutedForeground,
+              ),
             ),
             const SizedBox(width: 12),
             const Text(
@@ -755,29 +922,41 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
         const SizedBox(height: 20),
 
         // Name
-        const Text('Full Name',
-            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+        const Text(
+          'Full Name',
+          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+        ),
         const SizedBox(height: 6),
         _buildTextField(_nameController, 'Full Name', TextInputType.name),
         const SizedBox(height: 16),
 
         // Phone
-        const Text('Phone Number',
-            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+        const Text(
+          'Phone Number',
+          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+        ),
         const SizedBox(height: 6),
         _buildTextField(_phoneController, 'Phone Number', TextInputType.phone),
         const SizedBox(height: 16),
 
         // Address
-        const Text('Full Address',
-            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+        const Text(
+          'Full Address',
+          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+        ),
         const SizedBox(height: 6),
-        _buildTextField(_addressController, 'Full Address', TextInputType.streetAddress),
+        _buildTextField(
+          _addressController,
+          'Full Address',
+          TextInputType.streetAddress,
+        ),
         const SizedBox(height: 16),
 
         // Barangay dropdown
-        const Text('Barangay',
-            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+        const Text(
+          'Barangay',
+          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+        ),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -795,15 +974,25 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                 _barangays.isEmpty
                     ? 'No barangays. Add them in Settings.'
                     : 'Select Barangay...',
-                style: const TextStyle(color: AppColors.mutedForeground, fontSize: 14),
+                style: const TextStyle(
+                  color: AppColors.mutedForeground,
+                  fontSize: 14,
+                ),
               ),
-              items: _barangays.map((b) => DropdownMenuItem<int?>(
-                    value: b['id'] as int,
-                    child: Text(
-                      '${b['name']} (${b['delivery_zone']})',
-                      style: const TextStyle(color: AppColors.foreground, fontSize: 14),
+              items: _barangays
+                  .map(
+                    (b) => DropdownMenuItem<int?>(
+                      value: b['id'] as int,
+                      child: Text(
+                        '${b['name']} (${b['delivery_zone']})',
+                        style: const TextStyle(
+                          color: AppColors.foreground,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
-                  )).toList(),
+                  )
+                  .toList(),
               onChanged: (val) => setState(() => _selectedBarangayId = val),
             ),
           ),
@@ -841,7 +1030,10 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
             GestureDetector(
               onTap: () => Navigator.pop(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.muted,
                   borderRadius: BorderRadius.circular(12),
@@ -862,7 +1054,11 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, TextInputType type) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint,
+    TextInputType type,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.background,
@@ -877,7 +1073,10 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
           hintText: hint,
           hintStyle: const TextStyle(color: AppColors.mutedForeground),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
         ),
       ),
     );
@@ -894,11 +1093,18 @@ class _PolicyBullet extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('  \u2022  ', style: TextStyle(fontSize: 13, color: AppColors.primary)),
+        const Text(
+          '  \u2022  ',
+          style: TextStyle(fontSize: 13, color: AppColors.primary),
+        ),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(fontSize: 13, color: AppColors.foreground, height: 1.4),
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.foreground,
+              height: 1.4,
+            ),
           ),
         ),
       ],

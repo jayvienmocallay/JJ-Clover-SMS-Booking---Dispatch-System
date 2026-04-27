@@ -56,7 +56,10 @@ class CustomerProvider extends ChangeNotifier {
   }
 
   /// Updates customer information
-  Future<void> updateCustomer(int customerId, Map<String, dynamic> customerData) async {
+  Future<void> updateCustomer(
+    int customerId,
+    Map<String, dynamic> customerData,
+  ) async {
     _error = null;
     try {
       await DatabaseHelper.instance.updateCustomer(customerId, customerData);
@@ -64,6 +67,7 @@ class CustomerProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
+      rethrow;
     }
   }
 

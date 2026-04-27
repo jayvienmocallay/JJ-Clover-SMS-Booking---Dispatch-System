@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:telephony/telephony.dart';
 import '../../database_helper.dart';
 import '../../core/utils/phone_number_utils.dart';
+import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
 
 class MessagesScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   String _filter = 'all';
   bool _isLoading = true;
   List<Map<String, dynamic>> _smsMessages = [];
+  Map<String, String> _phoneToName = {};
   String? _selectedPhone;
   final _replyController = TextEditingController();
   Timer? _refreshTimer;
@@ -26,6 +28,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
     super.initState();
     _loadMessages();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadMessages());
+    AppEventBus().onMessageReceived.listen((_) {
+      _loadMessages();
+    });
   }
 
   @override
@@ -37,10 +42,22 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   Future<void> _loadMessages() async {
     try {
-      final messages = await DatabaseHelper.instance.getTodaySmsMessages();
+      final results = await Future.wait([
+        DatabaseHelper.instance.getTodaySmsMessages(),
+        DatabaseHelper.instance.getCustomers(),
+      ]);
+      final messages = results[0];
+      final customers = results[1];
+      final phoneToName = <String, String>{};
+      for (final c in customers) {
+        final phone = c['contact_number'] as String? ?? '';
+        final name = c['name'] as String? ?? '';
+        if (phone.isNotEmpty && name.isNotEmpty) phoneToName[phone] = name;
+      }
       if (mounted) {
         setState(() {
           _smsMessages = messages;
+          _phoneToName = phoneToName;
           _isLoading = false;
         });
       }
@@ -79,12 +96,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   List<Map<String, dynamic>> _getFilteredMessages() {
+    var msgs = _smsMessages;
     if (_filter == 'incoming') {
-      return _smsMessages.where((m) => m['direction'] == 'incoming').toList();
+      msgs = msgs.where((m) => m['direction'] == 'incoming').toList();
     } else if (_filter == 'outgoing') {
-      return _smsMessages.where((m) => m['direction'] == 'outgoing').toList();
+      msgs = msgs.where((m) => m['direction'] == 'outgoing').toList();
     }
-    return _smsMessages;
+    if (_selectedPhone != null) {
+      msgs = msgs.where((m) => m['phone_number'] == _selectedPhone).toList();
+    }
+    return msgs;
   }
 
   List<String> _getUniquePhones() {
@@ -133,11 +154,11 @@ return RefreshIndicator(
           const SizedBox(height: 16),
           Row(
             children: [
-              _FilterTab(label: 'All', isActive: _filter == 'all', onTap: () => setState(() => _filter = 'all')),
+              _FilterTab(label: 'All', isActive: _filter == 'all', onTap: () => setState(() { _filter = 'all'; _selectedPhone = null; })),
               const SizedBox(width: 8),
-              _FilterTab(label: 'Incoming', isActive: _filter == 'incoming', onTap: () => setState(() => _filter = 'incoming')),
+              _FilterTab(label: 'Incoming', isActive: _filter == 'incoming', onTap: () => setState(() { _filter = 'incoming'; _selectedPhone = null; })),
               const SizedBox(width: 8),
-              _FilterTab(label: 'Outgoing', isActive: _filter == 'outgoing', onTap: () => setState(() => _filter = 'outgoing')),
+              _FilterTab(label: 'Outgoing', isActive: _filter == 'outgoing', onTap: () => setState(() { _filter = 'outgoing'; _selectedPhone = null; })),
             ],
           ),
           const SizedBox(height: 16),
@@ -150,6 +171,7 @@ return RefreshIndicator(
                 itemBuilder: (_, i) {
                   final phone = uniquePhones[i];
                   final isSelected = _selectedPhone == phone;
+                  final label = _phoneToName[phone] ?? phone;
                   return GestureDetector(
                     onTap: () => setState(() => _selectedPhone = isSelected ? null : phone),
                     child: Container(
@@ -160,7 +182,7 @@ return RefreshIndicator(
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        phone,
+                        label,
                         style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppColors.mutedForeground),
                       ),
                     ),
@@ -187,9 +209,7 @@ return RefreshIndicator(
               final direction = msg['direction'] as String? ?? 'incoming';
               final sentAt = msg['sent_at'] as String? ?? '';
               final isIncoming = direction == 'incoming';
-
-              if (_selectedPhone != null && phone != _selectedPhone) return const SizedBox.shrink();
-
+              final displayName = _phoneToName[phone];
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
@@ -208,7 +228,17 @@ return RefreshIndicator(
                           children: [
                             Icon(isIncoming ? Icons.call_received : Icons.call_made, size: 16, color: isIncoming ? AppColors.primary : AppColors.statusOperating),
                             const SizedBox(width: 8),
-                            Text(phone, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  displayName ?? phone,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground),
+                                ),
+                                if (displayName != null)
+                                  Text(phone, style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
+                              ],
+                            ),
                           ],
                         ),
                         Text(_formatTime(sentAt), style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
@@ -238,6 +268,8 @@ return RefreshIndicator(
   }
 
   void _showReplyDialog(String phoneNumber) {
+    final name = _phoneToName[phoneNumber];
+    final replyTitle = name != null ? 'Reply to $name' : 'Reply to $phoneNumber';
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.card,
@@ -251,7 +283,7 @@ return RefreshIndicator(
           children: [
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 16),
-            Text('Reply to $phoneNumber', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+            Text(replyTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.foreground)),
             const SizedBox(height: 16),
             Container(
               decoration: BoxDecoration(
