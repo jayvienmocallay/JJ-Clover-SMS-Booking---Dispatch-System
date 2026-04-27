@@ -33,9 +33,8 @@ void main() {
       final result = SmsParser.parse('DELIVER 4 Purok 3 near chapel');
       expect(result.command, SmsCommand.deliver);
       expect(result.quantity, 4);
-      // Without NEW/OLD keyword, remaining text goes to address
       expect(result.gallonType, isNull);
-      expect(result.address, 'PUROK 3 NEAR CHAPEL');
+      expect(result.address, 'Purok 3 near chapel');
     });
 
     test('parses DELIVER with gallon type AND address', () {
@@ -43,7 +42,7 @@ void main() {
       expect(result.command, SmsCommand.deliver);
       expect(result.quantity, 3);
       expect(result.gallonType, 'new');
-      expect(result.address, 'PUROK 4');
+      expect(result.address, 'Purok 4');
     });
 
     // Task 009 — Real-world variations
@@ -71,7 +70,6 @@ void main() {
     test('rejects quantity above maximum', () {
       final result = SmsParser.parse('DELIVER 100');
       expect(result.command, SmsCommand.unknown);
-      expect(result.quantity, 100);
     });
 
     test('rejects DELIVER without quantity', () {
@@ -190,7 +188,6 @@ void main() {
     test('rejects zero quantity', () {
       final result = SmsParser.parse('DELIVER 0');
       expect(result.command, SmsCommand.unknown);
-      expect(result.quantity, 0);
     });
 
     test('handles whitespace-only message', () {

@@ -56,3 +56,15 @@ skills-lock.json
 
 # Audit
 audit/
+.codex/skills/android-architecture-clean
+.codex/skills/android-compose-foundations
+.codex/skills/android-coroutines-flow
+.codex/skills/android-di-hilt
+.codex/skills/android-kotlin-core
+.codex/skills/android-gradle-build-logic
+.codex/skills/android-networking-retrofit-okhttp
+.codex/skills/android-testing-unit
+.codex/skills/dart-best-practices
+.codex/skills/flutter-animations
+.codex/skills/flutter-expert
+.codex/skills/flutter-testing

@@ -18,6 +18,7 @@ import 'system_mode_manager.dart';
 import 'alarm_service.dart';
 import 'sms_source_message_id.dart';
 import 'app_event_bus.dart';
+import 'push_notification_service.dart';
 
 const MethodChannel _nativeSmsBackgroundChannel = MethodChannel(
   'com.jjclover.smartrelay/sms_background',
@@ -301,6 +302,11 @@ class SmsBackgroundService {
         'sent_at': DateTime.now().toIso8601String(),
       });
       AppEventBus().notifyMessageReceived();
+      await PushNotificationService.showMessageNotification(
+        title: 'New Message',
+        body: 'Message from $sender',
+        sender: sender,
+      );
 
       // The background SMS callback can run in a separate Dart isolate, so the
       // singleton's in-memory mode may be stale. Refresh from the shared database
@@ -557,6 +563,11 @@ class SmsBackgroundService {
 
     await _db.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
+    await PushNotificationService.showOrderNotification(
+      title: 'New Delivery Order',
+      body: '${parsed.quantity} gallon(s) from $sender – $deliveryDay',
+      sender: sender,
+    );
 
     // Step 7: Send the appropriate auto-reply based on cutoff status
     if (isStaffAway) {
@@ -626,6 +637,11 @@ class SmsBackgroundService {
 
     await _db.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
+    await PushNotificationService.showOrderNotification(
+      title: 'Walk-in DROP Order',
+      body: '${parsed.quantity} gallon(s) from $sender – walk-in at station',
+      sender: sender,
+    );
 
     // Step 4: Send the mode-appropriate auto-reply
     // (e.g., "Staff will assist" or "Leave bottles at designated area")
@@ -696,6 +712,11 @@ class SmsBackgroundService {
     // Insert the pre-booked order into the database
     await _db.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
+    await PushNotificationService.showOrderNotification(
+      title: 'Pre-book Confirmed',
+      body: '${context.quantity} gallon(s) from $sender – ${context.deliveryDay}',
+      sender: sender,
+    );
 
     // Remove the pending context — each YES is a one-time confirmation
     _preBookPending.remove(normalizedSender);
@@ -841,6 +862,11 @@ class SmsBackgroundService {
     );
     await _db.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
+    await PushNotificationService.showMessageNotification(
+      title: 'Unrecognized Message',
+      body: '$status from $sender',
+      sender: sender,
+    );
     debugPrint('Saved message from $normalizedSender: $status');
   }
 }
