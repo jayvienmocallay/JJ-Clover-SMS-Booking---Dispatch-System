@@ -31,14 +31,15 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   Timer? _refreshTimer;
   bool _isComposing = false;
+  int _lastMessageCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadMessages();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadMessages());
+    _loadMessages(isInitial: true);
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadMessages(isInitial: false));
     AppEventBus().onMessageReceived.listen((_) {
-      _loadMessages();
+      _loadMessages(isInitial: false, isNewMessage: true);
     });
     _messageController.addListener(() {
       setState(() {
@@ -55,7 +56,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _loadMessages() async {
+  Future<void> _loadMessages({bool isInitial = false, bool isNewMessage = false}) async {
     try {
       final messages = await DatabaseHelper.instance.getSmsMessagesForPhone(widget.phoneNumber);
       final sorted = messages.toList()..sort((a, b) {
@@ -64,11 +65,17 @@ class _ChatScreenState extends State<ChatScreen> {
         return timeA.compareTo(timeB);
       });
       if (mounted) {
+        final newMessageCount = sorted.length;
         setState(() {
           _messages = sorted;
           _isLoading = false;
         });
-        _scrollToBottom();
+        if (isInitial) {
+          _scrollToBottom();
+        } else if (isNewMessage || newMessageCount > _lastMessageCount) {
+          _scrollToBottom();
+        }
+        _lastMessageCount = newMessageCount;
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
@@ -103,7 +110,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'status': 'sent',
         'sent_at': DateTime.now().toIso8601String(),
       });
-      await _loadMessages();
+      await _loadMessages(isNewMessage: true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Message sent'), duration: Duration(seconds: 1)),
