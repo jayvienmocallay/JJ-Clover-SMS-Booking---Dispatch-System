@@ -305,6 +305,7 @@ class SmsBackgroundService {
       await PushNotificationService.showMessageNotification(
         title: 'New Message',
         body: 'Message from $sender',
+        sender: sender,
       );
 
       // The background SMS callback can run in a separate Dart isolate, so the
@@ -565,6 +566,7 @@ class SmsBackgroundService {
     await PushNotificationService.showOrderNotification(
       title: 'New Delivery Order',
       body: '${parsed.quantity} gallon(s) from $sender – $deliveryDay',
+      sender: sender,
     );
 
     // Step 7: Send the appropriate auto-reply based on cutoff status
@@ -638,6 +640,7 @@ class SmsBackgroundService {
     await PushNotificationService.showOrderNotification(
       title: 'Walk-in DROP Order',
       body: '${parsed.quantity} gallon(s) from $sender – walk-in at station',
+      sender: sender,
     );
 
     // Step 4: Send the mode-appropriate auto-reply
@@ -712,6 +715,7 @@ class SmsBackgroundService {
     await PushNotificationService.showOrderNotification(
       title: 'Pre-book Confirmed',
       body: '${context.quantity} gallon(s) from $sender – ${context.deliveryDay}',
+      sender: sender,
     );
 
     // Remove the pending context — each YES is a one-time confirmation
@@ -861,6 +865,7 @@ class SmsBackgroundService {
     await PushNotificationService.showMessageNotification(
       title: 'Unrecognized Message',
       body: '$status from $sender',
+      sender: sender,
     );
     debugPrint('Saved message from $normalizedSender: $status');
   }
