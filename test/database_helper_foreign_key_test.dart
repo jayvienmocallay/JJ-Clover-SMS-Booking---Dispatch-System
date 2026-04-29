@@ -180,29 +180,29 @@ void main() {
     },
   );
 
-  test('completion rolls back if a delivery log cannot be created', () async {
-    final helper = DatabaseHelper.instance;
-    final orderId = await helper.insertOrder({
-      'phone_number': '09189998888',
-      'type': 'deliver',
-      'quantity': 1,
-      'gallon_type': 'new',
-      'status': 'in_transit',
-      'created_at': DateTime(2026, 4, 26, 8).toIso8601String(),
-      'is_pre_book': 0,
-    });
+  test(
+    'completion without a customer succeeds without a delivery log',
+    () async {
+      final helper = DatabaseHelper.instance;
+      final orderId = await helper.insertOrder({
+        'phone_number': '09189998888',
+        'type': 'deliver',
+        'quantity': 1,
+        'gallon_type': 'new',
+        'status': 'in_transit',
+        'created_at': DateTime(2026, 4, 26, 8).toIso8601String(),
+        'is_pre_book': 0,
+      });
 
-    await expectLater(
-      helper.updateOrderStatus(orderId, 'completed'),
-      throwsA(isA<StateError>()),
-    );
+      expect(await helper.updateOrderStatus(orderId, 'completed'), 1);
 
-    final order = (await db.query(
-      'orders',
-      where: 'id = ?',
-      whereArgs: [orderId],
-    )).single;
-    expect(order['status'], 'in_transit');
-    expect(await helper.getDeliveryLogsForOrder(orderId), isEmpty);
-  });
+      final order = (await db.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [orderId],
+      )).single;
+      expect(order['status'], 'completed');
+      expect(await helper.getDeliveryLogsForOrder(orderId), isEmpty);
+    },
+  );
 }

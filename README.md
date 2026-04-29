@@ -29,3 +29,19 @@ Run the normal Flutter checks before handing off changes:
 flutter analyze --no-pub
 flutter test --no-pub
 ```
+
+## Android Release Signing
+
+Release builds must use a private Android keystore. Copy
+`android/key.properties.example` to `android/key.properties`, place the keystore
+at the configured `storeFile` path, and replace the placeholder passwords and
+alias. `android/key.properties` and keystore files are ignored by Git.
+
+CI can provide the same values with environment variables:
+
+```sh
+ANDROID_RELEASE_STORE_FILE
+ANDROID_RELEASE_STORE_PASSWORD
+ANDROID_RELEASE_KEY_ALIAS
+ANDROID_RELEASE_KEY_PASSWORD
+```
