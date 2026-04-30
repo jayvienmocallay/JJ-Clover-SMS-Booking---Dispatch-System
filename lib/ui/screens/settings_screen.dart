@@ -528,44 +528,332 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: _barangays.map((b) {
                 final name = b['name'] as String;
                 final zone = b['delivery_zone'] as String? ?? '';
+                final deliveryDay = b['delivery_day'] as String?;
                 final id = b['id'] as int;
-                return Container(
-                  padding: const EdgeInsets.only(
-                      left: 12, top: 6, bottom: 6, right: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '$name ($zone)',
-                        style: const TextStyle(
-                            fontSize: 12, color: AppColors.foreground),
-                      ),
-                      const SizedBox(width: 4),
-                      GestureDetector(
-                        onTap: () => _removeBarangay(id),
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(
-                            color: AppColors.muted,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.close,
-                              size: 12, color: AppColors.mutedForeground),
+
+                // Build display label
+                String label = '$name ($zone';
+                if (zone == 'Zone C' && deliveryDay != null) {
+                  label += ' · $deliveryDay';
+                }
+                label += ')';
+
+                return GestureDetector(
+                  onTap: () => _showEditBarangaySheet(b),
+                  child: Container(
+                    padding: const EdgeInsets.only(
+                        left: 12, top: 6, bottom: 6, right: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.edit, size: 12, color: AppColors.mutedForeground),
+                        const SizedBox(width: 4),
+                        Text(
+                          label,
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.foreground),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () => _removeBarangay(id),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: const BoxDecoration(
+                              color: AppColors.muted,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.close,
+                                size: 12, color: AppColors.mutedForeground),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }).toList(),
             ),
         ],
       ),
+    );
+  }
+
+  /// Shows a bottom sheet to edit a barangay's zone and delivery day
+  void _showEditBarangaySheet(Map<String, dynamic> barangay) {
+    final id = barangay['id'] as int;
+    final name = barangay['name'] as String;
+    String editZone = barangay['delivery_zone'] as String? ?? 'Zone A';
+    String? editDay = barangay['delivery_day'] as String?;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            // Determine which days apply for the selected zone
+            List<String> scheduleDays;
+            if (editZone == 'Zone A') {
+              scheduleDays = ZoneScheduleMap.zoneADays;
+            } else if (editZone == 'Zone B') {
+              scheduleDays = ZoneScheduleMap.zoneBDays;
+            } else if (editZone == 'Zone C' && editDay != null) {
+              scheduleDays = [editDay!];
+            } else {
+              scheduleDays = [];
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Handle
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Title
+                  Text(
+                    'Edit $name',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.foreground,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Zone selector
+                  const Text(
+                    'Delivery Zone',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.mutedForeground,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: DropdownButton<String>(
+                      value: editZone,
+                      isExpanded: true,
+                      underline: const SizedBox(),
+                      dropdownColor: AppColors.card,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.foreground,
+                      ),
+                      items: ['Zone A', 'Zone B', 'Zone C']
+                          .map((z) =>
+                              DropdownMenuItem(value: z, child: Text(z)))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setSheetState(() {
+                            editZone = v;
+                            if (v != 'Zone C') editDay = null;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Day selector (for Zone C)
+                  if (editZone == 'Zone C') ...[
+                    const Text(
+                      'Delivery Day',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: editDay == null
+                              ? AppColors.statusMaintenance
+                              : AppColors.border,
+                        ),
+                      ),
+                      child: DropdownButton<String>(
+                        value: editDay,
+                        isExpanded: true,
+                        underline: const SizedBox(),
+                        dropdownColor: AppColors.card,
+                        hint: const Text(
+                          'Select day...',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.mutedForeground,
+                          ),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.foreground,
+                        ),
+                        items: [
+                          'Monday', 'Tuesday', 'Wednesday',
+                          'Thursday', 'Friday', 'Saturday',
+                        ]
+                            .map((d) =>
+                                DropdownMenuItem(value: d, child: Text(d)))
+                            .toList(),
+                        onChanged: (d) =>
+                            setSheetState(() => editDay = d),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Schedule preview
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Delivery Schedule',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.mutedForeground,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: scheduleDays.map((day) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryLight,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                day,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        if (scheduleDays.isEmpty)
+                          const Text(
+                            'Select a delivery day above',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.mutedForeground,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Save button
+                  SizedBox(
+                    width: double.infinity,
+                    child: GestureDetector(
+                      onTap: () async {
+                        if (editZone == 'Zone C' && editDay == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please select a delivery day for Zone C'),
+                            ),
+                          );
+                          return;
+                        }
+
+                        await DatabaseHelper.instance.updateBarangay(id, {
+                          'name': name,
+                          'delivery_zone': editZone,
+                          'delivery_day': editZone == 'Zone C' ? editDay : null,
+                        });
+
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        await _loadData();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$name updated')),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'Save Changes',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

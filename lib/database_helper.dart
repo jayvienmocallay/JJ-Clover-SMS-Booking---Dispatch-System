@@ -651,6 +651,66 @@ class DatabaseHelper {
     return await db.delete('barangays', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Update a barangay's zone and delivery day.
+  /// Also re-creates schedules for all customers in this barangay
+  /// so their delivery days match the new zone configuration.
+  Future<int> updateBarangay(
+    int id,
+    Map<String, dynamic> data,
+  ) async {
+    final db = await instance.database;
+    final updated = await db.update(
+      'barangays',
+      data,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    // Re-create schedules for all customers in this barangay
+    final zone = data['delivery_zone'] as String?;
+    final barangayName = data['name'] as String?;
+    final barangayDeliveryDay = data['delivery_day'] as String?;
+    if (zone == null) return updated;
+
+    List<String> deliveryDays;
+    if (zone == 'Zone C' && barangayDeliveryDay != null) {
+      deliveryDays = [barangayDeliveryDay];
+    } else {
+      deliveryDays = ZoneScheduleMap.getDaysForZone(
+        zone,
+        barangayName: barangayName,
+      );
+    }
+
+    // Find all customers in this barangay
+    final customers = await db.query(
+      'customers',
+      columns: ['id'],
+      where: 'barangay_id = ?',
+      whereArgs: [id],
+    );
+
+    for (final customer in customers) {
+      final customerId = customer['id'] as int;
+      // Delete old schedules
+      await db.delete(
+        'schedules',
+        where: 'customer_id = ?',
+        whereArgs: [customerId],
+      );
+      // Re-create with new days
+      for (final day in deliveryDays) {
+        await db.insert('schedules', {
+          'customer_id': customerId,
+          'delivery_day': day,
+          'status': 'active',
+        });
+      }
+    }
+
+    return updated;
+  }
+
   /// Delete a customer by ID
   Future<int> deleteCustomer(int id) async {
     final db = await instance.database;

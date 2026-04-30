@@ -175,7 +175,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final cellWidth = (screenWidth - 32 - 12) / 2;
     // Content needs ~100px: 12(pad)*2 + 20(icon) + 4(gap) + 32(value) + 16(label)
-    final minHeight = 112.0;
+    const minHeight = 112.0;
     final cellHeight = cellWidth / 1.4 < minHeight ? minHeight : cellWidth / 1.4;
     final aspectRatio = cellWidth / cellHeight;
 

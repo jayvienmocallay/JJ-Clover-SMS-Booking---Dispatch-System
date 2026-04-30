@@ -54,7 +54,7 @@ class OrderProvider extends ChangeNotifier {
 
     try {
       final db = DatabaseHelper.instance;
-      _todayOrders = await db.getTodayOrders();
+      _todayOrders = await db.getOrders();
     } catch (e) {
       debugPrint('OrderProvider.loadOrders error: $e');
       _error = e.toString();
