@@ -170,58 +170,29 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             ),
         ],
       ),
-      // Bottom navigation bar
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.card,
-          border: Border(top: BorderSide(color: AppColors.border)),
+      // Bottom navigation bar — uses Flutter's built-in widget for
+      // reliable safe area handling and no overflow issues.
+      bottomNavigationBar: Theme(
+        data: Theme.of(context).copyWith(
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
         ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(_navItems.length, (i) {
-                final item = _navItems[i];
-                final isActive = _currentIndex == i;
-                return GestureDetector(
-                  onTap: () => setState(() => _currentIndex = i),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          item.icon,
-                          size: 22,
-                          color: isActive
-                              ? AppColors.primary
-                              : AppColors.mutedForeground,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: isActive
-                                ? FontWeight.w600
-                                : FontWeight.w500,
-                            color: isActive
-                                ? AppColors.primary
-                                : AppColors.mutedForeground,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (i) => setState(() => _currentIndex = i),
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: AppColors.card,
+          selectedItemColor: AppColors.primary,
+          unselectedItemColor: AppColors.mutedForeground,
+          selectedFontSize: 11,
+          unselectedFontSize: 11,
+          iconSize: 22,
+          items: _navItems
+              .map((item) => BottomNavigationBarItem(
+                    icon: Icon(item.icon),
+                    label: item.label,
+                  ))
+              .toList(),
         ),
       ),
     );

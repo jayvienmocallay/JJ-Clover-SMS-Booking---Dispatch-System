@@ -30,6 +30,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   Timer? _refreshTimer;
+  StreamSubscription? _messageSub;
   bool _isComposing = false;
   int _lastMessageCount = 0;
   final _expandedTimestamps = <String>{};
@@ -39,7 +40,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _loadMessages(isInitial: true);
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadMessages(isInitial: false));
-    AppEventBus().onMessageReceived.listen((_) {
+    _messageSub = AppEventBus().onMessageReceived.listen((_) {
       _loadMessages(isInitial: false, isNewMessage: true);
     });
     _messageController.addListener(() {
@@ -52,6 +53,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _messageSub?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -61,8 +63,8 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final messages = await DatabaseHelper.instance.getSmsMessagesForPhone(widget.phoneNumber);
       final sorted = messages.toList()..sort((a, b) {
-        final timeA = DateTime.parse(a['sent_at'] as String? ?? '');
-        final timeB = DateTime.parse(b['sent_at'] as String? ?? '');
+        final timeA = DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime(2000);
+        final timeB = DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime(2000);
         return timeA.compareTo(timeB);
       });
       if (mounted) {

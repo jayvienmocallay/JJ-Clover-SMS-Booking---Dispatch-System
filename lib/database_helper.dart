@@ -1137,10 +1137,11 @@ class DatabaseHelper {
     int? limit,
   }) async {
     final db = await instance.database;
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
     return await db.query(
       'sms_messages',
       where: 'phone_number = ?',
-      whereArgs: [phoneNumber],
+      whereArgs: [normalizedPhone],
       orderBy: 'sent_at DESC',
       limit: limit,
     );
@@ -1175,8 +1176,9 @@ class DatabaseHelper {
   ) async {
     final db = await instance.database;
     final normalizedData = _normalizeCustomerData(customerData);
+    late final int updated;
     try {
-      return await db.update(
+      updated = await db.update(
         'customers',
         normalizedData,
         where: 'id = ?',
@@ -1190,6 +1192,46 @@ class DatabaseHelper {
       }
       rethrow;
     }
+
+    // Re-create schedules if barangay changed so zone validation
+    // uses the new barangay's delivery days instead of stale ones.
+    final barangayId = normalizedData['barangay_id'] as int?;
+    if (barangayId != null) {
+      final barangay = await getBarangayById(barangayId);
+      if (barangay != null) {
+        // Delete old schedules
+        await db.delete(
+          'schedules',
+          where: 'customer_id = ?',
+          whereArgs: [customerId],
+        );
+
+        // Re-create based on new barangay's zone
+        final zone = barangay['delivery_zone'] as String;
+        final barangayName = barangay['name'] as String;
+        final barangayDeliveryDay = barangay['delivery_day'] as String?;
+
+        List<String> deliveryDays;
+        if (zone == 'Zone C' && barangayDeliveryDay != null) {
+          deliveryDays = [barangayDeliveryDay];
+        } else {
+          deliveryDays = ZoneScheduleMap.getDaysForZone(
+            zone,
+            barangayName: barangayName,
+          );
+        }
+
+        for (final day in deliveryDays) {
+          await db.insert('schedules', {
+            'customer_id': customerId,
+            'delivery_day': day,
+            'status': 'active',
+          });
+        }
+      }
+    }
+
+    return updated;
   }
 
   // App settings CRUD operations

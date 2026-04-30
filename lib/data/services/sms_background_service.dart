@@ -612,6 +612,14 @@ class SmsBackgroundService {
     // Step 1: Mode gate — check if drop-offs are accepted
     // Only MAINTENANCE mode rejects drop-offs; all others allow them
     if (!_modeManager.canAcceptDrop()) {
+      await _saveUnrecognizedMessage(
+        sender,
+        'DROP ${parsed.quantity ?? 0} - Rejected: ${_modeManager.getDropReply()}',
+        'rejected',
+        sourceMessageId: sourceMessageId,
+        quantity: parsed.quantity ?? 0,
+        gallonType: _mapGallonType(parsed.gallonType),
+      );
       await _sendReply(
         sender,
         _modeManager.getDropReply(),
@@ -650,7 +658,7 @@ class SmsBackgroundService {
 
     // Task 012 — Trigger loud alarm for walk-in customer
     await AlarmService.instance.trigger(
-      phone: sender,
+      phone: normalizedSender,
       qty: parsed.quantity ?? 0,
     );
   }
@@ -683,6 +691,7 @@ class SmsBackgroundService {
     // Check if pre-book has expired
     if (context.isExpired) {
       _preBookPending.remove(normalizedSender);
+      await _savePreBooksToDb();
       await _sendReply(
         sender,
         'Pre-book offer has expired. Please send a new DELIVER command.',
@@ -785,7 +794,7 @@ class SmsBackgroundService {
   /// Used when an order arrives after the cutoff time — the order is queued
   /// for the next scheduled day instead of today.
   /// Searches forward through the week starting from tomorrow.
-  String _findNextAvailableDay(List<Schedule> schedules, String currentDay) {
+  String? _findNextAvailableDay(List<Schedule> schedules, String currentDay) {
     // Extract all allowed delivery days from the customer's schedules
     final allowedDays = schedules.map((s) => s.deliveryDay).toSet();
 
@@ -802,8 +811,8 @@ class SmsBackgroundService {
       }
     }
 
-    // Fallback — shouldn't reach here if customer has at least one schedule
-    return currentDay;
+    // No valid schedule found
+    return null;
   }
 
   /// Maps a gallon type string from the SMS parser to the [GallonType] enum.
