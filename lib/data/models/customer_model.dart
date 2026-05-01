@@ -1,5 +1,6 @@
 // Task 003 — Customer data model (core entity)
 // Task 005 — Added address field per FR-1.2 in SRS
+// Task 020 — Added RA 10173 consent metadata for audit trail
 /// Represents a registered customer of the water refilling station.
 ///
 /// Each customer belongs to a barangay (which determines their delivery zone)
@@ -27,6 +28,18 @@ class Customer {
   /// Delivery zone derived from the barangay (e.g., 'Zone A', 'Zone B', 'Zone C')
   final String deliveryZone;
 
+  /// Whether the customer has consented to data collection per RA 10173.
+  final bool consentGiven;
+
+  /// ISO8601 timestamp at the moment the customer gave consent.
+  final String? consentTimestamp;
+
+  /// How consent was captured: 'app_ui' (staff form) or 'sms' (SMS flow).
+  final String? consentChannel;
+
+  /// Version string of the privacy notice the customer agreed to.
+  final String? consentVersion;
+
   Customer({
     this.id,
     required this.name,
@@ -35,6 +48,10 @@ class Customer {
     this.barangayId,
     required this.barangay,
     required this.deliveryZone,
+    this.consentGiven = false,
+    this.consentTimestamp,
+    this.consentChannel,
+    this.consentVersion,
   });
 
   /// Creates a [Customer] instance from a database row map.
@@ -48,6 +65,10 @@ class Customer {
       barangayId: map['barangay_id'] as int?,
       barangay: map['barangay'] as String? ?? '',
       deliveryZone: map['delivery_zone'] as String? ?? '',
+      consentGiven: (map['consent_given'] as int? ?? 0) == 1,
+      consentTimestamp: map['consent_timestamp'] as String?,
+      consentChannel: map['consent_channel'] as String?,
+      consentVersion: map['consent_version'] as String?,
     );
   }
 
@@ -61,6 +82,10 @@ class Customer {
       barangayId: map['barangay_id'] as int?,
       barangay: '',
       deliveryZone: '',
+      consentGiven: (map['consent_given'] as int? ?? 0) == 1,
+      consentTimestamp: map['consent_timestamp'] as String?,
+      consentChannel: map['consent_channel'] as String?,
+      consentVersion: map['consent_version'] as String?,
     );
   }
 
@@ -73,6 +98,10 @@ class Customer {
       'contact_number': contactNumber,
       if (address != null) 'address': address,
       'barangay_id': barangayId,
+      'consent_given': consentGiven ? 1 : 0,
+      if (consentTimestamp != null) 'consent_timestamp': consentTimestamp,
+      if (consentChannel != null) 'consent_channel': consentChannel,
+      if (consentVersion != null) 'consent_version': consentVersion,
     };
   }
 }
