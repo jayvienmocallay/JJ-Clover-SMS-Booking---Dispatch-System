@@ -33,7 +33,10 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
   static bool _schemaIntegrityChecked = false;
-  static const int databaseVersion = 6;
+  // Task 020 — v7 adds RA 10173 consent metadata on `customers` and the
+  // `pending_sms_actions` table that tracks multi-step SMS flows
+  // (registration & DELETEDATA confirmation).
+  static const int databaseVersion = 7;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
   static const Duration _resubmitCooldownAfter = Duration(hours: 1);
   final DatabaseEncryptionKeyRepository _encryptionKeyRepository =
@@ -124,7 +127,9 @@ class DatabaseHelper {
 
     // Task 005 — 2. Customers Table (references barangays)
     // Stores registered customer profiles per FR-1.2 in SRS:
-    // Phone Number, Name, Full Address, and Barangay (Zone)
+    // Phone Number, Name, Full Address, and Barangay (Zone).
+    // Task 020 — Consent columns provide an RA 10173 audit trail for the
+    // moment, channel, and notice version the customer agreed to.
     await db.execute('''
       CREATE TABLE customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,6 +137,10 @@ class DatabaseHelper {
         contact_number TEXT NOT NULL,
         address TEXT,
         barangay_id INTEGER NOT NULL,
+        consent_given INTEGER NOT NULL DEFAULT 0,
+        consent_timestamp TEXT,
+        consent_channel TEXT,
+        consent_version TEXT,
         FOREIGN KEY (barangay_id) REFERENCES barangays (id)
       )
     ''');
@@ -222,6 +231,7 @@ class DatabaseHelper {
     await _createSmsMessagesTable(db);
     await _createIncomingSmsReceiptsTable(db);
     await _createAppSettingsTable(db);
+    await _createPendingSmsActionsTable(db);
 
     // Task 006 — Seed default data in order: barangays first, then customers, then schedules.
     // Order matters because of foreign key dependencies:
@@ -345,11 +355,26 @@ class DatabaseHelper {
       }
     }
 
+    if (oldVersion < 7) {
+      // Task 020 — RA 10173 consent audit columns and SMS multi-step flow state.
+      await _addColumnIfMissing(
+        db,
+        'customers',
+        'consent_given',
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+      await _addColumnIfMissing(db, 'customers', 'consent_timestamp', 'TEXT');
+      await _addColumnIfMissing(db, 'customers', 'consent_channel', 'TEXT');
+      await _addColumnIfMissing(db, 'customers', 'consent_version', 'TEXT');
+      await _createPendingSmsActionsTable(db);
+    }
+
     // Create sms_messages table if not exists (for old databases)
     await _createSmsMessagesTable(db);
     await _createIncomingSmsReceiptsTable(db);
     await _createSourceMessageIndexes(db);
     await _createCustomerContactNumberIndex(db);
+    await _createPendingSmsActionsTable(db);
   }
 
   Future<void> _createAppSettingsTable(Database db) async {
@@ -511,6 +536,17 @@ class DatabaseHelper {
     await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
     await _createSourceMessageIndexes(db);
     await _addColumnIfMissing(db, 'barangays', 'delivery_day', 'TEXT');
+    // Task 020 — RA 10173 consent metadata; idempotent on existing v6 DBs.
+    await _addColumnIfMissing(
+      db,
+      'customers',
+      'consent_given',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(db, 'customers', 'consent_timestamp', 'TEXT');
+    await _addColumnIfMissing(db, 'customers', 'consent_channel', 'TEXT');
+    await _addColumnIfMissing(db, 'customers', 'consent_version', 'TEXT');
+    await _createPendingSmsActionsTable(db);
     for (final entry in ZoneScheduleMap.zoneCBarangayDays.entries) {
       await db.rawUpdate(
         'UPDATE barangays SET delivery_day = ? WHERE name = ? AND delivery_day IS NULL',
@@ -519,6 +555,33 @@ class DatabaseHelper {
     }
 
     _schemaIntegrityChecked = true;
+  }
+
+  // Task 020 — Tracks in-progress SMS flows (registration, delete-confirm)
+  // for unregistered or registered numbers. One row per phone number; rows
+  // expire after [SmsRegistrationCopy.pendingActionTtl] and are pruned at
+  // each interaction. Survives process restarts so a customer can finish
+  // a multi-step flow even if the device reboots between SMS messages.
+  Future<void> _createPendingSmsActionsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pending_sms_actions (
+        phone_number TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        step TEXT NOT NULL,
+        name TEXT,
+        barangay_id INTEGER,
+        address TEXT,
+        consent_version TEXT,
+        consent_given_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (barangay_id) REFERENCES barangays (id) ON DELETE SET NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_pending_sms_updated '
+      'ON pending_sms_actions(updated_at)',
+    );
   }
 
   Future<void> _addColumnIfMissing(
@@ -649,6 +712,66 @@ class DatabaseHelper {
   Future<int> deleteBarangay(int id) async {
     final db = await instance.database;
     return await db.delete('barangays', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Update a barangay's zone and delivery day.
+  /// Also re-creates schedules for all customers in this barangay
+  /// so their delivery days match the new zone configuration.
+  Future<int> updateBarangay(
+    int id,
+    Map<String, dynamic> data,
+  ) async {
+    final db = await instance.database;
+    final updated = await db.update(
+      'barangays',
+      data,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    // Re-create schedules for all customers in this barangay
+    final zone = data['delivery_zone'] as String?;
+    final barangayName = data['name'] as String?;
+    final barangayDeliveryDay = data['delivery_day'] as String?;
+    if (zone == null) return updated;
+
+    List<String> deliveryDays;
+    if (zone == 'Zone C' && barangayDeliveryDay != null) {
+      deliveryDays = [barangayDeliveryDay];
+    } else {
+      deliveryDays = ZoneScheduleMap.getDaysForZone(
+        zone,
+        barangayName: barangayName,
+      );
+    }
+
+    // Find all customers in this barangay
+    final customers = await db.query(
+      'customers',
+      columns: ['id'],
+      where: 'barangay_id = ?',
+      whereArgs: [id],
+    );
+
+    for (final customer in customers) {
+      final customerId = customer['id'] as int;
+      // Delete old schedules
+      await db.delete(
+        'schedules',
+        where: 'customer_id = ?',
+        whereArgs: [customerId],
+      );
+      // Re-create with new days
+      for (final day in deliveryDays) {
+        await db.insert('schedules', {
+          'customer_id': customerId,
+          'delivery_day': day,
+          'status': 'active',
+        });
+      }
+    }
+
+    return updated;
   }
 
   /// Delete a customer by ID
@@ -1137,10 +1260,11 @@ class DatabaseHelper {
     int? limit,
   }) async {
     final db = await instance.database;
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
     return await db.query(
       'sms_messages',
       where: 'phone_number = ?',
-      whereArgs: [phoneNumber],
+      whereArgs: [normalizedPhone],
       orderBy: 'sent_at DESC',
       limit: limit,
     );
@@ -1175,8 +1299,9 @@ class DatabaseHelper {
   ) async {
     final db = await instance.database;
     final normalizedData = _normalizeCustomerData(customerData);
+    late final int updated;
     try {
-      return await db.update(
+      updated = await db.update(
         'customers',
         normalizedData,
         where: 'id = ?',
@@ -1190,6 +1315,46 @@ class DatabaseHelper {
       }
       rethrow;
     }
+
+    // Re-create schedules if barangay changed so zone validation
+    // uses the new barangay's delivery days instead of stale ones.
+    final barangayId = normalizedData['barangay_id'] as int?;
+    if (barangayId != null) {
+      final barangay = await getBarangayById(barangayId);
+      if (barangay != null) {
+        // Delete old schedules
+        await db.delete(
+          'schedules',
+          where: 'customer_id = ?',
+          whereArgs: [customerId],
+        );
+
+        // Re-create based on new barangay's zone
+        final zone = barangay['delivery_zone'] as String;
+        final barangayName = barangay['name'] as String;
+        final barangayDeliveryDay = barangay['delivery_day'] as String?;
+
+        List<String> deliveryDays;
+        if (zone == 'Zone C' && barangayDeliveryDay != null) {
+          deliveryDays = [barangayDeliveryDay];
+        } else {
+          deliveryDays = ZoneScheduleMap.getDaysForZone(
+            zone,
+            barangayName: barangayName,
+          );
+        }
+
+        for (final day in deliveryDays) {
+          await db.insert('schedules', {
+            'customer_id': customerId,
+            'delivery_day': day,
+            'status': 'active',
+          });
+        }
+      }
+    }
+
+    return updated;
   }
 
   // App settings CRUD operations
@@ -1371,6 +1536,185 @@ class DatabaseHelper {
     if (value == null) return null;
     final stringValue = value.toString();
     return stringValue.isEmpty ? null : stringValue;
+  }
+
+  // Task 020 — Pending SMS actions (registration & delete-confirm flows)
+
+  /// Returns the pending action row for [phoneNumber], or null if none.
+  /// Expired rows (older than [maxAge]) are pruned and treated as null.
+  Future<Map<String, dynamic>?> getPendingSmsAction(
+    String phoneNumber, {
+    Duration maxAge = const Duration(minutes: 30),
+  }) async {
+    final db = await instance.database;
+    final normalized = PhoneNumberUtils.normalize(phoneNumber);
+    await prunePendingSmsActions(maxAge: maxAge);
+    final rows = await db.query(
+      'pending_sms_actions',
+      where: 'phone_number = ?',
+      whereArgs: [normalized],
+      limit: 1,
+    );
+    return rows.isNotEmpty ? rows.first : null;
+  }
+
+  /// Inserts or replaces the pending SMS action for [phoneNumber].
+  /// `created_at` is preserved if the row already exists; `updated_at`
+  /// always advances so prune sweeps can drop stale flows.
+  Future<void> upsertPendingSmsAction({
+    required String phoneNumber,
+    required String action,
+    required String step,
+    String? name,
+    int? barangayId,
+    String? address,
+    String? consentVersion,
+    String? consentGivenAt,
+  }) async {
+    final db = await instance.database;
+    final normalized = PhoneNumberUtils.normalize(phoneNumber);
+    final nowIso = DateTime.now().toIso8601String();
+
+    final existing = await db.query(
+      'pending_sms_actions',
+      columns: ['created_at'],
+      where: 'phone_number = ?',
+      whereArgs: [normalized],
+      limit: 1,
+    );
+    final createdAt =
+        existing.isNotEmpty ? (existing.first['created_at'] as String) : nowIso;
+
+    await db.insert(
+      'pending_sms_actions',
+      {
+        'phone_number': normalized,
+        'action': action,
+        'step': step,
+        'name': name,
+        'barangay_id': barangayId,
+        'address': address,
+        'consent_version': consentVersion,
+        'consent_given_at': consentGivenAt,
+        'created_at': createdAt,
+        'updated_at': nowIso,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Removes the pending action for [phoneNumber] (no-op if none).
+  Future<void> deletePendingSmsAction(String phoneNumber) async {
+    final db = await instance.database;
+    final normalized = PhoneNumberUtils.normalize(phoneNumber);
+    await db.delete(
+      'pending_sms_actions',
+      where: 'phone_number = ?',
+      whereArgs: [normalized],
+    );
+  }
+
+  /// Drops pending action rows whose `updated_at` is older than [maxAge].
+  /// Called automatically by [getPendingSmsAction]; safe to invoke directly.
+  Future<void> prunePendingSmsActions({
+    Duration maxAge = const Duration(minutes: 30),
+  }) async {
+    final db = await instance.database;
+    final cutoff = DateTime.now().subtract(maxAge).toIso8601String();
+    await db.delete(
+      'pending_sms_actions',
+      where: 'updated_at < ?',
+      whereArgs: [cutoff],
+    );
+  }
+
+  /// Looks up a barangay row by name (case-insensitive). Used by the SMS
+  /// registration flow to validate the customer-supplied barangay.
+  Future<Map<String, dynamic>?> getBarangayByName(String name) async {
+    final db = await instance.database;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return null;
+    final rows = await db.query(
+      'barangays',
+      where: 'LOWER(name) = LOWER(?)',
+      whereArgs: [trimmed],
+      limit: 1,
+    );
+    return rows.isNotEmpty ? rows.first : null;
+  }
+
+  /// RA 10173 right-to-erasure: permanently removes a customer and the
+  /// personal data tied to their phone number. Historical orders are kept
+  /// (for inventory accountability) but are anonymized — `customer_id` is
+  /// nulled out and `phone_number` / `address` are cleared. Schedules and
+  /// delivery_logs cascade-delete via FK. SMS history, in-flight pending
+  /// flows, and incoming-SMS receipts for this number are also removed.
+  ///
+  /// Returns true if a customer record was deleted, false if none existed
+  /// (the SMS history / receipts / pending rows are still cleared so an
+  /// unregistered sender can also opt out cleanly).
+  Future<bool> deleteCustomerByPhone(String phoneNumber) async {
+    final db = await instance.database;
+    final normalized = PhoneNumberUtils.normalize(phoneNumber);
+
+    return await db.transaction<bool>((txn) async {
+      final rows = await txn.query(
+        'customers',
+        columns: ['id'],
+        where: 'contact_number = ?',
+        whereArgs: [normalized],
+        limit: 1,
+      );
+
+      var deletedCustomer = false;
+      if (rows.isNotEmpty) {
+        final id = rows.first['id'] as int;
+        // Anonymize historical orders so aggregate stats survive but no
+        // personal identifiers remain (RA 10173 erasure of personal data).
+        await txn.update(
+          'orders',
+          {
+            'customer_id': null,
+            'phone_number': '',
+            'address': null,
+          },
+          where: 'customer_id = ? OR phone_number = ?',
+          whereArgs: [id, normalized],
+        );
+        await txn.delete('customers', where: 'id = ?', whereArgs: [id]);
+        deletedCustomer = true;
+      } else {
+        // Even with no customer row, scrub any orders that referenced the
+        // phone (walk-in DROP records etc.) so erasure is complete.
+        await txn.update(
+          'orders',
+          {
+            'phone_number': '',
+            'address': null,
+          },
+          where: 'phone_number = ?',
+          whereArgs: [normalized],
+        );
+      }
+
+      await txn.delete(
+        'sms_messages',
+        where: 'phone_number = ?',
+        whereArgs: [normalized],
+      );
+      await txn.delete(
+        'incoming_sms_receipts',
+        where: 'phone_number = ?',
+        whereArgs: [normalized],
+      );
+      await txn.delete(
+        'pending_sms_actions',
+        where: 'phone_number = ?',
+        whereArgs: [normalized],
+      );
+
+      return deletedCustomer;
+    });
   }
 
   Future<int> getCutoffHour() async {

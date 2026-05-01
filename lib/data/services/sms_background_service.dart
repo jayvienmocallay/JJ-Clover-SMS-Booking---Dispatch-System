@@ -13,6 +13,7 @@ import '../models/customer_model.dart';
 import '../models/schedule_model.dart';
 import '../models/order_model.dart';
 import 'sms_parser.dart';
+import 'sms_registration_copy.dart';
 import 'zone_validator.dart';
 import 'system_mode_manager.dart';
 import 'alarm_service.dart';
@@ -316,6 +317,21 @@ class SmsBackgroundService {
       // Parse the raw message into a structured command object
       final parsed = SmsParser.parse(message);
 
+      // Task 020 — RA 10173 self-registration & data-rights (MYDATA /
+      // DELETEDATA / OPTOUT / CONFIRM DELETE) take precedence over the
+      // delivery commands so a customer can manage their data even when
+      // a registration or deletion flow is in progress.
+      final handledByPrivacyFlow = await _handlePrivacyAndRegistration(
+        sender: sender,
+        parsed: parsed,
+        sourceMessageId: effectiveSourceMessageId,
+        smsSender: smsSender,
+      );
+      if (handledByPrivacyFlow) {
+        await _db.completeIncomingSmsReceipt(effectiveSourceMessageId);
+        return;
+      }
+
       // Route to the appropriate handler based on the parsed command type
       switch (parsed.command) {
         case SmsCommand.deliver:
@@ -344,6 +360,19 @@ class SmsBackgroundService {
         case SmsCommand.status:
           await _handleStatus(sender, smsSender: smsSender);
           break;
+        // Registration / privacy commands are handled above by
+        // _handlePrivacyAndRegistration; reaching them here means the
+        // sender is registered AND not in an active flow, so we treat
+        // them as misuse and reply with help text.
+        case SmsCommand.register:
+        case SmsCommand.agree:
+        case SmsCommand.stop:
+        case SmsCommand.barangay:
+        case SmsCommand.address:
+        case SmsCommand.myData:
+        case SmsCommand.deleteData:
+        case SmsCommand.confirmDelete:
+        case SmsCommand.optOut:
         case SmsCommand.unknown:
           // Save unrecognized message as an order record for visibility in Messages tab
           await _saveUnrecognizedMessage(
@@ -389,6 +418,364 @@ class SmsBackgroundService {
       sourceMessageId: sourceMessageId,
       smsSender: smsSender,
     );
+  }
+
+  /// Task 020 — RA 10173 self-registration & data-rights state machine.
+  ///
+  /// Returns `true` if the message was fully handled (registration step,
+  /// MYDATA / DELETEDATA / OPTOUT / CONFIRM DELETE / STOP, or an in-progress
+  /// flow nudge). When `false`, the caller falls through to the normal
+  /// command switch (DELIVER / DROP / YES / STATUS / unknown).
+  Future<bool> _handlePrivacyAndRegistration({
+    required String sender,
+    required ParsedSms parsed,
+    required String sourceMessageId,
+    Telephony? smsSender,
+  }) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+    final pending = await _db.getPendingSmsAction(
+      normalizedSender,
+      maxAge: SmsRegistrationCopy.pendingActionTtl,
+    );
+    final customerData = await _db.getCustomerByPhone(normalizedSender);
+
+    // --- Right to access (MYDATA) ---
+    if (parsed.command == SmsCommand.myData) {
+      if (customerData == null) {
+        await _sendReply(
+          sender,
+          SmsRegistrationCopy.noDataOnFile,
+          smsSender: smsSender,
+        );
+        return true;
+      }
+      final joined =
+          await _db.getCustomerWithBarangayByPhone(normalizedSender);
+      final c = joined != null
+          ? Customer.fromMap(joined)
+          : Customer.fromSimple(customerData);
+      await _sendReply(
+        sender,
+        SmsRegistrationCopy.myData(
+          name: c.name,
+          phone: c.contactNumber,
+          barangay: c.barangay,
+          address: c.address,
+        ),
+        smsSender: smsSender,
+      );
+      return true;
+    }
+
+    // --- Right to erasure / right to object — request phase ---
+    if (parsed.command == SmsCommand.deleteData ||
+        parsed.command == SmsCommand.optOut) {
+      // Treat OPTOUT identically to DELETEDATA for an unambiguous audit trail.
+      if (customerData == null && pending == null) {
+        await _sendReply(
+          sender,
+          SmsRegistrationCopy.noDataOnFile,
+          smsSender: smsSender,
+        );
+        return true;
+      }
+      await _db.upsertPendingSmsAction(
+        phoneNumber: normalizedSender,
+        action: 'delete',
+        step: 'awaiting_confirm',
+      );
+      await _sendReply(
+        sender,
+        SmsRegistrationCopy.deleteWarning,
+        smsSender: smsSender,
+      );
+      return true;
+    }
+
+    // --- Right to erasure — confirmation phase ---
+    if (parsed.command == SmsCommand.confirmDelete) {
+      if (pending == null || pending['action'] != 'delete') {
+        await _sendReply(
+          sender,
+          SmsRegistrationCopy.confirmDeleteWithoutRequest,
+          smsSender: smsSender,
+        );
+        return true;
+      }
+      await _db.deleteCustomerByPhone(normalizedSender);
+      // deleteCustomerByPhone already drops the pending row, but call
+      // explicitly so a no-customer opt-out still clears the pending state.
+      await _db.deletePendingSmsAction(normalizedSender);
+      AppEventBus().notifyOrderReceived();
+      await _sendReply(
+        sender,
+        SmsRegistrationCopy.deleteComplete,
+        smsSender: smsSender,
+      );
+      return true;
+    }
+
+    // --- STOP cancels any in-flight registration or delete-confirm flow ---
+    if (parsed.command == SmsCommand.stop && pending != null) {
+      final action = pending['action'] as String?;
+      await _db.deletePendingSmsAction(normalizedSender);
+      await _sendReply(
+        sender,
+        action == 'delete'
+            ? SmsRegistrationCopy.deleteCancelled
+            : SmsRegistrationCopy.registrationCancelled,
+        smsSender: smsSender,
+      );
+      return true;
+    }
+
+    // A pending delete that gets ANYTHING other than CONFIRM DELETE / STOP /
+    // privacy commands counts as a cancellation per the warning message.
+    if (pending != null && pending['action'] == 'delete') {
+      await _db.deletePendingSmsAction(normalizedSender);
+      await _sendReply(
+        sender,
+        SmsRegistrationCopy.deleteCancelled,
+        smsSender: smsSender,
+      );
+      return true;
+    }
+
+    // --- REGISTER kicks off (or restarts) the consent flow ---
+    if (parsed.command == SmsCommand.register) {
+      if (customerData != null) {
+        await _sendReply(
+          sender,
+          SmsRegistrationCopy.alreadyRegistered,
+          smsSender: smsSender,
+        );
+        return true;
+      }
+      final name = parsed.name?.trim();
+      if (name == null || name.isEmpty) {
+        await _sendReply(
+          sender,
+          SmsRegistrationCopy.registerHelp,
+          smsSender: smsSender,
+        );
+        return true;
+      }
+      await _db.upsertPendingSmsAction(
+        phoneNumber: normalizedSender,
+        action: 'register',
+        step: 'awaiting_consent',
+        name: name,
+      );
+      await _sendReply(
+        sender,
+        SmsRegistrationCopy.registrationConsent(name: name),
+        smsSender: smsSender,
+      );
+      return true;
+    }
+
+    // --- Continue an in-progress registration flow ---
+    if (pending != null &&
+        pending['action'] == 'register' &&
+        customerData == null) {
+      return await _continueRegistration(
+        sender: sender,
+        normalizedSender: normalizedSender,
+        parsed: parsed,
+        pending: pending,
+        sourceMessageId: sourceMessageId,
+        smsSender: smsSender,
+      );
+    }
+
+    // --- AGREE / BARANGAY / ADDRESS without an active flow ---
+    if (parsed.command == SmsCommand.agree ||
+        parsed.command == SmsCommand.barangay ||
+        parsed.command == SmsCommand.address) {
+      await _sendReply(
+        sender,
+        SmsRegistrationCopy.noPendingRegistration,
+        smsSender: smsSender,
+      );
+      return true;
+    }
+
+    // --- Unregistered sender sending an unrecognized message: redirect
+    //     them to REGISTER instead of the generic command help.
+    if (customerData == null && parsed.command == SmsCommand.unknown) {
+      await _saveUnrecognizedMessage(
+        sender,
+        parsed.rawMessage,
+        'Unregistered',
+        sourceMessageId: sourceMessageId,
+        quantity: parsed.quantity ?? 0,
+        gallonType: _mapGallonType(parsed.gallonType),
+      );
+      await _sendReply(
+        sender,
+        SmsRegistrationCopy.unknownNumberPrompt,
+        smsSender: smsSender,
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Drives the per-step transitions for a registration flow that is
+  /// already recorded in `pending_sms_actions`.
+  Future<bool> _continueRegistration({
+    required String sender,
+    required String normalizedSender,
+    required ParsedSms parsed,
+    required Map<String, dynamic> pending,
+    required String sourceMessageId,
+    Telephony? smsSender,
+  }) async {
+    final step = pending['step'] as String;
+    final pendingName = pending['name'] as String?;
+    final pendingBarangayId = pending['barangay_id'] as int?;
+    final pendingConsentVersion = pending['consent_version'] as String?;
+    final pendingConsentGivenAt = pending['consent_given_at'] as String?;
+
+    switch (step) {
+      case 'awaiting_consent':
+        if (parsed.command == SmsCommand.agree) {
+          final consentGivenAt = DateTime.now().toIso8601String();
+          await _db.upsertPendingSmsAction(
+            phoneNumber: normalizedSender,
+            action: 'register',
+            step: 'awaiting_barangay',
+            name: pendingName,
+            consentVersion: SmsRegistrationCopy.consentVersion,
+            consentGivenAt: consentGivenAt,
+          );
+          final barangays = await _db.getBarangays();
+          final list =
+              barangays.map((b) => b['name'] as String).join(', ');
+          await _sendReply(
+            sender,
+            SmsRegistrationCopy.askBarangay(list),
+            smsSender: smsSender,
+          );
+          return true;
+        }
+        await _sendReply(
+          sender,
+          SmsRegistrationCopy.consentRequired,
+          smsSender: smsSender,
+        );
+        return true;
+
+      case 'awaiting_barangay':
+        if (parsed.command == SmsCommand.barangay) {
+          final input = parsed.barangayName?.trim() ?? '';
+          if (input.isEmpty) {
+            await _sendReply(
+              sender,
+              SmsRegistrationCopy.invalidBarangay,
+              smsSender: smsSender,
+            );
+            return true;
+          }
+          final barangay = await _db.getBarangayByName(input);
+          if (barangay == null) {
+            await _sendReply(
+              sender,
+              SmsRegistrationCopy.invalidBarangay,
+              smsSender: smsSender,
+            );
+            return true;
+          }
+          await _db.upsertPendingSmsAction(
+            phoneNumber: normalizedSender,
+            action: 'register',
+            step: 'awaiting_address',
+            name: pendingName,
+            barangayId: barangay['id'] as int,
+            consentVersion: pendingConsentVersion,
+            consentGivenAt: pendingConsentGivenAt,
+          );
+          await _sendReply(
+            sender,
+            SmsRegistrationCopy.askAddress,
+            smsSender: smsSender,
+          );
+          return true;
+        }
+        await _sendReply(
+          sender,
+          SmsRegistrationCopy.barangayPromptReminder,
+          smsSender: smsSender,
+        );
+        return true;
+
+      case 'awaiting_address':
+        if (parsed.command == SmsCommand.address) {
+          final addr = parsed.address?.trim() ?? '';
+          if (addr.isEmpty) {
+            await _sendReply(
+              sender,
+              SmsRegistrationCopy.addressPromptReminder,
+              smsSender: smsSender,
+            );
+            return true;
+          }
+          if (pendingBarangayId == null || pendingName == null) {
+            // Defensive: pending row corrupted somehow — restart the flow.
+            await _db.deletePendingSmsAction(normalizedSender);
+            await _sendReply(
+              sender,
+              SmsRegistrationCopy.registerHelp,
+              smsSender: smsSender,
+            );
+            return true;
+          }
+          try {
+            await _db.insertCustomer({
+              'name': pendingName,
+              'contact_number': normalizedSender,
+              'address': addr,
+              'barangay_id': pendingBarangayId,
+              'consent_given': 1,
+              'consent_timestamp': pendingConsentGivenAt,
+              'consent_channel': SmsRegistrationCopy.channelSms,
+              'consent_version':
+                  pendingConsentVersion ?? SmsRegistrationCopy.consentVersion,
+            });
+          } on CustomerPhoneAlreadyExistsException {
+            await _db.deletePendingSmsAction(normalizedSender);
+            await _sendReply(
+              sender,
+              SmsRegistrationCopy.alreadyRegistered,
+              smsSender: smsSender,
+            );
+            return true;
+          }
+          final barangay = await _db.getBarangayById(pendingBarangayId);
+          await _db.deletePendingSmsAction(normalizedSender);
+          AppEventBus().notifyOrderReceived();
+          await _sendReply(
+            sender,
+            SmsRegistrationCopy.registrationComplete(
+              name: pendingName,
+              barangay: barangay?['name'] as String? ?? '',
+            ),
+            smsSender: smsSender,
+          );
+          return true;
+        }
+        await _sendReply(
+          sender,
+          SmsRegistrationCopy.addressPromptReminder,
+          smsSender: smsSender,
+        );
+        return true;
+    }
+
+    // Unknown step — clear the row and treat as fresh.
+    await _db.deletePendingSmsAction(normalizedSender);
+    return false;
   }
 
   /// Handles the DELIVER command — the core order processing flow.
@@ -439,10 +826,10 @@ class SmsBackgroundService {
         quantity: parsed.quantity ?? 0,
         gallonType: _mapGallonType(parsed.gallonType),
       );
-      // Phone number not registered — prompt them to register
+      // Phone number not registered — point them to the SMS self-registration flow.
       await _sendReply(
         sender,
-        'Unknown number. Please register first or call the station.',
+        SmsRegistrationCopy.unknownNumberPrompt,
         smsSender: smsSender,
       );
       return;
@@ -612,6 +999,14 @@ class SmsBackgroundService {
     // Step 1: Mode gate — check if drop-offs are accepted
     // Only MAINTENANCE mode rejects drop-offs; all others allow them
     if (!_modeManager.canAcceptDrop()) {
+      await _saveUnrecognizedMessage(
+        sender,
+        'DROP ${parsed.quantity ?? 0} - Rejected: ${_modeManager.getDropReply()}',
+        'rejected',
+        sourceMessageId: sourceMessageId,
+        quantity: parsed.quantity ?? 0,
+        gallonType: _mapGallonType(parsed.gallonType),
+      );
       await _sendReply(
         sender,
         _modeManager.getDropReply(),
@@ -650,7 +1045,7 @@ class SmsBackgroundService {
 
     // Task 012 — Trigger loud alarm for walk-in customer
     await AlarmService.instance.trigger(
-      phone: sender,
+      phone: normalizedSender,
       qty: parsed.quantity ?? 0,
     );
   }
@@ -683,6 +1078,7 @@ class SmsBackgroundService {
     // Check if pre-book has expired
     if (context.isExpired) {
       _preBookPending.remove(normalizedSender);
+      await _savePreBooksToDb();
       await _sendReply(
         sender,
         'Pre-book offer has expired. Please send a new DELIVER command.',
@@ -785,7 +1181,7 @@ class SmsBackgroundService {
   /// Used when an order arrives after the cutoff time — the order is queued
   /// for the next scheduled day instead of today.
   /// Searches forward through the week starting from tomorrow.
-  String _findNextAvailableDay(List<Schedule> schedules, String currentDay) {
+  String? _findNextAvailableDay(List<Schedule> schedules, String currentDay) {
     // Extract all allowed delivery days from the customer's schedules
     final allowedDays = schedules.map((s) => s.deliveryDay).toSet();
 
@@ -802,8 +1198,8 @@ class SmsBackgroundService {
       }
     }
 
-    // Fallback — shouldn't reach here if customer has at least one schedule
-    return currentDay;
+    // No valid schedule found
+    return null;
   }
 
   /// Maps a gallon type string from the SMS parser to the [GallonType] enum.

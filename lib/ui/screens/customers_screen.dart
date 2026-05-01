@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../core/utils/phone_number_utils.dart';
 import '../../data/providers/customer_provider.dart';
+import '../../data/services/sms_registration_copy.dart';
 import '../../database_helper.dart';
 import '../theme/app_theme.dart';
 
@@ -685,11 +686,17 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       return;
     }
 
+    // Task 020 — Record RA 10173 consent metadata so UI- and SMS-registered
+    // customers carry the same audit trail (channel + version + timestamp).
     final customerData = {
       'name': name,
       'contact_number': phone,
       'address': address.isNotEmpty ? address : null,
       'barangay_id': _selectedBarangayId,
+      'consent_given': 1,
+      'consent_timestamp': DateTime.now().toIso8601String(),
+      'consent_channel': SmsRegistrationCopy.channelAppUi,
+      'consent_version': SmsRegistrationCopy.consentVersion,
     };
 
     // ignore: use_build_context_synchronously
