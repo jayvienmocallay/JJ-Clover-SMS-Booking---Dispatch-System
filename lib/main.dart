@@ -12,7 +12,10 @@ import 'package:jj_clover_sms/data/services/default_sms_app_service.dart';
 import 'package:jj_clover_sms/data/services/sms_background_service.dart';
 import 'package:jj_clover_sms/data/services/system_mode_manager.dart';
 import 'package:jj_clover_sms/data/services/push_notification_service.dart';
+import 'package:jj_clover_sms/data/services/supabase_sync_service.dart';
+import 'package:jj_clover_sms/core/constants/supabase_config.dart';
 import 'package:jj_clover_sms/data/providers/order_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jj_clover_sms/data/providers/customer_provider.dart';
 import 'package:jj_clover_sms/ui/theme/app_theme.dart';
 import 'package:jj_clover_sms/ui/screens/app_shell.dart';
@@ -38,6 +41,26 @@ Future<void> main() async {
       debugPrint('Database initialized successfully');
     } catch (e) {
       debugPrint('Database initialization error: $e');
+    }
+
+    // Initialize Supabase cloud sync — only when real credentials are set.
+    if (SupabaseConfig.url != 'YOUR_SUPABASE_URL' &&
+        SupabaseConfig.anonKey != 'YOUR_SUPABASE_ANON_KEY') {
+      try {
+        await Supabase.initialize(
+          url: SupabaseConfig.url,
+          anonKey: SupabaseConfig.anonKey,
+        );
+        await SupabaseSyncService.instance.initialize();
+        debugPrint('Supabase initialized successfully');
+      } catch (e) {
+        debugPrint('Supabase initialization error: $e');
+      }
+    } else {
+      // Load saved sync preferences even without live credentials so the
+      // Settings screen reflects the last-known sync state on startup.
+      await SupabaseSyncService.instance.initialize();
+      debugPrint('Supabase not configured — skipping cloud sync');
     }
   }
 

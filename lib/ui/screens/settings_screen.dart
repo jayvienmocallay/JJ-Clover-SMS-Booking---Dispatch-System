@@ -8,6 +8,7 @@ import '../../core/constants/app_constants.dart';
 import '../../database_helper.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
+import '../../data/services/supabase_sync_service.dart';
 import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -98,6 +99,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _removeBarangay(int id) async {
     await DatabaseHelper.instance.deleteBarangay(id);
     await _loadData();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Barangay removed ✓')),
+      );
+    }
   }
 
   void _showTimePicker() async {
@@ -248,6 +254,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         // --- Barangay List Management ---
         _buildBarangaySection(),
+        const SizedBox(height: 16),
+
+        // --- Cloud Sync ---
+        _buildSyncSection(),
         const SizedBox(height: 16),
 
         // --- Data Privacy ---
@@ -854,6 +864,288 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildSyncSection() {
+    return ChangeNotifierProvider.value(
+      value: SupabaseSyncService.instance,
+      child: Consumer<SupabaseSyncService>(
+        builder: (context, syncService, _) {
+          String statusText;
+          Color statusColor;
+          IconData statusIcon;
+          switch (syncService.status) {
+            case SyncStatus.idle:
+              statusText = 'Idle';
+              statusColor = AppColors.mutedForeground;
+              statusIcon = Icons.cloud_off;
+              break;
+            case SyncStatus.syncing:
+              statusText = 'Syncing...';
+              statusColor = AppColors.primary;
+              statusIcon = Icons.cloud_sync;
+              break;
+            case SyncStatus.success:
+              statusText = 'Synced';
+              statusColor = AppColors.statusOperating;
+              statusIcon = Icons.cloud_done;
+              break;
+            case SyncStatus.error:
+              statusText = 'Error';
+              statusColor = AppColors.statusMaintenance;
+              statusIcon = Icons.cloud_off;
+              break;
+          }
+
+          String lastSyncLabel = 'Never';
+          if (syncService.lastSyncedAt != null) {
+            final dt = syncService.lastSyncedAt!;
+            final hour = dt.hour > 12
+                ? dt.hour - 12
+                : (dt.hour == 0 ? 12 : dt.hour);
+            final amPm = dt.hour >= 12 ? 'PM' : 'AM';
+            final min = dt.minute.toString().padLeft(2, '0');
+            lastSyncLabel = '${dt.month}/${dt.day} $hour:$min $amPm';
+          }
+
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.cloud_sync,
+                          size: 20, color: AppColors.primary),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Cloud Sync',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.foreground,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Back up your data to Supabase cloud. '
+                            'Data syncs automatically when connected.',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.mutedForeground),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Auto Sync toggle
+                _buildSyncToggle(
+                  icon: Icons.sync,
+                  label: 'Auto Sync',
+                  value: syncService.autoSyncEnabled,
+                  onChanged: (v) => syncService.setAutoSync(v),
+                ),
+                const SizedBox(height: 8),
+
+                // WiFi Only toggle
+                _buildSyncToggle(
+                  icon: Icons.wifi,
+                  label: 'Sync over Wi-Fi only',
+                  value: syncService.wifiOnly,
+                  onChanged: (v) => syncService.setWifiOnly(v),
+                ),
+                const SizedBox(height: 12),
+
+                // Status row
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      syncService.status == SyncStatus.syncing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
+                            )
+                          : Icon(statusIcon, size: 16, color: statusColor),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              statusText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: statusColor,
+                              ),
+                            ),
+                            if (syncService.lastError != null &&
+                                syncService.status == SyncStatus.error)
+                              Text(
+                                syncService.lastError!,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.statusMaintenance,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          const Text(
+                            'Last sync',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppColors.mutedForeground,
+                            ),
+                          ),
+                          Text(
+                            lastSyncLabel,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.foreground,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Manual sync button
+                GestureDetector(
+                  onTap: syncService.status == SyncStatus.syncing
+                      ? null
+                      : () async {
+                          await syncService.syncAll();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  syncService.status == SyncStatus.success
+                                      ? 'Data synced to cloud ✓'
+                                      : 'Sync failed: ${syncService.lastError ?? "Unknown error"}',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: syncService.status == SyncStatus.syncing
+                          ? AppColors.muted
+                          : AppColors.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          syncService.status == SyncStatus.syncing
+                              ? Icons.hourglass_top
+                              : Icons.cloud_upload,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          syncService.status == SyncStatus.syncing
+                              ? 'Syncing...'
+                              : 'Sync Now',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSyncToggle({
+    required IconData icon,
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon,
+              size: 18,
+              color: value ? AppColors.primary : AppColors.mutedForeground),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.foreground,
+              ),
+            ),
+          ),
+          Switch(
+            value: value,
+            activeThumbColor: AppColors.primary,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
     );
   }
 
