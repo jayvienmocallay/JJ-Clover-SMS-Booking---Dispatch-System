@@ -20,6 +20,7 @@ import 'alarm_service.dart';
 import 'sms_source_message_id.dart';
 import 'app_event_bus.dart';
 import 'push_notification_service.dart';
+import 'supabase_sync_service.dart';
 
 const MethodChannel _nativeSmsBackgroundChannel = MethodChannel(
   'com.jjclover.smartrelay/sms_background',
@@ -506,6 +507,16 @@ class SmsBackgroundService {
       // deleteCustomerByPhone already drops the pending row, but call
       // explicitly so a no-customer opt-out still clears the pending state.
       await _db.deletePendingSmsAction(normalizedSender);
+      // Mirror the erasure on Supabase so the right to erasure is honoured
+      // in the cloud too (RA 10173). Best-effort: a network failure must not
+      // block the local confirmation reply.
+      try {
+        await SupabaseSyncService.instance.deleteCustomerFromSupabase(
+          normalizedSender,
+        );
+      } catch (e) {
+        debugPrint('Supabase erasure failed (will retry on next sync): $e');
+      }
       AppEventBus().notifyOrderReceived();
       await _sendReply(
         sender,

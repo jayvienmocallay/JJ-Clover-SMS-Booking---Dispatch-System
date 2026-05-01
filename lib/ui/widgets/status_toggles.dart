@@ -89,7 +89,15 @@ class StatusToggles extends StatelessWidget {
             return _StatusButton(
               config: config,
               isActive: isActive,
-              onTap: () => modeManager.setMode(config.mode),
+              onTap: () {
+                modeManager.setMode(config.mode);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Mode set to ${config.mode.displayName} ✓'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
             );
           }).toList(),
         );

@@ -718,9 +718,11 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
-      child: _step == 0 ? _buildPrivacyConsentStep() : _buildCustomerFormStep(),
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+        child: _step == 0 ? _buildPrivacyConsentStep() : _buildCustomerFormStep(),
+      ),
     );
   }
 

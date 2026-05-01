@@ -180,7 +180,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       onConfirm:
                           order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.pending
-                          ? () => orderProv.updateStatus(order.id!, 'confirmed')
+                          ? () async {
+                              await orderProv.updateStatus(order.id!, 'confirmed');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Order confirmed ✓')),
+                                );
+                              }
+                            }
                           : null,
                       onReject:
                           order.type != OrderType.unrecognized &&
@@ -190,13 +197,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       onStartDelivery:
                           order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.confirmed
-                          ? () =>
-                                orderProv.updateStatus(order.id!, 'in_transit')
+                          ? () async {
+                              await orderProv.updateStatus(order.id!, 'in_transit');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Delivery started ✓')),
+                                );
+                              }
+                            }
                           : null,
                       onComplete:
                           order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.inTransit
-                          ? () => orderProv.updateStatus(order.id!, 'completed')
+                          ? () async {
+                              await orderProv.updateStatus(order.id!, 'completed');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Order completed ✓')),
+                                );
+                              }
+                            }
                           : null,
                     ),
                   );
@@ -276,9 +296,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.statusMaintenance,
             ),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              orderProv.updateStatus(orderId, 'cancelled', reason: reason);
+              await orderProv.updateStatus(orderId, 'cancelled', reason: reason);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Order rejected ✓')),
+                );
+              }
             },
             child: const Text('Reject'),
           ),
