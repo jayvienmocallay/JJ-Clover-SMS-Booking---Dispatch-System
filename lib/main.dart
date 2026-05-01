@@ -15,6 +15,8 @@ import 'package:jj_clover_sms/data/services/push_notification_service.dart';
 import 'package:jj_clover_sms/data/services/supabase_sync_service.dart';
 import 'package:jj_clover_sms/core/constants/supabase_config.dart';
 import 'package:jj_clover_sms/data/providers/order_provider.dart';
+import 'package:jj_clover_sms/data/repositories/order_repository.dart';
+import 'package:jj_clover_sms/data/repositories/customer_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jj_clover_sms/data/providers/customer_provider.dart';
 import 'package:jj_clover_sms/ui/theme/app_theme.dart';
@@ -83,9 +85,9 @@ class MyApp extends StatelessWidget {
         // Task 011, 013.2 — SystemModeManager singleton: shared across UI + background service
         ChangeNotifierProvider.value(value: SystemModeManager.instance),
         // Task 011 — OrderProvider: reactive order state for dashboard + order screens
-        ChangeNotifierProvider(create: (_) => OrderProvider()),
+        ChangeNotifierProvider(create: (_) => OrderProvider(OrderRepository())),
         // Task 011 — CustomerProvider: reactive customer state for customer screen + forms
-        ChangeNotifierProvider(create: (_) => CustomerProvider()),
+        ChangeNotifierProvider(create: (_) => CustomerProvider(CustomerRepository())),
       ],
       child: MaterialApp(
         title: 'JJ Clover',
