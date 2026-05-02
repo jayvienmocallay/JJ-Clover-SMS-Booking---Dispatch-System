@@ -5,7 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import '../../core/constants/app_constants.dart';
-import '../../database_helper.dart';
+import '../repositories/settings_repository.dart';
 
 class SystemModeManager extends ChangeNotifier {
   static const String _modeSettingKey = 'system_mode';
@@ -20,6 +20,7 @@ class SystemModeManager extends ChangeNotifier {
   factory SystemModeManager.forTest() = _TestSystemModeManager;
 
   final bool _persistChanges;
+  final _settings = SettingsRepository();
   SystemMode _currentMode = SystemMode.operating;
 
   SystemMode get currentMode => _currentMode;
@@ -40,9 +41,7 @@ class SystemModeManager extends ChangeNotifier {
     if (!_persistChanges || kIsWeb) return;
 
     try {
-      final savedMode = await DatabaseHelper.instance.getSetting(
-        _modeSettingKey,
-      );
+      final savedMode = await _settings.getSetting(_modeSettingKey);
       final mode = _parseMode(savedMode);
       _setModeInMemory(mode, notify: notify);
     } catch (e) {
@@ -77,7 +76,8 @@ class SystemModeManager extends ChangeNotifier {
       case SystemMode.operating:
         return 'Order Confirmed. Delivery is being prepared.';
       case SystemMode.staffAway:
-        const reply = 'Order Received. Staff is currently out delivering. '
+        const reply =
+            'Order Received. Staff is currently out delivering. '
             'We will process this upon return.';
         if (queuedDeliveryDay == null || queuedDeliveryDay.isEmpty) {
           return reply;
@@ -115,7 +115,7 @@ class SystemModeManager extends ChangeNotifier {
 
   Future<void> _persistMode(SystemMode mode) async {
     try {
-      await DatabaseHelper.instance.setSetting(_modeSettingKey, mode.name);
+      await _settings.setSetting(_modeSettingKey, mode.name);
     } catch (e) {
       debugPrint('Failed to persist system mode: $e');
     }
