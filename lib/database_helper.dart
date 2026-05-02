@@ -36,7 +36,8 @@ class DatabaseHelper {
   // Task 020 — v7 adds RA 10173 consent metadata on `customers` and the
   // `pending_sms_actions` table that tracks multi-step SMS flows
   // (registration & DELETEDATA confirmation).
-  static const int databaseVersion = 7;
+  // v8 — adds returned_containers and payment_method to delivery_logs.
+  static const int databaseVersion = 8;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
   static const Duration _resubmitCooldownAfter = Duration(hours: 1);
   final DatabaseEncryptionKeyRepository _encryptionKeyRepository =
@@ -212,6 +213,8 @@ class DatabaseHelper {
         quantity_delivered INTEGER NOT NULL,
         gallon_type TEXT,
         notes TEXT,
+        returned_containers INTEGER,
+        payment_method TEXT,
         delivered_at TEXT NOT NULL,
         FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE,
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
@@ -367,6 +370,16 @@ class DatabaseHelper {
       await _addColumnIfMissing(db, 'customers', 'consent_channel', 'TEXT');
       await _addColumnIfMissing(db, 'customers', 'consent_version', 'TEXT');
       await _createPendingSmsActionsTable(db);
+    }
+
+    if (oldVersion < 8) {
+      await _addColumnIfMissing(
+        db,
+        'delivery_logs',
+        'returned_containers',
+        'INTEGER',
+      );
+      await _addColumnIfMissing(db, 'delivery_logs', 'payment_method', 'TEXT');
     }
 
     // Create sms_messages table if not exists (for old databases)

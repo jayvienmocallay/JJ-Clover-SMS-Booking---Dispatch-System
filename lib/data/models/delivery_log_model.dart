@@ -27,6 +27,12 @@ class DeliveryLog {
   /// Optional notes about the delivery (e.g., 'left at gate', 'short 1 gallon')
   final String? notes;
 
+  /// Number of empty gallon containers returned by the customer on this trip
+  final int? returnedContainers;
+
+  /// Payment method used: 'cash', 'gcash', 'credit', or null if not recorded
+  final String? paymentMethod;
+
   /// Timestamp when the delivery was recorded
   final DateTime deliveredAt;
 
@@ -38,6 +44,8 @@ class DeliveryLog {
     required this.quantityDelivered,
     this.gallonType,
     this.notes,
+    this.returnedContainers,
+    this.paymentMethod,
     required this.deliveredAt,
   });
 
@@ -51,6 +59,8 @@ class DeliveryLog {
       quantityDelivered: map['quantity_delivered'] as int,
       gallonType: map['gallon_type'] as String?,
       notes: map['notes'] as String?,
+      returnedContainers: map['returned_containers'] as int?,
+      paymentMethod: map['payment_method'] as String?,
       // Parse ISO 8601 timestamp string back to DateTime
       deliveredAt: DateTime.parse(map['delivered_at'] as String),
     );
@@ -66,6 +76,8 @@ class DeliveryLog {
       'quantity_delivered': quantityDelivered,
       if (gallonType != null) 'gallon_type': gallonType,
       if (notes != null) 'notes': notes,
+      if (returnedContainers != null) 'returned_containers': returnedContainers,
+      if (paymentMethod != null) 'payment_method': paymentMethod,
       // Store DateTime as ISO 8601 string for consistent parsing
       'delivered_at': deliveredAt.toIso8601String(),
     };

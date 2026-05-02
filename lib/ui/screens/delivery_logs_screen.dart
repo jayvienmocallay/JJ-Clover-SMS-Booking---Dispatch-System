@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../data/models/delivery_log_model.dart';
 import '../../data/providers/customer_provider.dart';
-import '../../data/repositories/order_repository.dart';
+import '../../data/repositories/delivery_log_repository.dart';
 import '../theme/app_theme.dart';
 
 class DeliveryLogsScreen extends StatefulWidget {
@@ -27,7 +27,7 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
 
   Future<void> _loadLogs() async {
     setState(() => _loading = true);
-    final rawLogs = await context.read<OrderRepository>().getDeliveryLogs();
+    final rawLogs = await context.read<DeliveryLogRepository>().getDeliveryLogs();
     setState(() {
       _allLogs = rawLogs.map(DeliveryLog.fromMap).toList();
       _loading = false;
@@ -338,6 +338,46 @@ class _DeliveryLogCard extends StatelessWidget {
                       fontSize: 12,
                       color: AppColors.mutedForeground,
                     ),
+                  ),
+                ],
+                if (log.returnedContainers != null ||
+                    log.paymentMethod != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (log.returnedContainers != null) ...[
+                        const Icon(
+                          Icons.replay,
+                          size: 11,
+                          color: AppColors.mutedForeground,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${log.returnedContainers} returned',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.mutedForeground,
+                          ),
+                        ),
+                        if (log.paymentMethod != null)
+                          const SizedBox(width: 10),
+                      ],
+                      if (log.paymentMethod != null) ...[
+                        const Icon(
+                          Icons.payments_outlined,
+                          size: 11,
+                          color: AppColors.mutedForeground,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          log.paymentMethod!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.mutedForeground,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ],

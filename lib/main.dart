@@ -18,6 +18,7 @@ import 'package:jj_clover_sms/data/providers/order_provider.dart';
 import 'package:jj_clover_sms/data/repositories/order_repository.dart';
 import 'package:jj_clover_sms/data/repositories/customer_repository.dart';
 import 'package:jj_clover_sms/data/repositories/barangay_repository.dart';
+import 'package:jj_clover_sms/data/repositories/delivery_log_repository.dart';
 import 'package:jj_clover_sms/data/repositories/sms_message_repository.dart';
 import 'package:jj_clover_sms/data/repositories/settings_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -90,6 +91,7 @@ class MyApp extends StatelessWidget {
         Provider(create: (_) => OrderRepository()),
         Provider(create: (_) => CustomerRepository()),
         Provider(create: (_) => BarangayRepository()),
+        Provider(create: (_) => DeliveryLogRepository()),
         Provider(create: (_) => SmsMessageRepository()),
         Provider(create: (_) => SettingsRepository()),
         // Task 011 — OrderProvider: reactive order state for dashboard + order screens

@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../data/models/delivery_log_model.dart';
 import '../../data/models/order_model.dart';
-import '../../data/repositories/order_repository.dart';
+import '../../data/repositories/delivery_log_repository.dart';
 import '../theme/app_theme.dart';
 
 /// Displays a single order as a card with customer info, quantity,
@@ -431,7 +431,7 @@ class OrderCard extends StatelessWidget {
   /// Task 011 — Shows delivery logs for a completed order
   void _showDeliveryLogs(BuildContext context, int orderId) async {
     if (kIsWeb) return;
-    final rawLogs = await context.read<OrderRepository>().getDeliveryLogsForOrder(orderId);
+    final rawLogs = await context.read<DeliveryLogRepository>().getDeliveryLogsForOrder(orderId);
     final logs = rawLogs.map(DeliveryLog.fromMap).toList();
 
     if (!context.mounted) return;
@@ -521,6 +521,23 @@ class OrderCard extends StatelessWidget {
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.mutedForeground,
+                                  ),
+                                ),
+                              if (log.returnedContainers != null ||
+                                  log.paymentMethod != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    [
+                                      if (log.returnedContainers != null)
+                                        '${log.returnedContainers} returned',
+                                      if (log.paymentMethod != null)
+                                        log.paymentMethod!,
+                                    ].join(' · '),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.mutedForeground,
+                                    ),
                                   ),
                                 ),
                             ],
