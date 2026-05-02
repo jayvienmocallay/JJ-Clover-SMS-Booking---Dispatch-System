@@ -271,8 +271,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           iconBgColor: AppColors.statusOperatingLight,
           iconColor: AppColors.statusOperating,
           title: 'Data Privacy',
-          description: 'All customer data is stored locally and encrypted. '
-              'No internet connection required for operation.',
+          description: 'Customer data is stored locally with encryption. '
+              'When Cloud Sync is enabled, data is backed up to Supabase. '
+              'Deletion requests (RA 10173) propagate to cloud.',
           trailing: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -285,7 +286,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Icon(Icons.shield, size: 12, color: AppColors.statusOperating),
                 SizedBox(width: 4),
                 Text(
-                  'Encrypted & Offline',
+                  'Encrypted & RA 10173',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
