@@ -995,12 +995,18 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                 ),
                 SizedBox(height: 6),
                 _PolicyBullet('Improving our service quality'),
+                SizedBox(height: 6),
+                _PolicyBullet(
+                  'Securely backing up records to cloud storage when sync is enabled',
+                ),
                 SizedBox(height: 12),
                 Text(
                   'Your data will not be shared with third parties without '
-                  'your explicit consent. You may request access, correction, '
-                  'or deletion of your personal data at any time by '
-                  'contacting us.',
+                  'your explicit consent. Cloud backup uses encrypted storage '
+                  'under the same RA 10173 protections — deletion requests '
+                  'also remove your data from cloud. You may request access, '
+                  'correction, or deletion of your personal data at any time '
+                  'by contacting us.',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.foreground,
