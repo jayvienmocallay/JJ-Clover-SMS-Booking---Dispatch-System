@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart';
-import '../../database_helper.dart';
 import '../models/pre_book_context.dart';
+import '../repositories/pre_book_repository.dart';
 
 /// Manages the in-memory map of pending pre-book offers and persists it to the
 /// database so offers survive process restarts.
 class PreBookStore {
   final _pending = <String, PreBookContext>{};
+  final _repository = PreBookRepository();
 
   PreBookContext? operator [](String phoneNumber) => _pending[phoneNumber];
 
@@ -22,13 +23,14 @@ class PreBookStore {
   /// Loads non-expired pre-book contexts from the database on startup.
   Future<void> loadFromDb() async {
     try {
-      final raw = await DatabaseHelper.instance.getPreBookPending();
+      final raw = await _repository.getPending();
       final now = DateTime.now();
       for (final entry in raw.entries) {
         final v = entry.value;
         final timestamp = v['timestamp'] as int? ?? 0;
         final createdAt = DateTime.fromMillisecondsSinceEpoch(timestamp);
-        if (now.difference(createdAt).inHours <= PreBookContext.expirationHours) {
+        if (now.difference(createdAt).inHours <=
+            PreBookContext.expirationHours) {
           _pending[entry.key] = PreBookContext(
             customerId: v['customerId'] as int,
             phoneNumber: v['phoneNumber'] as String,
@@ -61,7 +63,7 @@ class PreBookStore {
           'timestamp': c.createdAt.millisecondsSinceEpoch,
         };
       }
-      await DatabaseHelper.instance.setPreBookPending(data);
+      await _repository.setPending(data);
     } catch (e) {
       debugPrint('PreBookStore: failed to persist: $e');
     }
