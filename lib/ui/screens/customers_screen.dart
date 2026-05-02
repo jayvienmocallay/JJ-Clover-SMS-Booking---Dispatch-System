@@ -6,8 +6,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../core/utils/phone_number_utils.dart';
 import '../../data/providers/customer_provider.dart';
+import '../../data/repositories/barangay_repository.dart';
+import '../../data/repositories/customer_repository.dart';
 import '../../data/services/sms_registration_copy.dart';
-import '../../database_helper.dart';
 import '../theme/app_theme.dart';
 
 class CustomersScreen extends StatefulWidget {
@@ -359,7 +360,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) {
           return FutureBuilder<List<Map<String, dynamic>>>(
-            future: DatabaseHelper.instance.getBarangays(),
+            future: context.read<BarangayRepository>().getBarangays(),
             builder: (ctx, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
@@ -621,16 +622,20 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
   final _addressController = TextEditingController();
   int? _selectedBarangayId;
   List<Map<String, dynamic>> _barangays = [];
+  late final BarangayRepository _barangayRepo;
+  late final CustomerRepository _customerRepo;
 
   @override
   void initState() {
     super.initState();
+    _barangayRepo = context.read<BarangayRepository>();
+    _customerRepo = context.read<CustomerRepository>();
     _loadBarangays();
   }
 
   Future<void> _loadBarangays() async {
     if (kIsWeb) return;
-    final barangays = await DatabaseHelper.instance.getBarangays();
+    final barangays = await _barangayRepo.getBarangays();
     if (mounted) setState(() => _barangays = barangays);
   }
 
@@ -676,7 +681,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
     }
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final existing = await DatabaseHelper.instance.getCustomerByPhone(phone);
+    final existing = await _customerRepo.getCustomerByPhone(phone);
     if (existing != null) {
       if (mounted) {
         scaffoldMessenger.showSnackBar(

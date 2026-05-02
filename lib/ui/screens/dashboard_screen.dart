@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
-import '../../database_helper.dart';
+import '../../data/repositories/barangay_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/status_toggles.dart';
 
@@ -24,19 +24,20 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _todayBarangays = [];
+  late final BarangayRepository _barangayRepo;
 
   @override
   void initState() {
     super.initState();
+    _barangayRepo = context.read<BarangayRepository>();
     _loadBarangays();
   }
 
   /// Loads today's scheduled barangays (zone data is static, not in provider)
   Future<void> _loadBarangays() async {
     if (kIsWeb) return;
-    final db = DatabaseHelper.instance;
     final today = DeliveryDays.getToday();
-    final barangays = await db.getBarangays();
+    final barangays = await _barangayRepo.getBarangays();
     final todayBarangays = <String>[];
 
     for (final brgy in barangays) {

@@ -1,7 +1,9 @@
 // Messages screen: SMS inbox with full send/receive history
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../database_helper.dart';
+import 'package:provider/provider.dart';
+import '../../data/repositories/customer_repository.dart';
+import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
 import './chat_screen.dart';
@@ -19,10 +21,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Map<String, String> _phoneToName = {};
   Timer? _refreshTimer;
   StreamSubscription? _messageSub;
+  late final SmsMessageRepository _smsRepo;
+  late final CustomerRepository _customerRepo;
 
   @override
   void initState() {
     super.initState();
+    _smsRepo = context.read<SmsMessageRepository>();
+    _customerRepo = context.read<CustomerRepository>();
     _loadMessages();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadMessages());
     _messageSub = AppEventBus().onMessageReceived.listen((_) {
@@ -40,8 +46,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Future<void> _loadMessages() async {
     try {
       final results = await Future.wait([
-        DatabaseHelper.instance.getAllSmsMessages(),
-        DatabaseHelper.instance.getCustomers(),
+        _smsRepo.getAllSmsMessages(),
+        _customerRepo.getCustomers(),
       ]);
       final messages = results[0];
       final customers = results[1];

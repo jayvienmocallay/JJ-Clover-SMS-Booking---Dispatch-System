@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
-import '../../database_helper.dart';
+import '../../data/repositories/barangay_repository.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/supabase_sync_service.dart';
@@ -31,10 +32,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _cutoffHour = AppConstants.orderCutOffHour;
   int _cutoffMinute = AppConstants.orderCutOffMinute;
   bool _isLoading = true;
+  late final BarangayRepository _barangayRepo;
+  late final SettingsRepository _settingsRepo;
 
   @override
   void initState() {
     super.initState();
+    _barangayRepo = context.read<BarangayRepository>();
+    _settingsRepo = context.read<SettingsRepository>();
     _loadData();
   }
 
@@ -43,9 +48,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
-    final barangays = await DatabaseHelper.instance.getBarangays();
-    final hour = await DatabaseHelper.instance.getCutoffHour();
-    final minute = await DatabaseHelper.instance.getCutoffMinute();
+    final barangays = await _barangayRepo.getBarangays();
+    final hour = await _settingsRepo.getCutoffHour();
+    final minute = await _settingsRepo.getCutoffMinute();
     if (mounted) {
       setState(() {
         _barangays = barangays;
@@ -85,7 +90,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'delivery_day': _selectedDay,
     };
 
-    await DatabaseHelper.instance.insertBarangay(barangayData);
+    await _barangayRepo.insertBarangay(barangayData);
     _barangayController.clear();
     setState(() => _selectedDay = null);
     if (mounted) {
@@ -97,7 +102,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _removeBarangay(int id) async {
-    await DatabaseHelper.instance.deleteBarangay(id);
+    await _barangayRepo.deleteBarangay(id);
     await _loadData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -127,7 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (picked != null) {
-      await DatabaseHelper.instance.setCutoffTime(picked.hour, picked.minute);
+      await _settingsRepo.setCutoffTime(picked.hour, picked.minute);
       setState(() {
         _cutoffHour = picked.hour;
         _cutoffMinute = picked.minute;
@@ -826,7 +831,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           return;
                         }
 
-                        await DatabaseHelper.instance.updateBarangay(id, {
+                        await _barangayRepo.updateBarangay(id, {
                           'name': name,
                           'delivery_zone': editZone,
                           'delivery_day': editZone == 'Zone C' ? editDay : null,

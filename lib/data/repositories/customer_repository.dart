@@ -1,6 +1,10 @@
 // Task 011 — Repository pattern: single point of data access for customer operations.
 // Providers and UI depend on this interface, not on DatabaseHelper directly.
 import '../../database_helper.dart';
+export '../../database_helper.dart'
+    show
+        CustomerPhoneAlreadyExistsException,
+        CustomerPhoneIdentityMigrationException;
 
 class CustomerRepository {
   Future<List<Map<String, dynamic>>> getCustomersWithBarangay() {
