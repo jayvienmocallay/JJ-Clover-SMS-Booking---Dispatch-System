@@ -6,9 +6,9 @@ import 'dart:ui';
 import 'package:telephony/telephony.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import '../../database_helper.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/phone_number_utils.dart';
+import '../repositories/database_runtime_repository.dart';
 import '../repositories/incoming_sms_receipt_repository.dart';
 import '../repositories/sms_message_repository.dart';
 import 'sms_parser.dart';
@@ -26,6 +26,8 @@ import 'command_handlers/registration_flow_handler.dart';
 const MethodChannel _nativeSmsBackgroundChannel = MethodChannel(
   'com.jjclover.smartrelay/sms_background',
 );
+
+final _databaseRuntime = DatabaseRuntimeRepository();
 
 /// Dart entry point started directly by Android's default SMS receiver.
 @pragma('vm:entry-point')
@@ -73,8 +75,7 @@ Future<void> smsNativeBackgroundMain() async {
 }
 
 Future<void> _ensureSmsRuntimeReady() async {
-  await DatabaseHelper.instance.database;
-  await DatabaseHelper.instance.ensureSchedulesSeeded();
+  await _databaseRuntime.ensureReady();
 }
 
 /// Entry point used by Android when an SMS arrives while Flutter is backgrounded.
