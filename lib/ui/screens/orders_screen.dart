@@ -10,6 +10,7 @@ import '../../data/models/order_model.dart';
 import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/order_card.dart';
+import 'delivery_logs_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
@@ -95,6 +96,28 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DeliveryLogsScreen(),
+                      ),
+                    ),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.muted,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.receipt_long,
+                        size: 20,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: _showAddOrderSheet,
                     child: Container(

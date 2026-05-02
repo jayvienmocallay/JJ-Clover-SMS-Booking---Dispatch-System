@@ -4,8 +4,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
+import '../../data/models/delivery_log_model.dart';
 import '../../data/models/order_model.dart';
-import '../../data/repositories/order_repository.dart';
+import '../../data/repositories/delivery_log_repository.dart';
 import '../theme/app_theme.dart';
 
 /// Displays a single order as a card with customer info, quantity,
@@ -430,7 +431,8 @@ class OrderCard extends StatelessWidget {
   /// Task 011 — Shows delivery logs for a completed order
   void _showDeliveryLogs(BuildContext context, int orderId) async {
     if (kIsWeb) return;
-    final logs = await context.read<OrderRepository>().getDeliveryLogsForOrder(orderId);
+    final rawLogs = await context.read<DeliveryLogRepository>().getDeliveryLogsForOrder(orderId);
+    final logs = rawLogs.map(DeliveryLog.fromMap).toList();
 
     if (!context.mounted) return;
     showModalBottomSheet(
@@ -481,15 +483,9 @@ class OrderCard extends StatelessWidget {
                 )
               else
                 ...logs.map((log) {
-                  final qty = log['quantity_delivered'] as int? ?? 0;
-                  final gType = log['gallon_type'] as String? ?? '';
-                  final notes = log['notes'] as String? ?? '';
-                  final deliveredAt = log['delivered_at'] as String? ?? '';
-                  String timeStr = '';
-                  try {
-                    final dt = DateTime.parse(deliveredAt);
-                    timeStr = _formatTime(dt);
-                  } catch (_) {}
+                  final qty = log.quantityDelivered;
+                  final gType = log.gallonType ?? '';
+                  final notes = log.notes ?? '';
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -527,11 +523,28 @@ class OrderCard extends StatelessWidget {
                                     color: AppColors.mutedForeground,
                                   ),
                                 ),
+                              if (log.returnedContainers != null ||
+                                  log.paymentMethod != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    [
+                                      if (log.returnedContainers != null)
+                                        '${log.returnedContainers} returned',
+                                      if (log.paymentMethod != null)
+                                        log.paymentMethod!,
+                                    ].join(' · '),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.mutedForeground,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
                         Text(
-                          timeStr,
+                          _formatTime(log.deliveredAt),
                           style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.mutedForeground,
