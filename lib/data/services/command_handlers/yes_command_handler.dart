@@ -1,7 +1,7 @@
 import 'package:telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
-import '../../../database_helper.dart';
 import '../../models/order_model.dart';
+import '../../repositories/order_repository.dart';
 import '../app_event_bus.dart';
 import '../pre_book_store.dart';
 import '../push_notification_service.dart';
@@ -12,7 +12,7 @@ class YesCommandHandler {
   YesCommandHandler(this._preBookStore);
 
   final PreBookStore _preBookStore;
-  final _db = DatabaseHelper.instance;
+  final _orders = OrderRepository();
 
   Future<void> handle(
     String sender, {
@@ -55,11 +55,12 @@ class YesCommandHandler {
       sourceMessageId: sourceMessageId,
     );
 
-    await _db.insertOrder(order.toMap());
+    await _orders.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
       title: 'Pre-book Confirmed',
-      body: '${context.quantity} gallon(s) from $sender – ${context.deliveryDay}',
+      body:
+          '${context.quantity} gallon(s) from $sender – ${context.deliveryDay}',
       sender: sender,
     );
 

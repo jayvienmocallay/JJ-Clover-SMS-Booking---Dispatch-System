@@ -1,13 +1,19 @@
 import 'package:flutter/foundation.dart';
 import 'package:telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
-import '../../../database_helper.dart';
 import '../../models/order_model.dart';
+import '../../repositories/customer_repository.dart';
+import '../../repositories/order_repository.dart';
+import '../../repositories/sms_message_repository.dart';
 import '../app_event_bus.dart';
 import '../push_notification_service.dart';
 
 /// Static utilities shared across all SMS command handlers.
 class SmsHandlerUtils {
+  static final _customers = CustomerRepository();
+  static final _messages = SmsMessageRepository();
+  static final _orders = OrderRepository();
+
   /// Sends an SMS reply, logs it to the outgoing message history, and
   /// swallows errors so a send failure never crashes the background service.
   static Future<void> sendReply(
@@ -19,7 +25,7 @@ class SmsHandlerUtils {
     try {
       await telephony.sendSms(to: phoneNumber, message: message);
       debugPrint('Reply sent to $phoneNumber: $message');
-      await DatabaseHelper.instance.insertSmsMessage({
+      await _messages.insertSmsMessage({
         'phone_number': PhoneNumberUtils.normalize(phoneNumber),
         'message': message,
         'direction': 'outgoing',
@@ -28,7 +34,7 @@ class SmsHandlerUtils {
       });
     } catch (e) {
       debugPrint('Failed to send reply: $e');
-      await DatabaseHelper.instance.insertSmsMessage({
+      await _messages.insertSmsMessage({
         'phone_number': PhoneNumberUtils.normalize(phoneNumber),
         'message': message,
         'direction': 'outgoing',
@@ -49,8 +55,7 @@ class SmsHandlerUtils {
     GallonType? gallonType,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
-    final customerData =
-        await DatabaseHelper.instance.getCustomerByPhone(normalizedSender);
+    final customerData = await _customers.getCustomerByPhone(normalizedSender);
     final customerId = customerData?['id'] as int?;
 
     final OrderStatus orderStatus;
@@ -78,7 +83,7 @@ class SmsHandlerUtils {
       createdAt: DateTime.now(),
       sourceMessageId: sourceMessageId,
     );
-    await DatabaseHelper.instance.insertOrder(order.toMap());
+    await _orders.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showMessageNotification(
       title: 'Unrecognized Message',

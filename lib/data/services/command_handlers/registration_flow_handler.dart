@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
-import '../../../database_helper.dart';
 import '../../models/customer_model.dart';
+import '../../repositories/barangay_repository.dart';
+import '../../repositories/customer_repository.dart';
+import '../../repositories/pending_sms_action_repository.dart';
 import '../app_event_bus.dart';
 import '../sms_parser.dart';
 import '../sms_registration_copy.dart';
@@ -15,7 +17,9 @@ import 'sms_handler_utils.dart';
 /// Returns `true` if the message was fully handled so the caller can skip
 /// the normal command dispatch (DELIVER / DROP / YES / STATUS).
 class RegistrationFlowHandler {
-  final _db = DatabaseHelper.instance;
+  final _barangays = BarangayRepository();
+  final _customers = CustomerRepository();
+  final _pendingActions = PendingSmsActionRepository();
 
   Future<bool> handle({
     required String sender,
@@ -24,11 +28,11 @@ class RegistrationFlowHandler {
     Telephony? smsSender,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
-    final pending = await _db.getPendingSmsAction(
+    final pending = await _pendingActions.get(
       normalizedSender,
       maxAge: SmsRegistrationCopy.pendingActionTtl,
     );
-    final customerData = await _db.getCustomerByPhone(normalizedSender);
+    final customerData = await _customers.getCustomerByPhone(normalizedSender);
 
     // --- Right to access (MYDATA) ---
     if (parsed.command == SmsCommand.myData) {
@@ -40,7 +44,9 @@ class RegistrationFlowHandler {
         );
         return true;
       }
-      final joined = await _db.getCustomerWithBarangayByPhone(normalizedSender);
+      final joined = await _customers.getCustomerWithBarangayByPhone(
+        normalizedSender,
+      );
       final c = joined != null
           ? Customer.fromMap(joined)
           : Customer.fromSimple(customerData);
@@ -68,7 +74,7 @@ class RegistrationFlowHandler {
         );
         return true;
       }
-      await _db.upsertPendingSmsAction(
+      await _pendingActions.upsert(
         phoneNumber: normalizedSender,
         action: 'delete',
         step: 'awaiting_confirm',
@@ -91,11 +97,12 @@ class RegistrationFlowHandler {
         );
         return true;
       }
-      await _db.deleteCustomerByPhone(normalizedSender);
-      await _db.deletePendingSmsAction(normalizedSender);
+      await _customers.deleteCustomerByPhone(normalizedSender);
+      await _pendingActions.delete(normalizedSender);
       try {
-        await SupabaseSyncService.instance
-            .deleteCustomerFromSupabase(normalizedSender);
+        await SupabaseSyncService.instance.deleteCustomerFromSupabase(
+          normalizedSender,
+        );
       } catch (e) {
         debugPrint('Supabase erasure failed (will retry on next sync): $e');
       }
@@ -111,7 +118,7 @@ class RegistrationFlowHandler {
     // --- STOP cancels any in-flight flow ---
     if (parsed.command == SmsCommand.stop && pending != null) {
       final action = pending['action'] as String?;
-      await _db.deletePendingSmsAction(normalizedSender);
+      await _pendingActions.delete(normalizedSender);
       await SmsHandlerUtils.sendReply(
         sender,
         action == 'delete'
@@ -125,7 +132,7 @@ class RegistrationFlowHandler {
     // --- Anything other than CONFIRM DELETE / STOP during a pending delete
     //     counts as implicit cancellation per the warning message ---
     if (pending != null && pending['action'] == 'delete') {
-      await _db.deletePendingSmsAction(normalizedSender);
+      await _pendingActions.delete(normalizedSender);
       await SmsHandlerUtils.sendReply(
         sender,
         SmsRegistrationCopy.deleteCancelled,
@@ -153,7 +160,7 @@ class RegistrationFlowHandler {
         );
         return true;
       }
-      await _db.upsertPendingSmsAction(
+      await _pendingActions.upsert(
         phoneNumber: normalizedSender,
         action: 'register',
         step: 'awaiting_consent',
@@ -234,7 +241,7 @@ class RegistrationFlowHandler {
       case 'awaiting_consent':
         if (parsed.command == SmsCommand.agree) {
           final consentGivenAt = DateTime.now().toIso8601String();
-          await _db.upsertPendingSmsAction(
+          await _pendingActions.upsert(
             phoneNumber: normalizedSender,
             action: 'register',
             step: 'awaiting_barangay',
@@ -242,7 +249,7 @@ class RegistrationFlowHandler {
             consentVersion: SmsRegistrationCopy.consentVersion,
             consentGivenAt: consentGivenAt,
           );
-          final barangays = await _db.getBarangays();
+          final barangays = await _barangays.getBarangays();
           final list = barangays.map((b) => b['name'] as String).join(', ');
           await SmsHandlerUtils.sendReply(
             sender,
@@ -269,7 +276,7 @@ class RegistrationFlowHandler {
             );
             return true;
           }
-          final barangay = await _db.getBarangayByName(input);
+          final barangay = await _barangays.getBarangayByName(input);
           if (barangay == null) {
             await SmsHandlerUtils.sendReply(
               sender,
@@ -278,7 +285,7 @@ class RegistrationFlowHandler {
             );
             return true;
           }
-          await _db.upsertPendingSmsAction(
+          await _pendingActions.upsert(
             phoneNumber: normalizedSender,
             action: 'register',
             step: 'awaiting_address',
@@ -313,7 +320,7 @@ class RegistrationFlowHandler {
             return true;
           }
           if (pendingBarangayId == null || pendingName == null) {
-            await _db.deletePendingSmsAction(normalizedSender);
+            await _pendingActions.delete(normalizedSender);
             await SmsHandlerUtils.sendReply(
               sender,
               SmsRegistrationCopy.registerHelp,
@@ -322,7 +329,7 @@ class RegistrationFlowHandler {
             return true;
           }
           try {
-            await _db.insertCustomer({
+            await _customers.insertCustomer({
               'name': pendingName,
               'contact_number': normalizedSender,
               'address': addr,
@@ -334,7 +341,7 @@ class RegistrationFlowHandler {
                   pendingConsentVersion ?? SmsRegistrationCopy.consentVersion,
             });
           } on CustomerPhoneAlreadyExistsException {
-            await _db.deletePendingSmsAction(normalizedSender);
+            await _pendingActions.delete(normalizedSender);
             await SmsHandlerUtils.sendReply(
               sender,
               SmsRegistrationCopy.alreadyRegistered,
@@ -342,8 +349,8 @@ class RegistrationFlowHandler {
             );
             return true;
           }
-          final barangay = await _db.getBarangayById(pendingBarangayId);
-          await _db.deletePendingSmsAction(normalizedSender);
+          final barangay = await _barangays.getBarangayById(pendingBarangayId);
+          await _pendingActions.delete(normalizedSender);
           AppEventBus().notifyOrderReceived();
           await SmsHandlerUtils.sendReply(
             sender,
@@ -364,7 +371,7 @@ class RegistrationFlowHandler {
     }
 
     // Unknown step — clear the row and treat as fresh
-    await _db.deletePendingSmsAction(normalizedSender);
+    await _pendingActions.delete(normalizedSender);
     return false;
   }
 }
