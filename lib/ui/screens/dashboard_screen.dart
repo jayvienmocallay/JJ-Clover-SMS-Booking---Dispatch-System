@@ -6,11 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../data/models/delivery_log_model.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
-import '../../database_helper.dart';
+import '../../data/repositories/barangay_repository.dart';
+import '../../data/repositories/delivery_log_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/status_toggles.dart';
+import 'delivery_logs_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   /// Callback to navigate to a specific tab in AppShell
@@ -24,19 +27,25 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _todayBarangays = [];
+  int _todayDeliveryCount = 0;
+  int _todayGallonsDelivered = 0;
+  late final BarangayRepository _barangayRepo;
+  late final DeliveryLogRepository _deliveryLogRepo;
 
   @override
   void initState() {
     super.initState();
+    _barangayRepo = context.read<BarangayRepository>();
+    _deliveryLogRepo = context.read<DeliveryLogRepository>();
     _loadBarangays();
+    _loadTodayStats();
   }
 
   /// Loads today's scheduled barangays (zone data is static, not in provider)
   Future<void> _loadBarangays() async {
     if (kIsWeb) return;
-    final db = DatabaseHelper.instance;
     final today = DeliveryDays.getToday();
-    final barangays = await db.getBarangays();
+    final barangays = await _barangayRepo.getBarangays();
     final todayBarangays = <String>[];
 
     for (final brgy in barangays) {
@@ -60,13 +69,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) setState(() => _todayBarangays = todayBarangays);
   }
 
+  Future<void> _loadTodayStats() async {
+    if (kIsWeb) return;
+    final rawLogs = await _deliveryLogRepo.getTodayDeliveryLogs();
+    final logs = rawLogs.map(DeliveryLog.fromMap).toList();
+    if (mounted) {
+      setState(() {
+        _todayDeliveryCount = logs.length;
+        _todayGallonsDelivered =
+            logs.fold(0, (sum, l) => sum + l.quantityDelivered);
+      });
+    }
+  }
+
   Future<void> _refresh() async {
     if (kIsWeb) return;
     final orderProv = context.read<OrderProvider>();
     final customerProv = context.read<CustomerProvider>();
     await orderProv.loadOrders();
     await customerProv.loadCustomers();
-    await _loadBarangays();
+    await Future.wait([_loadBarangays(), _loadTodayStats()]);
   }
 
   /// Returns a greeting based on the current hour
@@ -121,6 +143,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               // --- Stats cards (2x2 grid) ---
               _buildStatsGrid(orderProv, customerProv),
+              const SizedBox(height: 12),
+
+              // --- Today's deliveries summary ---
+              _buildDeliveredTodayCard(),
               const SizedBox(height: 24),
 
               // --- Today's Zones card ---
@@ -221,6 +247,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildDeliveredTodayCard() {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const DeliveryLogsScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.statusOperatingLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.check_circle,
+                size: 20,
+                color: AppColors.statusOperating,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Delivered Today',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.foreground,
+                    ),
+                  ),
+                  Text(
+                    '$_todayDeliveryCount order${_todayDeliveryCount != 1 ? "s" : ""} · $_todayGallonsDelivered gallon${_todayGallonsDelivered != 1 ? "s" : ""}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.mutedForeground,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 13,
+              color: AppColors.mutedForeground,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

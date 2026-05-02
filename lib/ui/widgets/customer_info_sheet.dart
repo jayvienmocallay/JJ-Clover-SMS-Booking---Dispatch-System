@@ -1,9 +1,11 @@
 // Customer/Conversation info bottom sheet — shown when the ⓘ button is tapped
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:telephony/telephony.dart';
-import '../../database_helper.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/order_model.dart';
+import '../../data/repositories/customer_repository.dart';
+import '../../data/repositories/order_repository.dart';
 import '../../core/utils/phone_number_utils.dart';
 import '../theme/app_theme.dart';
 
@@ -27,16 +29,20 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
   Order? _activeOrder;
   Order? _lastCompletedOrder;
   int _totalOrders = 0;
+  late final CustomerRepository _customerRepo;
+  late final OrderRepository _orderRepo;
 
   @override
   void initState() {
     super.initState();
+    _customerRepo = context.read<CustomerRepository>();
+    _orderRepo = context.read<OrderRepository>();
     _loadData();
   }
 
   Future<void> _loadData() async {
     try {
-      final customerMap = await DatabaseHelper.instance
+      final customerMap = await _customerRepo
           .getCustomerWithBarangayByPhone(widget.phoneNumber);
 
       final Customer? customer =
@@ -44,7 +50,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
 
       final normalizedPhone = PhoneNumberUtils.normalize(widget.phoneNumber);
 
-      final activeRows = await DatabaseHelper.instance.getOrders(
+      final activeRows = await _orderRepo.getOrders(
         where: 'phone_number = ? AND status NOT IN (?, ?, ?)',
         whereArgs: [normalizedPhone, 'completed', 'cancelled', 'rejected'],
       );
@@ -54,7 +60,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
         activeOrder = Order.fromMap(activeRows.first);
       }
 
-      final allRows = await DatabaseHelper.instance.getOrders(
+      final allRows = await _orderRepo.getOrders(
         where: 'phone_number = ?',
         whereArgs: [normalizedPhone],
       );
@@ -97,8 +103,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
     final id = _activeOrder?.id;
     if (id == null) return;
     try {
-      await DatabaseHelper.instance
-          .updateOrderStatus(id, status, reason: reason);
+      await _orderRepo.updateOrderStatus(id, status, reason: reason);
       await _loadData();
     } catch (e) {
       if (mounted) {
@@ -822,16 +827,18 @@ class _OrderHistorySheet extends StatefulWidget {
 class _OrderHistorySheetState extends State<_OrderHistorySheet> {
   bool _loading = true;
   List<Order> _orders = [];
+  late final OrderRepository _orderRepo;
 
   @override
   void initState() {
     super.initState();
+    _orderRepo = context.read<OrderRepository>();
     _loadOrders();
   }
 
   Future<void> _loadOrders() async {
     try {
-      final rows = await DatabaseHelper.instance.getOrders(
+      final rows = await _orderRepo.getOrders(
         where: 'phone_number = ?',
         whereArgs: [PhoneNumberUtils.normalize(widget.phoneNumber)],
       );

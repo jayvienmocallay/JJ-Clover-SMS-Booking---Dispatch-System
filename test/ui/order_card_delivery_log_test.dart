@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jj_clover_sms/data/models/order_model.dart';
+import 'package:jj_clover_sms/data/repositories/order_repository.dart';
 import 'package:jj_clover_sms/database_helper.dart';
 import 'package:jj_clover_sms/ui/widgets/order_card.dart';
+import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -76,14 +78,17 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: OrderCard(
-            order: Order.fromMap(orderMap),
-            customerName: 'Detail View Customer',
-            phone: '09181112222',
-            barangay: 'San Isidro',
-            address: 'Purok 3',
+      Provider<OrderRepository>(
+        create: (_) => OrderRepository(),
+        child: MaterialApp(
+          home: Scaffold(
+            body: OrderCard(
+              order: Order.fromMap(orderMap),
+              customerName: 'Detail View Customer',
+              phone: '09181112222',
+              barangay: 'San Isidro',
+              address: 'Purok 3',
+            ),
           ),
         ),
       ),

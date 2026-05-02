@@ -1,9 +1,10 @@
 // Modern chat interface: SMS conversations with bubble-based layout
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:telephony/telephony.dart';
-import '../../database_helper.dart';
 import '../../core/utils/phone_number_utils.dart';
+import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chat_bubble.dart';
@@ -34,10 +35,12 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isComposing = false;
   int _lastMessageCount = 0;
   final _expandedTimestamps = <String>{};
+  late final SmsMessageRepository _smsRepo;
 
   @override
   void initState() {
     super.initState();
+    _smsRepo = context.read<SmsMessageRepository>();
     _loadMessages(isInitial: true);
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadMessages(isInitial: false));
     _messageSub = AppEventBus().onMessageReceived.listen((_) {
@@ -61,7 +64,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _loadMessages({bool isInitial = false, bool isNewMessage = false}) async {
     try {
-      final messages = await DatabaseHelper.instance.getSmsMessagesForPhone(widget.phoneNumber);
+      final messages = await _smsRepo.getSmsMessagesForPhone(widget.phoneNumber);
       final sorted = messages.toList()..sort((a, b) {
         final timeA = DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime(2000);
         final timeB = DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime(2000);
@@ -106,7 +109,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       await Telephony.instance.sendSms(to: widget.phoneNumber, message: message);
-      await DatabaseHelper.instance.insertSmsMessage({
+      await _smsRepo.insertSmsMessage({
         'phone_number': PhoneNumberUtils.normalize(widget.phoneNumber),
         'message': message,
         'direction': 'outgoing',

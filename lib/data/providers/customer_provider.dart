@@ -1,9 +1,13 @@
 // Task 011 — CustomerProvider: ChangeNotifier wrapping customer queries
 // Provides reactive customer state to all screens via Provider
 import 'package:flutter/foundation.dart';
-import '../../database_helper.dart';
+import '../repositories/customer_repository.dart';
 
 class CustomerProvider extends ChangeNotifier {
+  CustomerProvider(this._repository);
+
+  final CustomerRepository _repository;
+
   List<Map<String, dynamic>> _customers = [];
   bool _isLoading = false;
   String? _error;
@@ -20,8 +24,7 @@ class CustomerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final db = DatabaseHelper.instance;
-      _customers = await db.getCustomersWithBarangay();
+      _customers = await _repository.getCustomersWithBarangay();
     } catch (e) {
       debugPrint('CustomerProvider.loadCustomers error: $e');
       _error = e.toString();
@@ -35,7 +38,7 @@ class CustomerProvider extends ChangeNotifier {
   Future<void> addCustomer(Map<String, dynamic> customerData) async {
     _error = null;
     try {
-      await DatabaseHelper.instance.insertCustomer(customerData);
+      await _repository.insertCustomer(customerData);
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
@@ -47,7 +50,7 @@ class CustomerProvider extends ChangeNotifier {
   Future<void> deleteCustomer(int customerId) async {
     _error = null;
     try {
-      await DatabaseHelper.instance.deleteCustomer(customerId);
+      await _repository.deleteCustomer(customerId);
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
@@ -62,7 +65,7 @@ class CustomerProvider extends ChangeNotifier {
   ) async {
     _error = null;
     try {
-      await DatabaseHelper.instance.updateCustomer(customerId, customerData);
+      await _repository.updateCustomer(customerId, customerData);
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
