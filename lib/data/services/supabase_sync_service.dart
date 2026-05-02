@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import '../../database_helper.dart';
 import '../../core/utils/phone_number_utils.dart';
 import '../repositories/settings_repository.dart';
+import '../repositories/supabase_local_sync_repository.dart';
 
 /// Sync status for UI display
 enum SyncStatus { idle, syncing, success, error }
@@ -23,6 +23,7 @@ class SupabaseSyncService extends ChangeNotifier {
   Timer? _periodicTimer;
   StreamSubscription? _connectivitySub;
   final SettingsRepository _settings = SettingsRepository();
+  final SupabaseLocalSyncRepository _localSync = SupabaseLocalSyncRepository();
 
   bool get initialized => _initialized;
   bool get autoSyncEnabled => _autoSyncEnabled;
@@ -157,9 +158,7 @@ class SupabaseSyncService extends ChangeNotifier {
   }
 
   Future<void> _syncTable(SupabaseClient client, String tableName) async {
-    final db = await DatabaseHelper.instance.database;
-
-    final rows = await db.query(tableName, orderBy: 'id ASC');
+    final rows = await _localSync.getRowsForSync(tableName);
     if (rows.isEmpty) return;
 
     const batchSize = 50;
@@ -181,7 +180,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
   /// RA 10173 right-to-erasure cascade on Supabase.
   ///
-  /// Called after [DatabaseHelper.deleteCustomerByPhone] succeeds locally.
+  /// Called after the local customer deletion succeeds.
   /// Removes the customer's personal data from all synced Supabase tables so
   /// the right to erasure is honoured both locally and in the cloud.
   ///
@@ -212,11 +211,9 @@ class SupabaseSyncService extends ChangeNotifier {
 
   Future<void> _updatePendingCount() async {
     try {
-      final db = await DatabaseHelper.instance.database;
       int count = 0;
       for (final table in _syncTables) {
-        final result = await db.rawQuery('SELECT COUNT(*) as cnt FROM $table');
-        count += (result.first['cnt'] as int? ?? 0);
+        count += await _localSync.countRows(table);
       }
       _pendingCount = count;
     } catch (e) {
