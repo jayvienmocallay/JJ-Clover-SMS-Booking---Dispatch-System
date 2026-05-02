@@ -34,4 +34,12 @@ class OrderRepository {
   Future<List<Map<String, dynamic>>> getDeliveryLogsForOrder(int orderId) {
     return DatabaseHelper.instance.getDeliveryLogsForOrder(orderId);
   }
+
+  Future<List<Map<String, dynamic>>> getDeliveryLogs() {
+    return DatabaseHelper.instance.getDeliveryLogs();
+  }
+
+  Future<List<Map<String, dynamic>>> getTodayDeliveryLogs() {
+    return DatabaseHelper.instance.getTodayDeliveryLogs();
+  }
 }
