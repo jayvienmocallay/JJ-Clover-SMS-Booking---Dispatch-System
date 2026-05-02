@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../database_helper.dart';
 import '../../core/utils/phone_number_utils.dart';
+import '../repositories/settings_repository.dart';
 
 /// Sync status for UI display
 enum SyncStatus { idle, syncing, success, error }
@@ -21,6 +22,7 @@ class SupabaseSyncService extends ChangeNotifier {
   int _pendingCount = 0;
   Timer? _periodicTimer;
   StreamSubscription? _connectivitySub;
+  final SettingsRepository _settings = SettingsRepository();
 
   bool get initialized => _initialized;
   bool get autoSyncEnabled => _autoSyncEnabled;
@@ -49,10 +51,9 @@ class SupabaseSyncService extends ChangeNotifier {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    final db = DatabaseHelper.instance;
-    final autoSync = await db.getSetting('auto_sync_enabled');
-    final wifi = await db.getSetting('sync_wifi_only');
-    final lastSync = await db.getSetting('last_synced_at');
+    final autoSync = await _settings.getSetting('auto_sync_enabled');
+    final wifi = await _settings.getSetting('sync_wifi_only');
+    final lastSync = await _settings.getSetting('last_synced_at');
 
     _autoSyncEnabled = autoSync == 'true';
     _wifiOnly = wifi == 'true';
@@ -70,7 +71,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
   Future<void> setAutoSync(bool enabled) async {
     _autoSyncEnabled = enabled;
-    await DatabaseHelper.instance.setSetting('auto_sync_enabled', enabled.toString());
+    await _settings.setSetting('auto_sync_enabled', enabled.toString());
 
     if (enabled) {
       _startAutoSync();
@@ -83,7 +84,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
   Future<void> setWifiOnly(bool enabled) async {
     _wifiOnly = enabled;
-    await DatabaseHelper.instance.setSetting('sync_wifi_only', enabled.toString());
+    await _settings.setSetting('sync_wifi_only', enabled.toString());
     notifyListeners();
   }
 
@@ -141,7 +142,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
       _lastSyncedAt = DateTime.now();
       _status = SyncStatus.success;
-      await DatabaseHelper.instance.setSetting(
+      await _settings.setSetting(
         'last_synced_at',
         _lastSyncedAt!.toIso8601String(),
       );
