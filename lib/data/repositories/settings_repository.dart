@@ -1,6 +1,18 @@
 import '../../database_helper.dart';
 
 class SettingsRepository {
+  Future<String?> getSetting(String key) {
+    return DatabaseHelper.instance.getSetting(key);
+  }
+
+  Future<void> setSetting(String key, String value) {
+    return DatabaseHelper.instance.setSetting(key, value);
+  }
+
+  Future<void> deleteSetting(String key) {
+    return DatabaseHelper.instance.deleteSetting(key);
+  }
+
   Future<int> getCutoffHour() {
     return DatabaseHelper.instance.getCutoffHour();
   }

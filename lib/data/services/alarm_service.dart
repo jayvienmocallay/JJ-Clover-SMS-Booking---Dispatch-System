@@ -8,7 +8,7 @@ import 'dart:ui';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../database_helper.dart';
+import '../repositories/settings_repository.dart';
 
 /// Manages the walk-in alarm audio playback.
 ///
@@ -24,6 +24,7 @@ class AlarmService extends ChangeNotifier {
   static const String _uiAlarmPortName = 'jj_clover_drop_alarm_port';
 
   final AudioPlayer _player = AudioPlayer();
+  final _settings = SettingsRepository();
   ReceivePort? _uiAlarmPort;
   bool _isPlaying = false;
 
@@ -162,7 +163,7 @@ class AlarmService extends ChangeNotifier {
     if (kIsWeb) return;
 
     try {
-      await DatabaseHelper.instance.setSetting(
+      await _settings.setSetting(
         _activeAlertSettingKey,
         jsonEncode(alert.toJson()),
       );
@@ -175,9 +176,7 @@ class AlarmService extends ChangeNotifier {
     if (kIsWeb) return null;
 
     try {
-      final raw = await DatabaseHelper.instance.getSetting(
-        _activeAlertSettingKey,
-      );
+      final raw = await _settings.getSetting(_activeAlertSettingKey);
       return _DropAlarmAlert.fromJsonString(raw);
     } catch (e) {
       debugPrint('AlarmService: Error loading persisted alert - $e');
@@ -189,7 +188,7 @@ class AlarmService extends ChangeNotifier {
     if (kIsWeb) return;
 
     try {
-      await DatabaseHelper.instance.deleteSetting(_activeAlertSettingKey);
+      await _settings.deleteSetting(_activeAlertSettingKey);
     } catch (e) {
       debugPrint('AlarmService: Error clearing persisted alert - $e');
     }

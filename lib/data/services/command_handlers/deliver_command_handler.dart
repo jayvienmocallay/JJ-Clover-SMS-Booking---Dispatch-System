@@ -1,11 +1,14 @@
 import 'package:telephony/telephony.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/phone_number_utils.dart';
-import '../../../database_helper.dart';
 import '../../models/customer_model.dart';
 import '../../models/order_model.dart';
 import '../../models/schedule_model.dart';
 import '../../models/pre_book_context.dart';
+import '../../repositories/customer_repository.dart';
+import '../../repositories/order_repository.dart';
+import '../../repositories/schedule_repository.dart';
+import '../../repositories/settings_repository.dart';
 import '../app_event_bus.dart';
 import '../push_notification_service.dart';
 import '../sms_parser.dart';
@@ -23,7 +26,10 @@ class DeliverCommandHandler {
 
   final PreBookStore _preBookStore;
 
-  final _db = DatabaseHelper.instance;
+  final _customers = CustomerRepository();
+  final _orders = OrderRepository();
+  final _schedules = ScheduleRepository();
+  final _settings = SettingsRepository();
   final _modeManager = SystemModeManager.instance;
 
   Future<void> handle(
@@ -53,7 +59,7 @@ class DeliverCommandHandler {
     }
 
     // Step 2: Customer lookup
-    final customerData = await _db.getCustomerByPhone(normalizedSender);
+    final customerData = await _customers.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
       await SmsHandlerUtils.saveUnrecognized(
         sender,
@@ -72,8 +78,9 @@ class DeliverCommandHandler {
     }
 
     // Step 3: Customer profile + schedules
-    final customerJoined =
-        await _db.getCustomerWithBarangayByPhone(normalizedSender);
+    final customerJoined = await _customers.getCustomerWithBarangayByPhone(
+      normalizedSender,
+    );
     if (customerJoined == null) {
       await SmsHandlerUtils.saveUnrecognized(
         sender,
@@ -91,7 +98,9 @@ class DeliverCommandHandler {
       return;
     }
     final customer = Customer.fromMap(customerJoined);
-    final schedulesData = await _db.getSchedulesForCustomer(customer.id!);
+    final schedulesData = await _schedules.getSchedulesForCustomer(
+      customer.id!,
+    );
     final schedules = schedulesData.map((s) => Schedule.fromMap(s)).toList();
     final today = DeliveryDays.getToday();
 
@@ -134,8 +143,8 @@ class DeliverCommandHandler {
 
     // Step 5: Cutoff check
     final now = DateTime.now();
-    final cutoffHour = await _db.getCutoffHour();
-    final cutoffMinute = await _db.getCutoffMinute();
+    final cutoffHour = await _settings.getCutoffHour();
+    final cutoffMinute = await _settings.getCutoffMinute();
     final isBeforeCutoff =
         now.hour < cutoffHour ||
         (now.hour == cutoffHour && now.minute < cutoffMinute);
@@ -171,7 +180,7 @@ class DeliverCommandHandler {
       sourceMessageId: sourceMessageId,
     );
 
-    await _db.insertOrder(order.toMap());
+    await _orders.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
       title: 'New Delivery Order',

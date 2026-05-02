@@ -5,6 +5,14 @@ class BarangayRepository {
     return DatabaseHelper.instance.getBarangays();
   }
 
+  Future<Map<String, dynamic>?> getBarangayById(int id) {
+    return DatabaseHelper.instance.getBarangayById(id);
+  }
+
+  Future<Map<String, dynamic>?> getBarangayByName(String name) {
+    return DatabaseHelper.instance.getBarangayByName(name);
+  }
+
   Future<int> insertBarangay(Map<String, dynamic> data) {
     return DatabaseHelper.instance.insertBarangay(data);
   }

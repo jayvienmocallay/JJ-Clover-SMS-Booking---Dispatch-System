@@ -252,4 +252,16 @@ Future<void> _createLegacyCustomerPhoneTables(Database db) async {
       id INTEGER PRIMARY KEY AUTOINCREMENT
     )
   ''');
+  await db.execute('''
+    CREATE TABLE delivery_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      customer_id INTEGER NOT NULL,
+      staff_id INTEGER,
+      quantity_delivered INTEGER NOT NULL,
+      gallon_type TEXT,
+      notes TEXT,
+      delivered_at TEXT NOT NULL
+    )
+  ''');
 }

@@ -2,8 +2,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import '../../database_helper.dart';
 import '../../core/utils/phone_number_utils.dart';
+import '../repositories/settings_repository.dart';
+import '../repositories/supabase_local_sync_repository.dart';
 
 /// Sync status for UI display
 enum SyncStatus { idle, syncing, success, error }
@@ -21,6 +22,8 @@ class SupabaseSyncService extends ChangeNotifier {
   int _pendingCount = 0;
   Timer? _periodicTimer;
   StreamSubscription? _connectivitySub;
+  final SettingsRepository _settings = SettingsRepository();
+  final SupabaseLocalSyncRepository _localSync = SupabaseLocalSyncRepository();
 
   bool get initialized => _initialized;
   bool get autoSyncEnabled => _autoSyncEnabled;
@@ -49,10 +52,9 @@ class SupabaseSyncService extends ChangeNotifier {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    final db = DatabaseHelper.instance;
-    final autoSync = await db.getSetting('auto_sync_enabled');
-    final wifi = await db.getSetting('sync_wifi_only');
-    final lastSync = await db.getSetting('last_synced_at');
+    final autoSync = await _settings.getSetting('auto_sync_enabled');
+    final wifi = await _settings.getSetting('sync_wifi_only');
+    final lastSync = await _settings.getSetting('last_synced_at');
 
     _autoSyncEnabled = autoSync == 'true';
     _wifiOnly = wifi == 'true';
@@ -70,7 +72,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
   Future<void> setAutoSync(bool enabled) async {
     _autoSyncEnabled = enabled;
-    await DatabaseHelper.instance.setSetting('auto_sync_enabled', enabled.toString());
+    await _settings.setSetting('auto_sync_enabled', enabled.toString());
 
     if (enabled) {
       _startAutoSync();
@@ -83,7 +85,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
   Future<void> setWifiOnly(bool enabled) async {
     _wifiOnly = enabled;
-    await DatabaseHelper.instance.setSetting('sync_wifi_only', enabled.toString());
+    await _settings.setSetting('sync_wifi_only', enabled.toString());
     notifyListeners();
   }
 
@@ -141,7 +143,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
       _lastSyncedAt = DateTime.now();
       _status = SyncStatus.success;
-      await DatabaseHelper.instance.setSetting(
+      await _settings.setSetting(
         'last_synced_at',
         _lastSyncedAt!.toIso8601String(),
       );
@@ -156,9 +158,7 @@ class SupabaseSyncService extends ChangeNotifier {
   }
 
   Future<void> _syncTable(SupabaseClient client, String tableName) async {
-    final db = await DatabaseHelper.instance.database;
-
-    final rows = await db.query(tableName, orderBy: 'id ASC');
+    final rows = await _localSync.getRowsForSync(tableName);
     if (rows.isEmpty) return;
 
     const batchSize = 50;
@@ -180,7 +180,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
   /// RA 10173 right-to-erasure cascade on Supabase.
   ///
-  /// Called after [DatabaseHelper.deleteCustomerByPhone] succeeds locally.
+  /// Called after the local customer deletion succeeds.
   /// Removes the customer's personal data from all synced Supabase tables so
   /// the right to erasure is honoured both locally and in the cloud.
   ///
@@ -211,11 +211,9 @@ class SupabaseSyncService extends ChangeNotifier {
 
   Future<void> _updatePendingCount() async {
     try {
-      final db = await DatabaseHelper.instance.database;
       int count = 0;
       for (final table in _syncTables) {
-        final result = await db.rawQuery('SELECT COUNT(*) as cnt FROM $table');
-        count += (result.first['cnt'] as int? ?? 0);
+        count += await _localSync.countRows(table);
       }
       _pendingCount = count;
     } catch (e) {

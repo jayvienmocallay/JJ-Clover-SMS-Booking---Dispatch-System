@@ -5,11 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../core/utils/phone_number_utils.dart';
-import '../../data/models/delivery_log_model.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/repositories/barangay_repository.dart';
 import '../../data/repositories/customer_repository.dart';
-import '../../data/repositories/delivery_log_repository.dart';
 import '../../data/services/sms_registration_copy.dart';
 import '../theme/app_theme.dart';
 
@@ -33,185 +31,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
       final barangay = (c['barangay'] as String? ?? '').toLowerCase();
       return name.contains(q) || phone.contains(q) || barangay.contains(q);
     }).toList();
-  }
-
-  void _showDeliveryHistory(int customerId, String name) async {
-    final rawLogs = await context
-        .read<DeliveryLogRepository>()
-        .getDeliveryLogsForCustomer(customerId);
-    final logs = rawLogs.map(DeliveryLog.fromMap).toList();
-
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      isScrollControlled: true,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.55,
-        maxChildSize: 0.9,
-        minChildSize: 0.35,
-        expand: false,
-        builder: (_, scrollController) => ListView(
-          controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Icon(
-                  Icons.history,
-                  size: 18,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '$name — Delivery History',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.foreground,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${logs.length} delivery${logs.length != 1 ? "ies" : ""} · '
-              '${logs.fold<int>(0, (s, l) => s + l.quantityDelivered)} gallons total',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.mutedForeground,
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (logs.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: Center(
-                  child: Text(
-                    'No deliveries recorded for this customer.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.mutedForeground,
-                    ),
-                  ),
-                ),
-              )
-            else
-              ...logs.map((log) {
-                final qty = log.quantityDelivered;
-                final now = DateTime.now();
-                final dt = log.deliveredAt;
-                final isToday = dt.year == now.year &&
-                    dt.month == now.month &&
-                    dt.day == now.day;
-                final hour = dt.hour > 12 ? dt.hour - 12 : dt.hour;
-                final displayHour = hour == 0 ? 12 : hour;
-                final minute = dt.minute.toString().padLeft(2, '0');
-                final period = dt.hour >= 12 ? 'PM' : 'AM';
-                final timeStr = '$displayHour:$minute $period';
-                const months = [
-                  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-                ];
-                final dateStr = isToday
-                    ? 'Today, $timeStr'
-                    : '${months[dt.month - 1]} ${dt.day}, ${dt.year}  $timeStr';
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: AppColors.statusOperatingLight,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.check_circle,
-                          size: 16,
-                          color: AppColors.statusOperating,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$qty gallon${qty > 1 ? "s" : ""}'
-                              '${log.gallonType?.isNotEmpty == true ? " (${log.gallonType})" : ""}',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.foreground,
-                              ),
-                            ),
-                            if (log.notes?.isNotEmpty == true)
-                              Text(
-                                log.notes!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.mutedForeground,
-                                ),
-                              ),
-                            if (log.returnedContainers != null ||
-                                log.paymentMethod != null)
-                              Text(
-                                [
-                                  if (log.returnedContainers != null)
-                                    '${log.returnedContainers} returned',
-                                  if (log.paymentMethod != null)
-                                    log.paymentMethod!,
-                                ].join(' · '),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.mutedForeground,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        dateStr,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.mutedForeground,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _deleteCustomer(int customerId, String name) async {
@@ -478,19 +297,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   ],
                                 ),
                               ],
-                            ),
-                          ),
-                          // Delivery history button
-                          GestureDetector(
-                            onTap: () =>
-                                _showDeliveryHistory(c['id'] as int, name),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              child: const Icon(
-                                Icons.receipt_long,
-                                size: 20,
-                                color: AppColors.mutedForeground,
-                              ),
                             ),
                           ),
                           // Edit button

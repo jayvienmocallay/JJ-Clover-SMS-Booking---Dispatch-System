@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:jj_clover_sms/database_helper.dart';
 import 'package:jj_clover_sms/data/services/default_sms_app_service.dart';
 import 'package:jj_clover_sms/data/services/sms_background_service.dart';
 import 'package:jj_clover_sms/data/services/system_mode_manager.dart';
@@ -18,9 +17,9 @@ import 'package:jj_clover_sms/data/providers/order_provider.dart';
 import 'package:jj_clover_sms/data/repositories/order_repository.dart';
 import 'package:jj_clover_sms/data/repositories/customer_repository.dart';
 import 'package:jj_clover_sms/data/repositories/barangay_repository.dart';
-import 'package:jj_clover_sms/data/repositories/delivery_log_repository.dart';
 import 'package:jj_clover_sms/data/repositories/sms_message_repository.dart';
 import 'package:jj_clover_sms/data/repositories/settings_repository.dart';
+import 'package:jj_clover_sms/data/repositories/database_runtime_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jj_clover_sms/data/providers/customer_provider.dart';
 import 'package:jj_clover_sms/ui/theme/app_theme.dart';
@@ -40,8 +39,7 @@ Future<void> main() async {
   // Skip on web — SQLCipher is not available in browsers.
   if (!kIsWeb) {
     try {
-      await DatabaseHelper.instance.database;
-      await DatabaseHelper.instance.ensureSchedulesSeeded();
+      await DatabaseRuntimeRepository().ensureReady();
       await SystemModeManager.instance.loadPersistedMode(notify: false);
       await PushNotificationService.instance.initialize();
       debugPrint('Database initialized successfully');
@@ -91,7 +89,6 @@ class MyApp extends StatelessWidget {
         Provider(create: (_) => OrderRepository()),
         Provider(create: (_) => CustomerRepository()),
         Provider(create: (_) => BarangayRepository()),
-        Provider(create: (_) => DeliveryLogRepository()),
         Provider(create: (_) => SmsMessageRepository()),
         Provider(create: (_) => SettingsRepository()),
         // Task 011 — OrderProvider: reactive order state for dashboard + order screens
