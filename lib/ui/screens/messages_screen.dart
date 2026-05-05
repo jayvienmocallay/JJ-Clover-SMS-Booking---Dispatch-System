@@ -172,7 +172,9 @@ return RefreshIndicator(
                         ),
                         child: Center(
                           child: Text(
-                            (displayName ?? phone).substring(0, 1).toUpperCase(),
+                            (displayName ?? phone).isNotEmpty
+                                ? (displayName ?? phone).substring(0, 1).toUpperCase()
+                                : '?',
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,

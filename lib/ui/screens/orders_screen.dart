@@ -3,6 +3,7 @@
 // Scrollable list with filter tabs, order cards, and add order form
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
@@ -204,10 +205,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.pending
                           ? () async {
-                              await orderProv.updateStatus(order.id!, 'confirmed');
+                              await orderProv.updateStatus(
+                                order.id!,
+                                'confirmed',
+                              );
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Order confirmed ✓')),
+                                  const SnackBar(
+                                    content: Text('Order confirmed ✓'),
+                                  ),
                                 );
                               }
                             }
@@ -221,10 +227,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.confirmed
                           ? () async {
-                              await orderProv.updateStatus(order.id!, 'in_transit');
+                              await orderProv.updateStatus(
+                                order.id!,
+                                'in_transit',
+                              );
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Delivery started ✓')),
+                                  const SnackBar(
+                                    content: Text('Delivery started ✓'),
+                                  ),
                                 );
                               }
                             }
@@ -233,10 +244,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.inTransit
                           ? () async {
-                              await orderProv.updateStatus(order.id!, 'completed');
+                              await orderProv.updateStatus(
+                                order.id!,
+                                'completed',
+                              );
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Order completed ✓')),
+                                  const SnackBar(
+                                    content: Text('Order completed ✓'),
+                                  ),
                                 );
                               }
                             }
@@ -321,7 +337,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              await orderProv.updateStatus(orderId, 'cancelled', reason: reason);
+              await orderProv.updateStatus(
+                orderId,
+                'cancelled',
+                reason: reason,
+              );
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Order rejected ✓')),
@@ -807,6 +827,12 @@ class _AddOrderFormState extends State<_AddOrderForm> {
       child: TextField(
         controller: controller,
         keyboardType: type,
+        inputFormatters: type == TextInputType.phone
+            ? [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(11),
+              ]
+            : null,
         style: const TextStyle(fontSize: 14, color: AppColors.foreground),
         decoration: InputDecoration(
           hintText: hint,
