@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jj_clover_sms/data/providers/order_provider.dart';
+import 'package:jj_clover_sms/data/repositories/order_repository.dart';
 import 'package:jj_clover_sms/database_helper.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -59,7 +60,7 @@ void main() {
         'staff_id': 3,
       });
 
-      final provider = OrderProvider();
+      final provider = OrderProvider(OrderRepository());
 
       await provider.updateStatus(
         orderId,

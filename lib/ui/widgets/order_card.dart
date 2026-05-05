@@ -3,8 +3,9 @@
 // Displays a single order with customer info, status, and action buttons
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:provider/provider.dart';
 import '../../data/models/order_model.dart';
-import '../../database_helper.dart';
+import '../../data/repositories/order_repository.dart';
 import '../theme/app_theme.dart';
 
 /// Displays a single order as a card with customer info, quantity,
@@ -429,7 +430,7 @@ class OrderCard extends StatelessWidget {
   /// Task 011 — Shows delivery logs for a completed order
   void _showDeliveryLogs(BuildContext context, int orderId) async {
     if (kIsWeb) return;
-    final logs = await DatabaseHelper.instance.getDeliveryLogsForOrder(orderId);
+    final logs = await context.read<OrderRepository>().getDeliveryLogsForOrder(orderId);
 
     if (!context.mounted) return;
     showModalBottomSheet(

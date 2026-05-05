@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
-import '../../database_helper.dart';
+import '../../data/repositories/barangay_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/status_toggles.dart';
 
@@ -24,25 +24,35 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _todayBarangays = [];
+  late final BarangayRepository _barangayRepo;
 
   @override
   void initState() {
     super.initState();
+    _barangayRepo = context.read<BarangayRepository>();
     _loadBarangays();
   }
 
   /// Loads today's scheduled barangays (zone data is static, not in provider)
   Future<void> _loadBarangays() async {
     if (kIsWeb) return;
-    final db = DatabaseHelper.instance;
     final today = DeliveryDays.getToday();
-    final barangays = await db.getBarangays();
+    final barangays = await _barangayRepo.getBarangays();
     final todayBarangays = <String>[];
 
     for (final brgy in barangays) {
       final zone = brgy['delivery_zone'] as String;
       final name = brgy['name'] as String;
-      final days = ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
+      final dbDeliveryDay = brgy['delivery_day'] as String?;
+
+      // For Zone C, prefer the DB-stored delivery_day so dynamically added
+      // barangays (not in the hardcoded map) also appear on the dashboard.
+      List<String> days;
+      if (zone == 'Zone C' && dbDeliveryDay != null) {
+        days = [dbDeliveryDay];
+      } else {
+        days = ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
+      }
       if (days.contains(today)) {
         todayBarangays.add(name);
       }
@@ -160,16 +170,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     ];
 
+    // Compute aspect ratio dynamically so content fits on small screens.
+    // Available width = screen width - 32 (ListView padding) - 12 (grid spacing)
+    // Each cell width = (availableWidth - crossAxisSpacing) / 2
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cellWidth = (screenWidth - 32 - 12) / 2;
+    // Content needs ~100px: 12(pad)*2 + 20(icon) + 4(gap) + 32(value) + 16(label)
+    const minHeight = 112.0;
+    final cellHeight = cellWidth / 1.4 < minHeight ? minHeight : cellWidth / 1.4;
+    final aspectRatio = cellWidth / cellHeight;
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: 1.6,
+      childAspectRatio: aspectRatio,
       children: stats.map((stat) {
         return Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(16),
@@ -180,11 +200,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(stat.icon, size: 20, color: stat.color),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Text(
                 '${stat.value}',
                 style: const TextStyle(
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: FontWeight.w700,
                   color: AppColors.foreground,
                 ),
@@ -195,6 +215,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fontSize: 12,
                   color: AppColors.mutedForeground,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

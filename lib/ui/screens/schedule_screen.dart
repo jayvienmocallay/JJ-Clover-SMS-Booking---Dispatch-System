@@ -2,8 +2,9 @@
 // Day-by-day barangay delivery schedule view
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
-import '../../database_helper.dart';
+import '../../data/repositories/barangay_repository.dart';
 import '../theme/app_theme.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -16,10 +17,12 @@ class ScheduleScreen extends StatefulWidget {
 class _ScheduleScreenState extends State<ScheduleScreen> {
   List<Map<String, dynamic>> _barangays = [];
   bool _isLoading = true;
+  late final BarangayRepository _barangayRepo;
 
   @override
   void initState() {
     super.initState();
+    _barangayRepo = context.read<BarangayRepository>();
     _loadBarangays();
   }
 
@@ -29,7 +32,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       return;
     }
     try {
-      final barangays = await DatabaseHelper.instance.getBarangays();
+      final barangays = await _barangayRepo.getBarangays();
       if (mounted) {
         setState(() {
           _barangays = barangays;

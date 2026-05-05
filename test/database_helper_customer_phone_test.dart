@@ -227,6 +227,18 @@ void main() {
 
 Future<void> _createLegacyCustomerPhoneTables(Database db) async {
   await db.execute('''
+    CREATE TABLE barangays (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      delivery_zone TEXT NOT NULL
+    )
+  ''');
+  await db.insert('barangays', {
+    'id': 1,
+    'name': 'San Isidro',
+    'delivery_zone': 'Zone A',
+  });
+  await db.execute('''
     CREATE TABLE customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -238,6 +250,18 @@ Future<void> _createLegacyCustomerPhoneTables(Database db) async {
   await db.execute('''
     CREATE TABLE orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT
+    )
+  ''');
+  await db.execute('''
+    CREATE TABLE delivery_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      customer_id INTEGER NOT NULL,
+      staff_id INTEGER,
+      quantity_delivered INTEGER NOT NULL,
+      gallon_type TEXT,
+      notes TEXT,
+      delivered_at TEXT NOT NULL
     )
   ''');
 }

@@ -1,8 +1,46 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val releaseKeystorePropertiesFile = rootProject.file("key.properties")
+val releaseKeystoreProperties = Properties().apply {
+    if (releaseKeystorePropertiesFile.exists()) {
+        FileInputStream(releaseKeystorePropertiesFile).use { load(it) }
+    }
+}
+
+fun releaseSigningValue(propertyName: String, environmentName: String): String? =
+    releaseKeystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(environmentName)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = releaseSigningValue("storeFile", "ANDROID_RELEASE_STORE_FILE")
+val releaseStorePassword = releaseSigningValue("storePassword", "ANDROID_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = releaseSigningValue("keyAlias", "ANDROID_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningValue("keyPassword", "ANDROID_RELEASE_KEY_PASSWORD")
+val releaseStoreFilePath = releaseStoreFile?.let { rootProject.file(it) }
+val missingReleaseSigningValues = buildList {
+    if (releaseStoreFilePath == null || !releaseStoreFilePath.exists()) add("storeFile")
+    if (releaseStorePassword == null) add("storePassword")
+    if (releaseKeyAlias == null) add("keyAlias")
+    if (releaseKeyPassword == null) add("keyPassword")
+}
+val releaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+
+if (releaseBuildRequested && missingReleaseSigningValues.isNotEmpty()) {
+    throw GradleException(
+        "Release signing is not configured. Add android/key.properties or set " +
+            "ANDROID_RELEASE_STORE_FILE, ANDROID_RELEASE_STORE_PASSWORD, " +
+            "ANDROID_RELEASE_KEY_ALIAS, and ANDROID_RELEASE_KEY_PASSWORD. " +
+            "Missing: ${missingReleaseSigningValues.joinToString()}."
+    )
 }
 
 android {
@@ -31,11 +69,20 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseStoreFilePath != null) {
+                storeFile = releaseStoreFilePath
+            }
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

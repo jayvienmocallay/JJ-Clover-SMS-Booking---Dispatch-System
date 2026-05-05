@@ -10,6 +10,7 @@ import '../../data/models/order_model.dart';
 import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/order_card.dart';
+import 'delivery_logs_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
@@ -96,6 +97,28 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   ),
                   const SizedBox(width: 12),
                   GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DeliveryLogsScreen(),
+                      ),
+                    ),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.muted,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.receipt_long,
+                        size: 20,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
                     onTap: _showAddOrderSheet,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -180,7 +203,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       onConfirm:
                           order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.pending
-                          ? () => orderProv.updateStatus(order.id!, 'confirmed')
+                          ? () async {
+                              await orderProv.updateStatus(order.id!, 'confirmed');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Order confirmed ✓')),
+                                );
+                              }
+                            }
                           : null,
                       onReject:
                           order.type != OrderType.unrecognized &&
@@ -190,13 +220,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       onStartDelivery:
                           order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.confirmed
-                          ? () =>
-                                orderProv.updateStatus(order.id!, 'in_transit')
+                          ? () async {
+                              await orderProv.updateStatus(order.id!, 'in_transit');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Delivery started ✓')),
+                                );
+                              }
+                            }
                           : null,
                       onComplete:
                           order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.inTransit
-                          ? () => orderProv.updateStatus(order.id!, 'completed')
+                          ? () async {
+                              await orderProv.updateStatus(order.id!, 'completed');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Order completed ✓')),
+                                );
+                              }
+                            }
                           : null,
                     ),
                   );
@@ -276,9 +319,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.statusMaintenance,
             ),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              orderProv.updateStatus(orderId, 'cancelled', reason: reason);
+              await orderProv.updateStatus(orderId, 'cancelled', reason: reason);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Order rejected ✓')),
+                );
+              }
             },
             child: const Text('Reject'),
           ),

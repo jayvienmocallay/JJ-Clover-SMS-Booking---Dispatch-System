@@ -2,10 +2,16 @@
 // Provides reactive order state to all screens via Provider
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../../database_helper.dart';
+import '../repositories/order_repository.dart';
 import '../services/app_event_bus.dart';
 
 class OrderProvider extends ChangeNotifier {
+  OrderProvider(this._repository) {
+    _subscribeToOrderEvents();
+  }
+
+  final OrderRepository _repository;
+
   List<Map<String, dynamic>> _todayOrders = [];
   bool _isLoading = false;
   String? _error;
@@ -14,10 +20,6 @@ class OrderProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get todayOrders => _todayOrders;
   bool get isLoading => _isLoading;
   String? get error => _error;
-
-  OrderProvider() {
-    _subscribeToOrderEvents();
-  }
 
   void _subscribeToOrderEvents() {
     _orderEventSubscription = AppEventBus().onOrderReceived.listen((_) {
@@ -53,8 +55,7 @@ class OrderProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final db = DatabaseHelper.instance;
-      _todayOrders = await db.getTodayOrders();
+      _todayOrders = await _repository.getOrders();
     } catch (e) {
       debugPrint('OrderProvider.loadOrders error: $e');
       _error = e.toString();
@@ -73,7 +74,7 @@ class OrderProvider extends ChangeNotifier {
   }) async {
     _error = null;
     try {
-      await DatabaseHelper.instance.updateOrderStatus(
+      await _repository.updateOrderStatus(
         orderId,
         newStatus,
         reason: reason,
@@ -90,7 +91,7 @@ class OrderProvider extends ChangeNotifier {
   Future<void> addOrder(Map<String, dynamic> orderData) async {
     _error = null;
     try {
-      await DatabaseHelper.instance.insertOrder(orderData);
+      await _repository.insertOrder(orderData);
       await loadOrders();
     } catch (e) {
       _error = e.toString();

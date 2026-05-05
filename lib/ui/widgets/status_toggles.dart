@@ -70,19 +70,34 @@ class StatusToggles extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<SystemModeManager>(
       builder: (context, modeManager, _) {
+        // Compute aspect ratio dynamically so content fits on small screens.
+        final screenWidth = MediaQuery.of(context).size.width;
+        final cellWidth = (screenWidth - 32 - 12) / 2;
+        // Min cell height ~105px for icon + label + description with padding
+        final cellHeight = cellWidth / 1.3 < 105 ? 105.0 : cellWidth / 1.3;
+        final aspectRatio = cellWidth / cellHeight;
+
         return GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: 1.3,
+          childAspectRatio: aspectRatio,
           children: _statuses.map((config) {
             final isActive = modeManager.currentMode == config.mode;
             return _StatusButton(
               config: config,
               isActive: isActive,
-              onTap: () => modeManager.setMode(config.mode),
+              onTap: () {
+                modeManager.setMode(config.mode);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Mode set to ${config.mode.displayName} ✓'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
             );
           }).toList(),
         );
@@ -133,36 +148,43 @@ class _StatusButton extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Status icon — colored when active, muted when inactive
-            Icon(
-              config.icon,
-              size: 32,
-              color: isActive ? config.activeColor : AppColors.mutedForeground,
-            ),
-            const SizedBox(height: 8),
-            // Status label
-            Text(
-              config.label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isActive ? AppColors.foreground : AppColors.mutedForeground,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Status icon — colored when active, muted when inactive
+              Icon(
+                config.icon,
+                size: 28,
+                color: isActive ? config.activeColor : AppColors.mutedForeground,
               ),
-            ),
-            const SizedBox(height: 2),
-            // Status description
-            Text(
-              config.description,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.mutedForeground,
+              const SizedBox(height: 6),
+              // Status label
+              Text(
+                config.label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isActive ? AppColors.foreground : AppColors.mutedForeground,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: 2),
+              // Status description
+              Text(
+                config.description,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: AppColors.mutedForeground,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../core/utils/phone_number_utils.dart';
 import '../../data/providers/customer_provider.dart';
-import '../../database_helper.dart';
+import '../../data/repositories/barangay_repository.dart';
+import '../../data/repositories/customer_repository.dart';
+import '../../data/services/sms_registration_copy.dart';
 import '../theme/app_theme.dart';
 
 class CustomersScreen extends StatefulWidget {
@@ -358,7 +360,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) {
           return FutureBuilder<List<Map<String, dynamic>>>(
-            future: DatabaseHelper.instance.getBarangays(),
+            future: context.read<BarangayRepository>().getBarangays(),
             builder: (ctx, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
@@ -620,16 +622,20 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
   final _addressController = TextEditingController();
   int? _selectedBarangayId;
   List<Map<String, dynamic>> _barangays = [];
+  late final BarangayRepository _barangayRepo;
+  late final CustomerRepository _customerRepo;
 
   @override
   void initState() {
     super.initState();
+    _barangayRepo = context.read<BarangayRepository>();
+    _customerRepo = context.read<CustomerRepository>();
     _loadBarangays();
   }
 
   Future<void> _loadBarangays() async {
     if (kIsWeb) return;
-    final barangays = await DatabaseHelper.instance.getBarangays();
+    final barangays = await _barangayRepo.getBarangays();
     if (mounted) setState(() => _barangays = barangays);
   }
 
@@ -675,7 +681,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
     }
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final existing = await DatabaseHelper.instance.getCustomerByPhone(phone);
+    final existing = await _customerRepo.getCustomerByPhone(phone);
     if (existing != null) {
       if (mounted) {
         scaffoldMessenger.showSnackBar(
@@ -685,11 +691,17 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       return;
     }
 
+    // Task 020 — Record RA 10173 consent metadata so UI- and SMS-registered
+    // customers carry the same audit trail (channel + version + timestamp).
     final customerData = {
       'name': name,
       'contact_number': phone,
       'address': address.isNotEmpty ? address : null,
       'barangay_id': _selectedBarangayId,
+      'consent_given': 1,
+      'consent_timestamp': DateTime.now().toIso8601String(),
+      'consent_channel': SmsRegistrationCopy.channelAppUi,
+      'consent_version': SmsRegistrationCopy.consentVersion,
     };
 
     // ignore: use_build_context_synchronously
@@ -711,9 +723,11 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
-      child: _step == 0 ? _buildPrivacyConsentStep() : _buildCustomerFormStep(),
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+        child: _step == 0 ? _buildPrivacyConsentStep() : _buildCustomerFormStep(),
+      ),
     );
   }
 
@@ -787,12 +801,18 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                 ),
                 SizedBox(height: 6),
                 _PolicyBullet('Improving our service quality'),
+                SizedBox(height: 6),
+                _PolicyBullet(
+                  'Securely backing up records to cloud storage when sync is enabled',
+                ),
                 SizedBox(height: 12),
                 Text(
                   'Your data will not be shared with third parties without '
-                  'your explicit consent. You may request access, correction, '
-                  'or deletion of your personal data at any time by '
-                  'contacting us.',
+                  'your explicit consent. Cloud backup uses encrypted storage '
+                  'under the same RA 10173 protections — deletion requests '
+                  'also remove your data from cloud. You may request access, '
+                  'correction, or deletion of your personal data at any time '
+                  'by contacting us.',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.foreground,

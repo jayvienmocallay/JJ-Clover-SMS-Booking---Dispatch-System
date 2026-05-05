@@ -1,7 +1,9 @@
 // Messages screen: SMS inbox with full send/receive history
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../database_helper.dart';
+import 'package:provider/provider.dart';
+import '../../data/repositories/customer_repository.dart';
+import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
 import './chat_screen.dart';
@@ -18,13 +20,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
   List<Map<String, dynamic>> _smsMessages = [];
   Map<String, String> _phoneToName = {};
   Timer? _refreshTimer;
+  StreamSubscription? _messageSub;
+  late final SmsMessageRepository _smsRepo;
+  late final CustomerRepository _customerRepo;
 
   @override
   void initState() {
     super.initState();
+    _smsRepo = context.read<SmsMessageRepository>();
+    _customerRepo = context.read<CustomerRepository>();
     _loadMessages();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadMessages());
-    AppEventBus().onMessageReceived.listen((_) {
+    _messageSub = AppEventBus().onMessageReceived.listen((_) {
       _loadMessages();
     });
   }
@@ -32,14 +39,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _messageSub?.cancel();
     super.dispose();
   }
 
   Future<void> _loadMessages() async {
     try {
       final results = await Future.wait([
-        DatabaseHelper.instance.getTodaySmsMessages(),
-        DatabaseHelper.instance.getCustomers(),
+        _smsRepo.getAllSmsMessages(),
+        _customerRepo.getCustomers(),
       ]);
       final messages = results[0];
       final customers = results[1];
@@ -241,9 +249,7 @@ return RefreshIndicator(
       if (diff.inMinutes < 60) return '${diff.inMinutes}m';
       if (diff.inHours < 24) return '${diff.inHours}h';
       if (diff.inDays < 7) return '${diff.inDays}d';
-      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-      final amPm = dt.hour >= 12 ? 'PM' : 'AM';
-      return '$hour:${dt.minute.toString().padLeft(2, '0')} $amPm';
+      return '${dt.month}/${dt.day}/${dt.year.toString().substring(2)}';
     } catch (_) {
       return '';
     }
