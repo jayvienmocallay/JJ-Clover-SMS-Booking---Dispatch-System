@@ -3,6 +3,7 @@
 // Search, list with avatars, add customer form
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/utils/phone_number_utils.dart';
 import '../../data/providers/customer_provider.dart';
@@ -587,6 +588,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
       child: TextField(
         controller: controller,
         keyboardType: type,
+        inputFormatters: type == TextInputType.phone
+            ? [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(11),
+              ]
+            : null,
         style: const TextStyle(fontSize: 14, color: AppColors.foreground),
         decoration: InputDecoration(
           hintText: hint,
@@ -726,7 +733,9 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
     return SingleChildScrollView(
       child: Padding(
         padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
-        child: _step == 0 ? _buildPrivacyConsentStep() : _buildCustomerFormStep(),
+        child: _step == 0
+            ? _buildPrivacyConsentStep()
+            : _buildCustomerFormStep(),
       ),
     );
   }
@@ -1088,6 +1097,12 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       child: TextField(
         controller: controller,
         keyboardType: type,
+        inputFormatters: type == TextInputType.phone
+            ? [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(11),
+              ]
+            : null,
         style: const TextStyle(fontSize: 14, color: AppColors.foreground),
         decoration: InputDecoration(
           hintText: hint,
