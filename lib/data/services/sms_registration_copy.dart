@@ -97,6 +97,24 @@ class SmsRegistrationCopy {
       'Unknown number. Reply REGISTER [your full name] to register, '
       'or call the station.';
 
+  /// Sent once, the first time any mobile number texts the app.
+  static const String firstContactWelcome =
+      'Hi! This is an automated response from JJ Clover Water Refilling '
+      'Station for field testing.\n\n'
+      'To order water delivery, text:\n'
+      'DELIVER [qty] - e.g. DELIVER 5\n'
+      'DELIVER [qty] NEW - for new gallons\n'
+      'DROP [qty] - for walk-in pickup\n'
+      'STATUS - to check station status\n\n'
+      'Your next message will be processed automatically.';
+
+  /// Sent with [firstContactWelcome] when the first-time sender is not yet in
+  /// the customer database.
+  static const String firstContactPrivacyNotice =
+      'You are not yet registered in our system. Under the Data Privacy Act '
+      '(RA 10173), we need your consent before storing your information. '
+      'To register, reply REGISTER [your full name].';
+
   // --- Data subject rights (MYDATA / DELETEDATA / OPTOUT) ---
 
   /// Reply to MYDATA — shows the personal data on file (RA 10173 right to access).
