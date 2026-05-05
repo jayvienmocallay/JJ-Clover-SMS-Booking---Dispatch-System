@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/phone_number_utils.dart';
+import '../../database_helper.dart';
+import '../repositories/customer_repository.dart';
 import '../repositories/database_runtime_repository.dart';
 import '../repositories/incoming_sms_receipt_repository.dart';
 import '../repositories/sms_message_repository.dart';
@@ -16,6 +18,7 @@ import 'system_mode_manager.dart';
 import 'app_event_bus.dart';
 import 'push_notification_service.dart';
 import 'pre_book_store.dart';
+import 'sms_registration_copy.dart';
 import 'sms_source_message_id.dart';
 import 'command_handlers/sms_handler_utils.dart';
 import 'command_handlers/deliver_command_handler.dart';
@@ -102,6 +105,7 @@ class SmsBackgroundService {
   final IncomingSmsReceiptRepository _receipts =
       IncomingSmsReceiptRepository();
   final SmsMessageRepository _messages = SmsMessageRepository();
+  final CustomerRepository _customers = CustomerRepository();
   final SystemModeManager _modeManager = SystemModeManager.instance;
 
   final _preBookStore = PreBookStore();
@@ -239,6 +243,14 @@ class SmsBackgroundService {
       // Refresh persisted mode — background isolate may have a stale singleton
       await _modeManager.loadPersistedMode();
 
+      final handledByFirstContact = await _handleFirstContactIfNeeded(
+        sender: sender,
+        smsSender: smsSender,
+      );
+      if (handledByFirstContact) {
+        await _receipts.complete(effectiveSourceMessageId);
+        return;
+      }
 
       final parsed = SmsParser.parse(message);
 
@@ -339,5 +351,34 @@ class SmsBackgroundService {
       sourceMessageId: sourceMessageId,
       smsSender: smsSender,
     );
+  }
+
+  Future<bool> _handleFirstContactIfNeeded({
+    required String sender,
+    Telephony? smsSender,
+  }) async {
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+    final alreadyNotified = await DatabaseHelper.instance
+        .isFirstContactNotified(normalizedSender);
+    if (alreadyNotified) return false;
+
+    await SmsHandlerUtils.sendReply(
+      sender,
+      SmsRegistrationCopy.firstContactWelcome,
+      smsSender: smsSender,
+    );
+
+    final customerData = await _customers.getCustomerByPhone(normalizedSender);
+    if (customerData == null) {
+      await SmsHandlerUtils.sendReply(
+        sender,
+        SmsRegistrationCopy.firstContactPrivacyNotice,
+        smsSender: smsSender,
+      );
+    }
+
+    await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
+    debugPrint('First-contact automated reply sent to $normalizedSender');
+    return true;
   }
 }
