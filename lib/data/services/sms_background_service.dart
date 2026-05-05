@@ -313,6 +313,53 @@ class SmsBackgroundService {
       // before checking delivery/drop gates or replying to STATUS.
       await _modeManager.loadPersistedMode();
 
+      // --- First-contact welcome flow ---
+      // If this phone number has never texted us before, send the
+      // automated welcome message + instructions before processing.
+      final normalizedForCheck = PhoneNumberUtils.normalize(sender);
+      final alreadyNotified = await _db.isFirstContactNotified(normalizedForCheck);
+
+      if (!alreadyNotified) {
+        // 1. Send automated welcome message
+        await _sendReply(
+          sender,
+          'Hi! This is an automated response from JJ Clover Water '
+          'Refilling Station for field testing.\n\n'
+          'To order water delivery, text:\n'
+          '  DELIVER [qty] — e.g. "DELIVER 5"\n'
+          '  DELIVER [qty] NEW — for new gallons\n'
+          '  DROP [qty] — for walk-in pickup\n'
+          '  STATUS — to check station status\n\n'
+          'Your message will be processed automatically.',
+          smsSender: smsSender,
+        );
+
+        // 2. Check if this number is in the customer database
+        final existingCustomer = await _db.getCustomerByPhone(normalizedForCheck);
+        if (existingCustomer == null) {
+          // Not a registered customer — send privacy policy notice
+          await _sendReply(
+            sender,
+            'You are not yet registered in our system. '
+            'Under the Data Privacy Act (RA 10173), we need your consent '
+            'to store your information.\n\n'
+            'To register, please visit the station or contact staff. '
+            'Your data will be stored securely and used only for '
+            'water delivery services.',
+            smsSender: smsSender,
+          );
+        }
+
+        // 3. Mark this number as notified — next time they text,
+        //    skip straight to normal processing
+        await _db.markFirstContactNotified(normalizedForCheck);
+
+        // Complete this receipt and return — don't process the command yet.
+        // Their next message will go through the normal workflow.
+        await _db.completeIncomingSmsReceipt(effectiveSourceMessageId);
+        return;
+      }
+
       // Parse the raw message into a structured command object
       final parsed = SmsParser.parse(message);
 

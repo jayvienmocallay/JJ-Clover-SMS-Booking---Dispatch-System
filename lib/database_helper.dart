@@ -1220,6 +1220,22 @@ class DatabaseHelper {
     await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
   }
 
+  // --- First-contact notification tracking ---
+  // Tracks whether a phone number has received the automated welcome message.
+
+  /// Returns true if this phone number has already been notified.
+  Future<bool> isFirstContactNotified(String phoneNumber) async {
+    final key = 'first_contact_$phoneNumber';
+    final value = await getSetting(key);
+    return value != null;
+  }
+
+  /// Marks this phone number as having been notified.
+  Future<void> markFirstContactNotified(String phoneNumber) async {
+    final key = 'first_contact_$phoneNumber';
+    await setSetting(key, DateTime.now().toIso8601String());
+  }
+
   static const String readMessageIdsKey = 'read_message_ids';
   static const String preBookPendingKey = 'pre_book_pending';
   static const String cutoffHourKey = 'cutoff_hour';
