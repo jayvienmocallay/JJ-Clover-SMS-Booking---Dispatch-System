@@ -1403,14 +1403,16 @@ class DatabaseHelper {
 
   /// Returns true if this phone number has already been notified.
   Future<bool> isFirstContactNotified(String phoneNumber) async {
-    final key = 'first_contact_$phoneNumber';
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
+    final key = 'first_contact_$normalizedPhone';
     final value = await getSetting(key);
     return value != null;
   }
 
   /// Marks this phone number as having been notified.
   Future<void> markFirstContactNotified(String phoneNumber) async {
-    final key = 'first_contact_$phoneNumber';
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
+    final key = 'first_contact_$normalizedPhone';
     await setSetting(key, DateTime.now().toIso8601String());
   }
 
