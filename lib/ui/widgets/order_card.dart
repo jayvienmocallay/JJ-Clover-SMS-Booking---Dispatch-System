@@ -222,206 +222,87 @@ class OrderCard extends StatelessWidget {
             ),
 
           // Task 011 — Delivery log link for completed orders
-          if (order.status == OrderStatus.completed && order.id != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.only(top: 12),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-              ),
-              child: GestureDetector(
+          if (order.status == OrderStatus.completed && order.id != null)
+            _ActionSection(
+              child: InkWell(
                 onTap: () => _showDeliveryLogs(context, order.id!),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.receipt_long,
-                      size: 14,
-                      color: AppColors.primary,
-                    ),
-                    SizedBox(width: 6),
-                    Text(
-                      'View Delivery Log',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                borderRadius: BorderRadius.circular(8),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.receipt_long,
+                        size: 14,
                         color: AppColors.primary,
                       ),
-                    ),
-                  ],
+                      SizedBox(width: 6),
+                      Text(
+                        'View Delivery Log',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
 
           // --- Action buttons for pending orders ---
           if (order.status == OrderStatus.pending &&
-              (onConfirm != null || onReject != null)) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.only(top: 12),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-              ),
+              (onConfirm != null || onReject != null))
+            _ActionSection(
               child: Row(
                 children: [
-                  // Confirm button
                   if (onConfirm != null)
                     Expanded(
-                      child: GestureDetector(
-                        onTap: onConfirm,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: AppColors.statusOperating,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.check, size: 16, color: Colors.white),
-                              SizedBox(width: 6),
-                              Text(
-                                'Confirm',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      child: _ActionButton(
+                        label: 'Confirm',
+                        icon: Icons.check,
+                        color: AppColors.statusOperating,
+                        onTap: onConfirm!,
                       ),
                     ),
                   if (onConfirm != null && onReject != null)
                     const SizedBox(width: 8),
-                  // Reject button
                   if (onReject != null)
                     Expanded(
-                      child: GestureDetector(
-                        onTap: onReject,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: AppColors.statusMaintenance,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.close, size: 16, color: Colors.white),
-                              SizedBox(width: 6),
-                              Text(
-                                'Reject',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      child: _ActionButton(
+                        label: 'Reject',
+                        icon: Icons.close,
+                        color: AppColors.statusMaintenance,
+                        onTap: onReject!,
                       ),
                     ),
                 ],
               ),
             ),
-          ],
 
           // --- Action buttons for confirmed orders (start delivery) ---
-          if (order.status == OrderStatus.confirmed &&
-              onStartDelivery != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.only(top: 12),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: onStartDelivery,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.statusBusy,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.local_shipping,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'Start Delivery',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+          if (order.status == OrderStatus.confirmed && onStartDelivery != null)
+            _ActionSection(
+              child: _ActionButton(
+                label: 'Start Delivery',
+                icon: Icons.local_shipping,
+                color: AppColors.statusBusy,
+                onTap: onStartDelivery!,
               ),
             ),
-          ],
 
           // --- Action buttons for in_transit orders (complete delivery) ---
-          if (order.status == OrderStatus.inTransit && onComplete != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.only(top: 12),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: onComplete,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.statusOperating,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.check_circle,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'Mark Delivered',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+          if (order.status == OrderStatus.inTransit && onComplete != null)
+            _ActionSection(
+              child: _ActionButton(
+                label: 'Mark Delivered',
+                icon: Icons.check_circle,
+                color: AppColors.statusOperating,
+                onTap: onComplete!,
               ),
             ),
-          ],
         ],
       ),
     );
@@ -555,6 +436,72 @@ class OrderCard extends StatelessWidget {
     final minute = dateTime.minute.toString().padLeft(2, '0');
     final period = dateTime.hour >= 12 ? 'PM' : 'AM';
     return '$displayHour:$minute $period';
+  }
+}
+
+/// Wraps action content with a top divider and top padding.
+class _ActionSection extends StatelessWidget {
+  final Widget child;
+
+  const _ActionSection({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.only(top: 12),
+      margin: const EdgeInsets.only(top: 12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Full-width action button with ripple feedback.
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: Colors.white.withValues(alpha: 0.15),
+        highlightColor: Colors.white.withValues(alpha: 0.08),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

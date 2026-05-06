@@ -253,25 +253,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // Task 011 — Tappable "View schedule" navigates to Schedule tab
               // Schedule is not a tab, so we show it in a dialog or we could
               // navigate if we add it. For now, we'll show it in the bottom sheet.
-              GestureDetector(
+              InkWell(
                 onTap: () => _showScheduleSheet(context),
-                child: const Row(
-                  children: [
-                    Text(
-                      'View schedule',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                borderRadius: BorderRadius.circular(6),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    children: [
+                      Text(
+                        'View schedule',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      SizedBox(width: 2),
+                      Icon(
+                        Icons.arrow_forward,
+                        size: 12,
                         color: AppColors.primary,
                       ),
-                    ),
-                    SizedBox(width: 2),
-                    Icon(
-                      Icons.arrow_forward,
-                      size: 12,
-                      color: AppColors.primary,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -510,25 +514,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               // Task 011 — Tappable "View all" navigates to Orders tab
-              GestureDetector(
+              InkWell(
                 onTap: () => widget.onNavigateToTab?.call(1),
-                child: const Row(
-                  children: [
-                    Text(
-                      'View all',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                borderRadius: BorderRadius.circular(6),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    children: [
+                      Text(
+                        'View all',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      SizedBox(width: 2),
+                      Icon(
+                        Icons.arrow_forward,
+                        size: 12,
                         color: AppColors.primary,
                       ),
-                    ),
-                    SizedBox(width: 2),
-                    Icon(
-                      Icons.arrow_forward,
-                      size: 12,
-                      color: AppColors.primary,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],

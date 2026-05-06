@@ -1,6 +1,7 @@
 // Task 010 — App theme with dark mode color scheme
 // Color palette derived from the UI design's CSS variables
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Centralized color palette for the JJ Clover app.
 /// Maps directly to the UI design's CSS custom properties.
@@ -32,22 +33,47 @@ class AppColors {
 /// Builds the app-wide [ThemeData] for the dark theme.
 class AppTheme {
   static ThemeData get darkTheme {
+    final textTheme = GoogleFonts.plusJakartaSansTextTheme(
+      const TextTheme(
+        displayLarge:  TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: AppColors.foreground),
+        headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.foreground),
+        headlineMedium:TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.foreground),
+        headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.foreground),
+        titleLarge:    TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.foreground),
+        titleMedium:   TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.foreground),
+        titleSmall:    TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground),
+        bodyLarge:     TextStyle(fontSize: 14, fontWeight: FontWeight.w400, color: AppColors.foreground),
+        bodyMedium:    TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: AppColors.foreground),
+        bodySmall:     TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: AppColors.mutedForeground),
+        labelLarge:    TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.foreground),
+        labelMedium:   TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.mutedForeground),
+        labelSmall:    TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.mutedForeground),
+      ),
+    );
+
     return ThemeData(
       brightness: Brightness.dark,
-      fontFamily: 'PlusJakartaSans',
+      fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
       scaffoldBackgroundColor: AppColors.background,
+      textTheme: textTheme,
       colorScheme: const ColorScheme.dark(
         surface: AppColors.card,
         primary: AppColors.primary,
         onPrimary: AppColors.primaryForeground,
         onSurface: AppColors.foreground,
+        error: AppColors.statusMaintenance,
       ),
       cardColor: AppColors.card,
       dividerColor: AppColors.border,
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.card,
         foregroundColor: AppColors.foreground,
         elevation: 0,
+        titleTextStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: AppColors.foreground,
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.card,
@@ -75,7 +101,60 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.statusMaintenance),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.statusMaintenance, width: 2),
+        ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      cardTheme: CardThemeData(
+        color: AppColors.card,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        margin: EdgeInsets.zero,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.muted,
+        contentTextStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.foreground,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        behavior: SnackBarBehavior.floating,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titleTextStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: AppColors.foreground,
+        ),
+        contentTextStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 14,
+          color: AppColors.mutedForeground,
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.border,
+        thickness: 1,
+        space: 1,
       ),
     );
   }
