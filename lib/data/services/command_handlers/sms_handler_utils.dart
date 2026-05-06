@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
@@ -14,9 +16,66 @@ class SmsHandlerUtils {
   static final _messages = SmsMessageRepository();
   static final _orders = OrderRepository();
 
-  /// Sends an SMS reply, logs it to the outgoing message history, and
-  /// swallows errors so a send failure never crashes the background service.
+  // --- SMS reply queue with throttling ---
+  // Prevents overwhelming the Android SMS API when multiple customers
+  // text at the same time by spacing out outgoing replies.
+
+  /// Minimum delay between consecutive SMS sends.
+  static const Duration _sendDelay = Duration(seconds: 15);
+
+  /// FIFO queue of pending outgoing SMS replies.
+  static final Queue<_QueuedReply> _replyQueue = Queue<_QueuedReply>();
+
+  /// Whether the queue is currently being drained.
+  static bool _isSending = false;
+
+  /// Queues an SMS reply for sending. Replies are sent sequentially with
+  /// a [_sendDelay] gap between each send to avoid Android SMS rate limits.
   static Future<void> sendReply(
+    String phoneNumber,
+    String message, {
+    Telephony? smsSender,
+  }) async {
+    final completer = Completer<void>();
+    _replyQueue.add(_QueuedReply(
+      phoneNumber: phoneNumber,
+      message: message,
+      smsSender: smsSender,
+      completer: completer,
+    ));
+    _drainQueue(); // Start draining if not already running
+    return completer.future;
+  }
+
+  /// Processes the queue one item at a time, waiting [_sendDelay] between sends.
+  static Future<void> _drainQueue() async {
+    if (_isSending) return; // Already draining
+    _isSending = true;
+
+    while (_replyQueue.isNotEmpty) {
+      final item = _replyQueue.removeFirst();
+      try {
+        await _doSend(
+          item.phoneNumber,
+          item.message,
+          smsSender: item.smsSender,
+        );
+        item.completer.complete();
+      } catch (e) {
+        item.completer.completeError(e);
+      }
+
+      // Wait before sending the next one (skip delay if queue is empty)
+      if (_replyQueue.isNotEmpty) {
+        await Future<void>.delayed(_sendDelay);
+      }
+    }
+
+    _isSending = false;
+  }
+
+  /// Actually sends the SMS and logs it. Called only by [_drainQueue].
+  static Future<void> _doSend(
     String phoneNumber,
     String message, {
     Telephony? smsSender,
@@ -104,4 +163,19 @@ class SmsHandlerUtils {
         return null;
     }
   }
+}
+
+/// Internal data class for a queued outgoing SMS reply.
+class _QueuedReply {
+  final String phoneNumber;
+  final String message;
+  final Telephony? smsSender;
+  final Completer<void> completer;
+
+  _QueuedReply({
+    required this.phoneNumber,
+    required this.message,
+    this.smsSender,
+    required this.completer,
+  });
 }
