@@ -111,7 +111,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showTimePicker() async {
+  Future<void> _showTimePicker() async {
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: _cutoffHour, minute: _cutoffMinute),

@@ -1,5 +1,6 @@
 // Task 005 — Data Layer: SQLCipher encrypted database with full CRUD operations
 // Task 006 — Data seeding: barangays, customers, and schedules
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -33,6 +34,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
   static bool _schemaIntegrityChecked = false;
+  static Completer<Database>? _dbCompleter;
   // Task 020 — v7 adds RA 10173 consent metadata on `customers` and the
   // `pending_sms_actions` table that tracks multi-step SMS flows
   // (registration & DELETEDATA confirmation).
@@ -51,10 +53,23 @@ class DatabaseHelper {
       return _database!;
     }
 
-    final db = await _initDB('clover_secure.db');
-    _database = db;
-    await _ensureSchemaIntegrity(db);
-    return db;
+    if (_dbCompleter != null) {
+      return _dbCompleter!.future;
+    }
+
+    _dbCompleter = Completer<Database>();
+    try {
+      final db = await _initDB('clover_secure.db');
+      _database = db;
+      await _ensureSchemaIntegrity(db);
+      _dbCompleter!.complete(db);
+      return db;
+    } catch (e, st) {
+      final completer = _dbCompleter!;
+      _dbCompleter = null;
+      completer.completeError(e, st);
+      rethrow;
+    }
   }
 
   /// Ensures default schedules exist for databases created before schedule
@@ -597,12 +612,22 @@ class DatabaseHelper {
     );
   }
 
+  static final _safeIdentifier = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$');
+
+  void _assertSafeIdentifier(String name) {
+    if (!_safeIdentifier.hasMatch(name)) {
+      throw ArgumentError('Unsafe SQL identifier: $name');
+    }
+  }
+
   Future<void> _addColumnIfMissing(
     Database db,
     String table,
     String column,
     String definition,
   ) async {
+    _assertSafeIdentifier(table);
+    _assertSafeIdentifier(column);
     final columns = await db.rawQuery('PRAGMA table_info($table)');
     final exists = columns.any((row) => row['name'] == column);
     if (!exists) {

@@ -11,6 +11,7 @@ class CustomerProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _customers = [];
   bool _isLoading = false;
   String? _error;
+  bool _disposed = false;
 
   List<Map<String, dynamic>> get customers => _customers;
   bool get isLoading => _isLoading;
@@ -42,7 +43,7 @@ class CustomerProvider extends ChangeNotifier {
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -54,7 +55,7 @@ class CustomerProvider extends ChangeNotifier {
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -69,7 +70,7 @@ class CustomerProvider extends ChangeNotifier {
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
       rethrow;
     }
   }
@@ -86,5 +87,11 @@ class CustomerProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

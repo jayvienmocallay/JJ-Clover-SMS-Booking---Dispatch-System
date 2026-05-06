@@ -428,7 +428,7 @@ class OrderCard extends StatelessWidget {
   }
 
   /// Task 011 — Shows delivery logs for a completed order
-  void _showDeliveryLogs(BuildContext context, int orderId) async {
+  Future<void> _showDeliveryLogs(BuildContext context, int orderId) async {
     if (kIsWeb) return;
     final logs = await context.read<OrderRepository>().getDeliveryLogsForOrder(orderId);
 
