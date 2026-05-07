@@ -1,16 +1,19 @@
-// Task 010 — Orders screen: scrollable list with filter tabs and add order form
-// Task 011 — Connected to OrderProvider via Consumer for reactive updates
-// Scrollable list with filter tabs, order cards, and add order form
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../core/constants/app_constants.dart';
+import '../../data/models/order_model.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
-import '../../data/models/order_model.dart';
-import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/order_card.dart';
+import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/filter_chip_row.dart';
+import '../widgets/shared/empty_state.dart';
+import '../widgets/shared/bottom_sheet_handle.dart';
+import '../widgets/shared/primary_action_button.dart';
+import '../widgets/shared/customer_avatar.dart';
 import 'delivery_logs_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
@@ -21,16 +24,18 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  // Filter: 'all', 'deliver', 'drop', or 'unrecognized'
-  String _filter = 'all';
+  int _filterIndex = 0;
 
-  /// Filters orders by type
-  List<Map<String, dynamic>> _filterOrders(List<Map<String, dynamic>> orders) {
-    if (_filter == 'all') return orders;
-    return orders.where((o) => o['type'] == _filter).toList();
+  static const _filterTypes = ['all', 'deliver', 'drop', 'unrecognized'];
+  static const _filterLabels = ['All', 'Deliveries', 'Walk-ins', 'Invalid'];
+
+  List<Map<String, dynamic>> _filterOrders(
+      List<Map<String, dynamic>> orders) {
+    final type = _filterTypes[_filterIndex];
+    if (type == 'all') return orders;
+    return orders.where((o) => o['type'] == type).toList();
   }
 
-  /// Shows the Add Order bottom sheet form
   void _showAddOrderSheet() {
     showModalBottomSheet(
       context: context,
@@ -54,12 +59,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return Consumer2<OrderProvider, CustomerProvider>(
       builder: (context, orderProv, customerProv, _) {
         final filtered = _filterOrders(orderProv.todayOrders);
-        // Build customer cache for name/phone lookup
         final customerCache = <int, Map<String, dynamic>>{};
         for (final c in customerProv.customers) {
           final id = c['id'] as int?;
           if (id != null) customerCache[id] = c;
         }
+
+        final inTransitCount = orderProv.todayOrders
+            .where((o) => o['status'] == 'in_transit')
+            .length;
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -67,124 +75,104 @@ class _OrdersScreenState extends State<OrdersScreen> {
             await orderProv.loadOrders();
           },
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(kPagePadding),
             children: [
-              // --- Header ---
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Orders',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.foreground,
-                          ),
+              AppPageHeader(
+                title: 'Orders',
+                subtitle: "Manage today's delivery and walk-in orders.",
+                action: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const DeliveryLogsScreen()),
+                      ),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.muted,
+                          borderRadius: BorderRadius.circular(kButtonRadius),
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          "Manage today's delivery and walk-in orders.",
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.mutedForeground,
-                          ),
+                        child: const Icon(
+                          Icons.receipt_long,
+                          size: 20,
+                          color: AppColors.mutedForeground,
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DeliveryLogsScreen(),
                       ),
                     ),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.muted,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.receipt_long,
-                        size: 20,
-                        color: AppColors.mutedForeground,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _showAddOrderSheet,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.add, size: 16, color: Colors.white),
-                          SizedBox(width: 4),
-                          Text(
-                            'Add Order',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _showAddOrderSheet,
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(kButtonRadius),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.add,
+                                size: 16, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Add',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelLarge
+                                  ?.copyWith(color: Colors.white),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: kSectionGap),
 
-              // --- Filter tabs ---
-              Row(
-                children: [
-                  _FilterTab(
-                    label: 'All',
-                    isActive: _filter == 'all',
-                    onTap: () => setState(() => _filter = 'all'),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterTab(
-                    label: 'Deliveries',
-                    isActive: _filter == 'deliver',
-                    onTap: () => setState(() => _filter = 'deliver'),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterTab(
-                    label: 'Walk-ins',
-                    isActive: _filter == 'drop',
-                    onTap: () => setState(() => _filter = 'drop'),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterTab(
-                    label: 'Invalid',
-                    isActive: _filter == 'unrecognized',
-                    onTap: () => setState(() => _filter = 'unrecognized'),
-                  ),
-                ],
+              // Read-only summary chips
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _SummaryChip(
+                      label: 'Pending ${orderProv.pendingCount}',
+                      color: AppColors.statusAway,
+                    ),
+                    const SizedBox(width: 8),
+                    _SummaryChip(
+                      label: 'Confirmed ${orderProv.confirmedCount}',
+                      color: AppColors.statusOperating,
+                    ),
+                    const SizedBox(width: 8),
+                    _SummaryChip(
+                      label: 'In Transit $inTransitCount',
+                      color: AppColors.statusBusy,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
 
-              // --- Order list ---
+              FilterChipRow(
+                labels: _filterLabels,
+                selectedIndex: _filterIndex,
+                onSelected: (i) => setState(() => _filterIndex = i),
+              ),
+              const SizedBox(height: 16),
+
               if (filtered.isEmpty)
-                _buildEmptyState()
+                EmptyState(
+                  icon: Icons.local_shipping,
+                  message: _filterIndex == 0
+                      ? 'No orders today.'
+                      : 'No ${_filterLabels[_filterIndex].toLowerCase()} orders.',
+                )
               else
                 ...filtered.map((orderMap) {
                   final order = Order.fromMap(orderMap);
@@ -199,60 +187,51 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       customerName: customer?['name'] as String?,
                       phone: order.phoneNumber,
                       barangay: customer?['barangay'] as String?,
-                      address:
-                          order.address ?? (customer?['address'] as String?),
-                      onConfirm:
-                          order.type != OrderType.unrecognized &&
+                      address: order.address ??
+                          (customer?['address'] as String?),
+                      onConfirm: order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.pending
                           ? () async {
-                              await orderProv.updateStatus(
-                                order.id!,
-                                'confirmed',
-                              );
+                              final prov = orderProv;
+                              await prov.updateStatus(
+                                  order.id!, 'confirmed');
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Order confirmed ✓'),
-                                  ),
+                                      content: Text('Order confirmed ✓')),
                                 );
                               }
                             }
                           : null,
-                      onReject:
-                          order.type != OrderType.unrecognized &&
+                      onReject: order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.pending
                           ? () => _showRejectDialog(order.id!, orderProv)
                           : null,
                       onStartDelivery:
                           order.type != OrderType.unrecognized &&
-                              order.status == OrderStatus.confirmed
-                          ? () async {
-                              await orderProv.updateStatus(
-                                order.id!,
-                                'in_transit',
-                              );
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Delivery started ✓'),
-                                  ),
-                                );
-                              }
-                            }
-                          : null,
-                      onComplete:
-                          order.type != OrderType.unrecognized &&
+                                  order.status == OrderStatus.confirmed
+                              ? () async {
+                                  final prov = orderProv;
+                                  await prov.updateStatus(
+                                      order.id!, 'in_transit');
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(const SnackBar(
+                                            content:
+                                                Text('Delivery started ✓')));
+                                  }
+                                }
+                              : null,
+                      onComplete: order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.inTransit
                           ? () async {
-                              await orderProv.updateStatus(
-                                order.id!,
-                                'completed',
-                              );
+                              final prov = orderProv;
+                              await prov.updateStatus(
+                                  order.id!, 'completed');
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Order completed ✓'),
-                                  ),
+                                      content: Text('Order completed ✓')),
                                 );
                               }
                             }
@@ -267,59 +246,36 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  /// Empty state when no orders match the filter
-  Widget _buildEmptyState() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Column(
-        children: [
-          Icon(
-            Icons.local_shipping,
-            size: 48,
-            color: AppColors.mutedForeground.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _filter == 'all' ? 'No orders found.' : 'No $_filter orders found.',
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.mutedForeground,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showRejectDialog(int orderId, OrderProvider orderProv) {
     String? reason;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: const Text(
+        title: Text(
           'Reject Order',
-          style: TextStyle(color: AppColors.foreground),
+          style: Theme.of(context).textTheme.headlineSmall,
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Are you sure you want to reject this order?',
-              style: TextStyle(color: AppColors.mutedForeground),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.mutedForeground,
+                  ),
             ),
             const SizedBox(height: 16),
             TextField(
               onChanged: (v) => reason = v,
-              style: const TextStyle(color: AppColors.foreground),
+              style: Theme.of(context).textTheme.bodyMedium,
               decoration: InputDecoration(
                 hintText: 'Reason (optional)',
-                hintStyle: const TextStyle(color: AppColors.mutedForeground),
                 filled: true,
                 fillColor: AppColors.background,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(kButtonRadius),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -337,11 +293,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              await orderProv.updateStatus(
-                orderId,
-                'cancelled',
-                reason: reason,
-              );
+              final prov = orderProv;
+              await prov.updateStatus(orderId, 'cancelled',
+                  reason: reason);
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Order rejected ✓')),
@@ -356,44 +310,32 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 }
 
-/// Rounded filter tab button
-class _FilterTab extends StatelessWidget {
+class _SummaryChip extends StatelessWidget {
   final String label;
-  final bool isActive;
-  final VoidCallback onTap;
+  final Color color;
 
-  const _FilterTab({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
+  const _SummaryChip({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: isActive ? AppColors.primary : AppColors.muted,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: isActive ? Colors.white : AppColors.mutedForeground,
-          ),
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
       ),
     );
   }
 }
 
-/// Add Order bottom sheet form with existing/new customer toggle,
-/// searchable customer list, and +/- quantity buttons
 class _AddOrderForm extends StatefulWidget {
   const _AddOrderForm();
 
@@ -402,7 +344,6 @@ class _AddOrderForm extends StatefulWidget {
 }
 
 class _AddOrderFormState extends State<_AddOrderForm> {
-  // Customer mode: 'existing' or 'new'
   String _customerMode = 'existing';
   String _customerSearch = '';
   int? _selectedCustomerId;
@@ -420,14 +361,11 @@ class _AddOrderFormState extends State<_AddOrderForm> {
 
   Future<void> _submit() async {
     if (_customerMode == 'existing' && _selectedCustomerId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please select a customer')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a customer')));
       return;
     }
 
-    // For existing customers, always derive the phone from the customer record
-    // so a manually cleared controller can't produce an empty phone_number.
     String phone;
     if (_customerMode == 'existing' && _selectedCustomerId != null) {
       final customers = context.read<CustomerProvider>().customers;
@@ -441,12 +379,12 @@ class _AddOrderFormState extends State<_AddOrderForm> {
 
     if (_customerMode == 'new' && phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a phone number')),
-      );
+          const SnackBar(content: Text('Please enter a phone number')));
       return;
     }
 
-    final orderData = {
+    final orderProv = context.read<OrderProvider>();
+    await orderProv.addOrder({
       'customer_id': _selectedCustomerId,
       'phone_number': phone,
       'type': _type,
@@ -455,9 +393,8 @@ class _AddOrderFormState extends State<_AddOrderForm> {
       'status': 'pending',
       'created_at': DateTime.now().toIso8601String(),
       'is_pre_book': 0,
-    };
+    });
 
-    await context.read<OrderProvider>().addOrder(orderData);
     if (mounted) Navigator.pop(context);
   }
 
@@ -466,12 +403,12 @@ class _AddOrderFormState extends State<_AddOrderForm> {
     final customers = context.read<CustomerProvider>().customers;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    // Filter customers by search
     final filteredCustomers = _customerSearch.isEmpty
         ? customers
         : customers.where((c) {
             final name = (c['name'] as String? ?? '').toLowerCase();
-            final phone = (c['contact_number'] as String? ?? '').toLowerCase();
+            final phone =
+                (c['contact_number'] as String? ?? '').toLowerCase();
             return name.contains(_customerSearch.toLowerCase()) ||
                 phone.contains(_customerSearch.toLowerCase());
           }).toList();
@@ -482,73 +419,41 @@ class _AddOrderFormState extends State<_AddOrderForm> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Handle bar
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'New Order',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: AppColors.foreground,
-            ),
-          ),
+          const BottomSheetHandle(title: 'New Order'),
           const SizedBox(height: 20),
 
-          // Customer mode toggle
-          const Text(
-            'Customer',
-            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-          ),
+          Text('Customer',
+              style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
           Row(
             children: [
-              _buildModeOption('existing', 'Existing Customer', Icons.people),
+              _buildModeOption('existing', 'Existing', Icons.people),
               const SizedBox(width: 12),
               _buildModeOption('new', 'New / Manual', Icons.person_add),
             ],
           ),
           const SizedBox(height: 16),
 
-          // Existing customer: searchable list
           if (_customerMode == 'existing') ...[
-            // Search input
             Container(
               decoration: BoxDecoration(
                 color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(kButtonRadius),
                 border: Border.all(color: AppColors.border),
               ),
               child: TextField(
-                onChanged: (val) => setState(() => _customerSearch = val),
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.foreground,
-                ),
+                onChanged: (v) => setState(() => _customerSearch = v),
+                style: Theme.of(context).textTheme.bodyMedium,
                 decoration: const InputDecoration(
                   hintText: 'Search customer...',
-                  hintStyle: TextStyle(color: AppColors.mutedForeground),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    size: 18,
-                    color: AppColors.mutedForeground,
-                  ),
+                  prefixIcon: Icon(Icons.search,
+                      size: 18, color: AppColors.mutedForeground),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            // Customer list (scrollable, max height)
             Container(
               constraints: const BoxConstraints(maxHeight: 150),
               child: ListView.builder(
@@ -557,20 +462,17 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                 itemBuilder: (_, i) {
                   final c = filteredCustomers[i];
                   final id = c['id'] as int;
+                  final name = c['name'] as String? ?? '';
                   final isSelected = _selectedCustomerId == id;
                   return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedCustomerId = id;
-                        _phoneController.text =
-                            c['contact_number'] as String? ?? '';
-                      });
-                    },
+                    onTap: () => setState(() {
+                      _selectedCustomerId = id;
+                      _phoneController.text =
+                          c['contact_number'] as String? ?? '';
+                    }),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
+                          horizontal: 12, vertical: 10),
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
                         color: isSelected
@@ -585,31 +487,25 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                       ),
                       child: Row(
                         children: [
-                          if (isSelected)
-                            const Icon(
-                              Icons.check_circle,
-                              size: 16,
-                              color: AppColors.primary,
-                            )
-                          else
-                            const Icon(
-                              Icons.radio_button_off,
-                              size: 16,
-                              color: AppColors.mutedForeground,
-                            ),
-                          const SizedBox(width: 8),
+                          CustomerAvatar(name: name, size: 32),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              '${c['name']} — ${c['contact_number']}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : AppColors.foreground,
-                              ),
+                              '$name — ${c['contact_number']}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : AppColors.foreground,
+                                  ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (isSelected)
+                            const Icon(Icons.check_circle,
+                                size: 16, color: AppColors.primary),
                         ],
                       ),
                     ),
@@ -620,26 +516,17 @@ class _AddOrderFormState extends State<_AddOrderForm> {
             const SizedBox(height: 16),
           ],
 
-          // New customer: phone number input
           if (_customerMode == 'new') ...[
-            const Text(
-              'Phone Number',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-            ),
+            Text('Phone Number',
+                style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 6),
             _buildTextField(
-              _phoneController,
-              'e.g. 09171234567',
-              TextInputType.phone,
-            ),
+                _phoneController, 'e.g. 09171234567', TextInputType.phone),
             const SizedBox(height: 16),
           ],
 
-          // Type toggle
-          const Text(
-            'Order Type',
-            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-          ),
+          Text('Order Type',
+              style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -650,15 +537,11 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           ),
           const SizedBox(height: 16),
 
-          // Quantity with +/- buttons
-          const Text(
-            'Quantity (gallons)',
-            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-          ),
+          Text('Quantity (gallons)',
+              style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
           Row(
             children: [
-              // Minus button
               GestureDetector(
                 onTap: () {
                   if (_quantity > AppConstants.minQuantity) {
@@ -670,30 +553,21 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                   height: 44,
                   decoration: BoxDecoration(
                     color: AppColors.background,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(kButtonRadius),
                     border: Border.all(color: AppColors.border),
                   ),
-                  child: const Icon(
-                    Icons.remove,
-                    size: 18,
-                    color: AppColors.mutedForeground,
-                  ),
+                  child: const Icon(Icons.remove,
+                      size: 18, color: AppColors.mutedForeground),
                 ),
               ),
-              // Quantity display
               Expanded(
                 child: Center(
                   child: Text(
                     '$_quantity',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.foreground,
-                    ),
+                    style: Theme.of(context).textTheme.headlineLarge,
                   ),
                 ),
               ),
-              // Plus button
               GestureDetector(
                 onTap: () {
                   if (_quantity < AppConstants.maxQuantity) {
@@ -705,25 +579,19 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                   height: 44,
                   decoration: BoxDecoration(
                     color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(kButtonRadius),
                     border: Border.all(color: AppColors.primary),
                   ),
-                  child: const Icon(
-                    Icons.add,
-                    size: 18,
-                    color: AppColors.primary,
-                  ),
+                  child: const Icon(Icons.add,
+                      size: 18, color: AppColors.primary),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
-          // Gallon type selector
-          const Text(
-            'Gallon Type',
-            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-          ),
+          Text('Gallon Type',
+              style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -734,30 +602,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           ),
           const SizedBox(height: 24),
 
-          // Submit button
-          SizedBox(
-            width: double.infinity,
-            child: GestureDetector(
-              onTap: _submit,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Text(
-                    'Create Order',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          PrimaryActionButton(label: 'Create Order', onTap: _submit),
         ],
       ),
     );
@@ -777,7 +622,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: isSelected ? AppColors.primaryLight : AppColors.background,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(kButtonRadius),
             border: Border.all(
               color: isSelected ? AppColors.primary : AppColors.border,
             ),
@@ -785,24 +630,21 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 14,
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.mutedForeground,
-              ),
+              Icon(icon,
+                  size: 14,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.mutedForeground),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.mutedForeground,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.mutedForeground,
+                      ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -814,18 +656,15 @@ class _AddOrderFormState extends State<_AddOrderForm> {
   }
 
   Widget _buildTextField(
-    TextEditingController controller,
-    String hint,
-    TextInputType type,
-  ) {
+      TextEditingController ctrl, String hint, TextInputType type) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.background,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kButtonRadius),
         border: Border.all(color: AppColors.border),
       ),
       child: TextField(
-        controller: controller,
+        controller: ctrl,
         keyboardType: type,
         inputFormatters: type == TextInputType.phone
             ? [
@@ -833,15 +672,12 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                 LengthLimitingTextInputFormatter(11),
               ]
             : null,
-        style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+        style: Theme.of(context).textTheme.bodyMedium,
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: AppColors.mutedForeground),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 12,
-          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         ),
       ),
     );
@@ -857,31 +693,27 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSelected ? AppColors.primaryLight : AppColors.background,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(kButtonRadius),
             border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.border,
-            ),
+                color: isSelected ? AppColors.primary : AppColors.border),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 16,
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.mutedForeground,
-              ),
+              Icon(icon,
+                  size: 16,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.mutedForeground),
               const SizedBox(width: 8),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.mutedForeground,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.mutedForeground,
+                    ),
               ),
             ],
           ),
@@ -900,31 +732,27 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSelected ? AppColors.primaryLight : AppColors.background,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(kButtonRadius),
             border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.border,
-            ),
+                color: isSelected ? AppColors.primary : AppColors.border),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 16,
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.mutedForeground,
-              ),
+              Icon(icon,
+                  size: 16,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.mutedForeground),
               const SizedBox(width: 8),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.mutedForeground,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.mutedForeground,
+                    ),
               ),
             ],
           ),
