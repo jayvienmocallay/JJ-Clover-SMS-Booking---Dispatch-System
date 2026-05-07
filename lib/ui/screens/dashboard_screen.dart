@@ -590,6 +590,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  String _statusDisplayLabel(String status) {
+    switch (status) {
+      case 'pending':
+        return 'Pending';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'in_transit':
+        return 'In Transit';
+      case 'completed':
+        return 'Completed';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'rejected':
+        return 'Rejected';
+      default:
+        return status;
+    }
+  }
+
   Widget _orderStatusBadge(String status) {
     Color color;
     Color bgColor;
@@ -615,6 +634,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color = AppColors.statusOperating;
         bgColor = AppColors.statusOperatingLight;
     }
-    return StatusBadge(label: status, color: color, bgColor: bgColor);
+    return StatusBadge(label: _statusDisplayLabel(status), color: color, bgColor: bgColor);
   }
 }
