@@ -1,12 +1,11 @@
-// Task 010, Task 012 — Walk-in alert overlay (DROP command alarm UI)
-// Full-screen alert with pulsing animation, DROP order details, and acknowledge button
 import 'package:flutter/material.dart';
 import '../../data/services/alarm_service.dart';
 import '../theme/app_theme.dart';
+import 'shared/info_row.dart';
+import 'shared/primary_action_button.dart';
 
-/// Full-screen overlay alert shown when a DROP (walk-in) order arrives.
-/// Shows the customer phone, quantity, time, and a large Acknowledge button.
-/// Connected to AlarmService — acknowledging stops the audio alarm.
+/// Full-screen amber alert overlay for walk-in DROP orders.
+/// Requires explicit tap to dismiss — no auto-dismiss.
 class WalkInAlert extends StatelessWidget {
   final VoidCallback onAcknowledge;
 
@@ -19,7 +18,6 @@ class WalkInAlert extends StatelessWidget {
     final qty = alarm.quantity ?? 0;
     final time = alarm.triggeredAt;
 
-    // Format time
     String timeStr = '';
     if (time != null) {
       final hour = time.hour > 12
@@ -34,153 +32,71 @@ class WalkInAlert extends StatelessWidget {
       child: Center(
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 24),
-          padding: const EdgeInsets.all(32),
           constraints: const BoxConstraints(maxWidth: 360),
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 30,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            border: const Border(
+              left: BorderSide(color: AppColors.statusAway, width: 4),
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Pulsing bell icon
-              const _PulsingBell(),
-              const SizedBox(height: 20),
-              // Alert title
-              const Text(
-                'Walk-in Customer!',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.foreground,
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const _PulsingBell(),
+                const SizedBox(height: 20),
+                Text(
+                  'Walk-in Request',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              // Alert description
-              const Text(
-                'A customer is waiting at the station.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.mutedForeground,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // DROP order details card
-              if (qty > 0 || phone != 'Unknown')
+                const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(kCardPadding),
                   decoration: BoxDecoration(
                     color: AppColors.background,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(kCardRadius),
                     border: Border.all(color: AppColors.border),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Phone
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.phone,
-                            size: 16,
-                            color: AppColors.mutedForeground,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            phone,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.foreground,
-                            ),
-                          ),
-                        ],
+                      InfoRow(
+                        icon: Icons.phone,
+                        label: phone,
                       ),
                       if (qty > 0) ...[
-                        const SizedBox(height: 8),
-                        // Quantity
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.water_drop,
-                              size: 16,
-                              color: AppColors.statusAway,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '$qty gallon${qty > 1 ? "s" : ""}',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.foreground,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 10),
+                        InfoRow(
+                          icon: Icons.water_drop,
+                          label: '$qty gallon${qty > 1 ? "s" : ""}',
+                          iconColor: AppColors.statusAway,
                         ),
                       ],
                       if (timeStr.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        // Time
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.access_time,
-                              size: 16,
-                              color: AppColors.mutedForeground,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              timeStr,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: AppColors.mutedForeground,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 10),
+                        InfoRow(
+                          icon: Icons.access_time,
+                          label: timeStr,
                         ),
                       ],
                     ],
                   ),
                 ),
-              const SizedBox(height: 24),
-
-              // Acknowledge button — large, full-width
-              SizedBox(
-                width: double.infinity,
-                child: GestureDetector(
-                  onTap: () {
-                    // Dismiss the overlay
-                    onAcknowledge();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Text(
-                      'ACKNOWLEDGE',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ),
+                const SizedBox(height: 24),
+                PrimaryActionButton(
+                  label: 'ACKNOWLEDGE',
+                  onTap: onAcknowledge,
+                  backgroundColor: AppColors.statusAway,
+                  minHeight: 52,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -188,7 +104,6 @@ class WalkInAlert extends StatelessWidget {
   }
 }
 
-/// Animated pulsing bell icon
 class _PulsingBell extends StatefulWidget {
   const _PulsingBell();
 
@@ -208,11 +123,9 @@ class _PulsingBellState extends State<_PulsingBell>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
-
-    _animation = Tween<double>(
-      begin: 0.9,
-      end: 1.1,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _animation = Tween<double>(begin: 0.9, end: 1.1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
   }
 
   @override
