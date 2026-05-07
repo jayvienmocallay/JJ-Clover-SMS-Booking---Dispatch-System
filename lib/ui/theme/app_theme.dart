@@ -159,3 +159,11 @@ class AppTheme {
     );
   }
 }
+
+// Layout constants — used across all screens and widgets
+const double kPagePadding = 16;
+const double kCardPadding = 16;
+const double kCardRadius = 16;
+const double kButtonRadius = 12;
+const double kSectionGap = 20;
+const double kCompactGap = 8;
