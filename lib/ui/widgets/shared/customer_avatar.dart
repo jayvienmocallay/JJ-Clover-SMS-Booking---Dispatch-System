@@ -17,15 +17,15 @@ class CustomerAvatar extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: const BoxDecoration(
-        color: AppColors.primaryLight,
+      decoration: BoxDecoration(
+        color: AppColors.of(context).primaryLight,
         shape: BoxShape.circle,
       ),
       child: Center(
         child: Text(
           initial,
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: AppColors.primary,
+            color: AppColors.of(context).primary,
           ),
         ),
       ),

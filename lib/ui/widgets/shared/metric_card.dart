@@ -18,9 +18,9 @@ class MetricCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(kCardPadding),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: AppColors.of(context).card,
         borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.of(context).border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

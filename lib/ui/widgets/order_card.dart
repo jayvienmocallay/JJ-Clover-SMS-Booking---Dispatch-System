@@ -35,17 +35,18 @@ class OrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDeliver = order.type == OrderType.deliver;
     final isInvalid = order.type == OrderType.unrecognized;
+    final palette = AppColors.of(context);
 
     final typeColor = isInvalid
-        ? AppColors.statusMaintenance
+        ? palette.statusMaintenance
         : isDeliver
-        ? AppColors.primary
-        : AppColors.statusAway;
+        ? palette.primary
+        : palette.statusAway;
     final typeBgColor = isInvalid
-        ? AppColors.statusMaintenanceLight
+        ? palette.statusMaintenanceLight
         : isDeliver
-        ? AppColors.primaryLight
-        : AppColors.statusAwayLight;
+        ? palette.primaryLight
+        : palette.statusAwayLight;
     final typeIcon = isInvalid
         ? Icons.sms_failed
         : isDeliver
@@ -55,12 +56,12 @@ class OrderCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(kCardPadding),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: palette.card,
         borderRadius: BorderRadius.circular(kCardRadius),
         border: Border.all(
           color: isInvalid
-              ? AppColors.statusMaintenance.withValues(alpha: 0.4)
-              : AppColors.border,
+              ? palette.statusMaintenance.withValues(alpha: 0.4)
+              : palette.border,
         ),
       ),
       child: Column(
@@ -87,7 +88,7 @@ class OrderCard extends StatelessWidget {
                       customerName ?? order.phoneNumber,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: AppColors.foreground,
+                        color: palette.foreground,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -96,7 +97,7 @@ class OrderCard extends StatelessWidget {
                       Text(
                         phone!,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.mutedForeground,
+                          color: palette.mutedForeground,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -107,7 +108,7 @@ class OrderCard extends StatelessWidget {
                         child: Text(
                           [address, barangay].whereType<String>().join(' · '),
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.mutedForeground,
+                            color: palette.mutedForeground,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -125,14 +126,14 @@ class OrderCard extends StatelessWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.muted,
+                              color: palette.muted,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               '${order.quantity} gal · ${order.gallonType == GallonType.newGallon ? "New" : "Old"}',
                               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.mutedForeground,
+                                color: palette.mutedForeground,
                               ),
                             ),
                           ),
@@ -144,23 +145,23 @@ class OrderCard extends StatelessWidget {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: AppColors.primaryLight,
+                                color: palette.primaryLight,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.schedule,
                                     size: 10,
-                                    color: AppColors.primary,
+                                    color: palette.primary,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
                                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                       fontWeight: FontWeight.w500,
-                                      color: AppColors.primary,
+                                      color: palette.primary,
                                     ),
                                   ),
                                 ],
@@ -179,7 +180,7 @@ class OrderCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _buildStatusBadge(),
+              _buildStatusBadge(palette),
             ],
           ),
 
@@ -192,13 +193,13 @@ class OrderCard extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.statusMaintenanceLight,
+                  color: palette.statusMaintenanceLight,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   'Reason: ${order.cancelReason}',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppColors.statusMaintenance,
+                    color: palette.statusMaintenance,
                   ),
                 ),
               ),
@@ -214,17 +215,17 @@ class OrderCard extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.receipt_long,
                         size: 14,
-                        color: AppColors.primary,
+                        color: palette.primary,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'View Delivery Log',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w500,
-                          color: AppColors.primary,
+                          color: palette.primary,
                         ),
                       ),
                     ],
@@ -243,7 +244,7 @@ class OrderCard extends StatelessWidget {
                       child: _ActionButton(
                         label: 'Confirm',
                         icon: Icons.check,
-                        color: AppColors.statusOperating,
+                        color: palette.statusOperating,
                         onTap: onConfirm!,
                       ),
                     ),
@@ -254,7 +255,7 @@ class OrderCard extends StatelessWidget {
                       child: _ActionButton(
                         label: 'Reject',
                         icon: Icons.close,
-                        color: AppColors.statusMaintenance,
+                        color: palette.statusMaintenance,
                         onTap: onReject!,
                       ),
                     ),
@@ -267,7 +268,7 @@ class OrderCard extends StatelessWidget {
               child: _ActionButton(
                 label: 'Start Delivery',
                 icon: Icons.local_shipping,
-                color: AppColors.statusBusy,
+                color: palette.statusBusy,
                 onTap: onStartDelivery!,
               ),
             ),
@@ -277,7 +278,7 @@ class OrderCard extends StatelessWidget {
               child: _ActionButton(
                 label: 'Mark Delivered',
                 icon: Icons.check_circle,
-                color: AppColors.statusOperating,
+                color: palette.statusOperating,
                 onTap: onComplete!,
               ),
             ),
@@ -286,30 +287,30 @@ class OrderCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusBadge() {
+  Widget _buildStatusBadge(AppPalette palette) {
     Color color;
     Color bgColor;
     switch (order.status) {
       case OrderStatus.pending:
-        color = AppColors.statusAway;
-        bgColor = AppColors.statusAwayLight;
+        color = palette.statusAway;
+        bgColor = palette.statusAwayLight;
         break;
       case OrderStatus.confirmed:
-        color = AppColors.statusOperating;
-        bgColor = AppColors.statusOperatingLight;
+        color = palette.statusOperating;
+        bgColor = palette.statusOperatingLight;
         break;
       case OrderStatus.inTransit:
-        color = AppColors.statusBusy;
-        bgColor = AppColors.statusBusyLight;
+        color = palette.statusBusy;
+        bgColor = palette.statusBusyLight;
         break;
       case OrderStatus.cancelled:
       case OrderStatus.rejected:
-        color = AppColors.statusMaintenance;
-        bgColor = AppColors.statusMaintenanceLight;
+        color = palette.statusMaintenance;
+        bgColor = palette.statusMaintenanceLight;
         break;
       case OrderStatus.completed:
-        color = AppColors.statusOperating;
-        bgColor = AppColors.statusOperatingLight;
+        color = palette.statusOperating;
+        bgColor = palette.statusOperatingLight;
         break;
     }
     return StatusBadge(
@@ -325,9 +326,10 @@ class OrderCard extends StatelessWidget {
         .read<OrderRepository>()
         .getDeliveryLogsForOrder(orderId);
     if (!context.mounted) return;
+    final palette = AppColors.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: palette.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -342,7 +344,7 @@ class OrderCard extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.border,
+                  color: palette.border,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -360,7 +362,7 @@ class OrderCard extends StatelessWidget {
                   child: Text(
                     'No delivery logs recorded.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.mutedForeground,
+                      color: palette.mutedForeground,
                     ),
                   ),
                 ),
@@ -379,16 +381,16 @@ class OrderCard extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.background,
+                    color: palette.background,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: palette.border),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.check_circle,
                         size: 18,
-                        color: AppColors.statusOperating,
+                        color: palette.statusOperating,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -441,8 +443,8 @@ class _ActionSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.only(top: 12),
       margin: const EdgeInsets.only(top: 12),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.of(context).border)),
       ),
       child: child,
     );

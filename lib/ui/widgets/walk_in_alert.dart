@@ -27,6 +27,7 @@ class WalkInAlert extends StatelessWidget {
       timeStr = '$hour:${time.minute.toString().padLeft(2, '0')} $amPm';
     }
 
+    final palette = AppColors.of(context);
     return Material(
       color: Colors.black.withValues(alpha: 0.6),
       child: Center(
@@ -34,10 +35,10 @@ class WalkInAlert extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 24),
           constraints: const BoxConstraints(maxWidth: 360),
           decoration: BoxDecoration(
-            color: AppColors.card,
+            color: palette.card,
             borderRadius: BorderRadius.circular(24),
-            border: const Border(
-              left: BorderSide(color: AppColors.statusAway, width: 4),
+            border: Border(
+              left: BorderSide(color: palette.statusAway, width: 4),
             ),
           ),
           child: Padding(
@@ -56,9 +57,9 @@ class WalkInAlert extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(kCardPadding),
                   decoration: BoxDecoration(
-                    color: AppColors.background,
+                    color: palette.background,
                     borderRadius: BorderRadius.circular(kCardRadius),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: palette.border),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,7 +73,7 @@ class WalkInAlert extends StatelessWidget {
                         InfoRow(
                           icon: Icons.water_drop,
                           label: '$qty gallon${qty > 1 ? "s" : ""}',
-                          iconColor: AppColors.statusAway,
+                          iconColor: palette.statusAway,
                         ),
                       ],
                       if (timeStr.isNotEmpty) ...[
@@ -89,7 +90,7 @@ class WalkInAlert extends StatelessWidget {
                 PrimaryActionButton(
                   label: 'ACKNOWLEDGE',
                   onTap: onAcknowledge,
-                  backgroundColor: AppColors.statusAway,
+                  backgroundColor: palette.statusAway,
                   minHeight: 52,
                 ),
               ],
@@ -133,19 +134,20 @@ class _PulsingBellState extends State<_PulsingBell>
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
     return ScaleTransition(
       scale: _animation,
       child: Container(
         width: 80,
         height: 80,
-        decoration: const BoxDecoration(
-          color: AppColors.statusAwayLight,
+        decoration: BoxDecoration(
+          color: palette.statusAwayLight,
           shape: BoxShape.circle,
         ),
-        child: const Icon(
+        child: Icon(
           Icons.notifications_active,
           size: 40,
-          color: AppColors.statusAway,
+          color: palette.statusAway,
         ),
       ),
     );

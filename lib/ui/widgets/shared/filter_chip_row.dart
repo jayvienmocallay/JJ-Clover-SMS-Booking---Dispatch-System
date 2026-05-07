@@ -29,14 +29,14 @@ class FilterChipRow extends StatelessWidget {
                 height: 36,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  color: isActive ? AppColors.primary : AppColors.muted,
+                  color: isActive ? AppColors.of(context).primary : AppColors.of(context).muted,
                   borderRadius: BorderRadius.circular(100),
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   labels[i],
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isActive ? AppColors.primaryForeground : AppColors.mutedForeground,
+                    color: isActive ? AppColors.of(context).primaryForeground : AppColors.of(context).mutedForeground,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
