@@ -131,6 +131,23 @@ void main() {
     });
   });
 
+  group('SmsParser - CANCEL command', () {
+    test('parses exact CANCEL', () {
+      final result = SmsParser.parse('CANCEL');
+      expect(result.command, SmsCommand.cancel);
+    });
+
+    test('handles lowercase cancel', () {
+      final result = SmsParser.parse('cancel');
+      expect(result.command, SmsCommand.cancel);
+    });
+
+    test('rejects CANCEL with extra text', () {
+      final result = SmsParser.parse('CANCEL order');
+      expect(result.command, SmsCommand.unknown);
+    });
+  });
+
   group('SmsParser — STATUS command', () {
     test('parses exact STATUS', () {
       final result = SmsParser.parse('STATUS');
@@ -173,6 +190,7 @@ void main() {
       final reply = SmsParser.getUnknownCommandReply();
       expect(reply, contains('DELIVER'));
       expect(reply, contains('DROP'));
+      expect(reply, contains('CANCEL'));
     });
   });
 

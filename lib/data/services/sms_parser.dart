@@ -11,6 +11,7 @@ enum SmsCommand {
   deliver,
   drop,
   yes,
+  cancel,
   status,
   // Registration & data-rights flow (RA 10173).
   register,
@@ -63,6 +64,7 @@ class ParsedSms {
 /// - `DELIVER [qty] NEW|OLD [address]` — e.g., "DELIVER 3 NEW Purok 4"
 /// - `DROP [qty]` — e.g., "DROP 2"
 /// - `YES` — confirms a pre-booking offer
+/// - `CANCEL` - cancels the latest pending/confirmed order or pre-book offer
 /// - `STATUS` — returns current system mode
 /// - `REGISTER [name]` — starts self-registration (RA 10173 consent flow)
 /// - `AGREE` / `STOP` — consent / cancel during registration
@@ -84,10 +86,16 @@ class SmsParser {
 
   /// Matches: DROP [qty]
   /// Group 1 = quantity (required digits, max 4 digits for safety)
-  static final RegExp _dropRegex = RegExp(r'^DROP\s+(\d{1,4})$', caseSensitive: false);
+  static final RegExp _dropRegex = RegExp(
+    r'^DROP\s+(\d{1,4})$',
+    caseSensitive: false,
+  );
 
   /// Matches: YES (exact, no extra text)
   static final RegExp _yesRegex = RegExp(r'^YES$', caseSensitive: false);
+
+  /// Matches: CANCEL (exact, no extra text)
+  static final RegExp _cancelRegex = RegExp(r'^CANCEL$', caseSensitive: false);
 
   /// Matches: STATUS (exact, no extra text)
   static final RegExp _statusRegex = RegExp(r'^STATUS$', caseSensitive: false);
@@ -120,12 +128,16 @@ class SmsParser {
   static final RegExp _myDataRegex = RegExp(r'^MYDATA$', caseSensitive: false);
 
   /// Matches: DELETEDATA (exact)
-  static final RegExp _deleteDataRegex =
-      RegExp(r'^DELETEDATA$', caseSensitive: false);
+  static final RegExp _deleteDataRegex = RegExp(
+    r'^DELETEDATA$',
+    caseSensitive: false,
+  );
 
   /// Matches: CONFIRM DELETE (one or more spaces between the words)
-  static final RegExp _confirmDeleteRegex =
-      RegExp(r'^CONFIRM\s+DELETE$', caseSensitive: false);
+  static final RegExp _confirmDeleteRegex = RegExp(
+    r'^CONFIRM\s+DELETE$',
+    caseSensitive: false,
+  );
 
   /// Matches: OPTOUT (exact). Equivalent to DELETEDATA per RA 10173 right to object.
   static final RegExp _optOutRegex = RegExp(r'^OPTOUT$', caseSensitive: false);
@@ -147,7 +159,7 @@ class SmsParser {
   ///
   /// The message is trimmed and matched case-insensitively against regex
   /// patterns in priority order:
-  /// DELIVER > DROP > YES > STATUS >
+  /// DELIVER > DROP > YES > CANCEL > STATUS >
   /// REGISTER > AGREE > STOP > BARANGAY > ADDRESS >
   /// MYDATA > DELETEDATA > CONFIRM DELETE > OPTOUT > UNKNOWN.
   static ParsedSms parse(String message) {
@@ -157,10 +169,7 @@ class SmsParser {
     if (deliverMatch != null) {
       final qty = _parseValidQuantity(deliverMatch.group(1));
       if (qty == null) {
-        return ParsedSms(
-          command: SmsCommand.unknown,
-          rawMessage: message,
-        );
+        return ParsedSms(command: SmsCommand.unknown, rawMessage: message);
       }
       final gallonTypeRaw = deliverMatch.group(2);
       final gallonType = gallonTypeRaw?.toLowerCase();
@@ -178,10 +187,7 @@ class SmsParser {
     if (dropMatch != null) {
       final qty = _parseValidQuantity(dropMatch.group(1));
       if (qty == null) {
-        return ParsedSms(
-          command: SmsCommand.unknown,
-          rawMessage: message,
-        );
+        return ParsedSms(command: SmsCommand.unknown, rawMessage: message);
       }
       return ParsedSms(
         command: SmsCommand.drop,
@@ -192,6 +198,10 @@ class SmsParser {
 
     if (_yesRegex.hasMatch(trimmed)) {
       return ParsedSms(command: SmsCommand.yes, rawMessage: message);
+    }
+
+    if (_cancelRegex.hasMatch(trimmed)) {
+      return ParsedSms(command: SmsCommand.cancel, rawMessage: message);
     }
 
     if (_statusRegex.hasMatch(trimmed)) {
@@ -289,6 +299,6 @@ class SmsParser {
   /// from a registered customer.
   static String getUnknownCommandReply() {
     return 'Invalid. Use DELIVER [${AppConstants.minQuantity}-${AppConstants.maxQuantity}] or DROP [${AppConstants.minQuantity}-${AppConstants.maxQuantity}]. '
-        'Text MYDATA / DELETEDATA for privacy rights.';
+        'Reply CANCEL to cancel an active order. Text MYDATA / DELETEDATA for privacy rights.';
   }
 }

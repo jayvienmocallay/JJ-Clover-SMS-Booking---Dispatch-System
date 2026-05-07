@@ -21,6 +21,7 @@ import 'pre_book_store.dart';
 import 'sms_registration_copy.dart';
 import 'sms_source_message_id.dart';
 import 'command_handlers/sms_handler_utils.dart';
+import 'command_handlers/cancel_command_handler.dart';
 import 'command_handlers/deliver_command_handler.dart';
 import 'command_handlers/drop_command_handler.dart';
 import 'command_handlers/yes_command_handler.dart';
@@ -110,8 +111,7 @@ class SmsBackgroundService {
   static final SmsBackgroundService instance = SmsBackgroundService._internal();
 
   final Telephony _telephony = Telephony.instance;
-  final IncomingSmsReceiptRepository _receipts =
-      IncomingSmsReceiptRepository();
+  final IncomingSmsReceiptRepository _receipts = IncomingSmsReceiptRepository();
   final SmsMessageRepository _messages = SmsMessageRepository();
   final CustomerRepository _customers = CustomerRepository();
   final SystemModeManager _modeManager = SystemModeManager.instance;
@@ -121,6 +121,7 @@ class SmsBackgroundService {
   late final DeliverCommandHandler _deliverHandler;
   late final DropCommandHandler _dropHandler;
   late final YesCommandHandler _yesHandler;
+  late final CancelCommandHandler _cancelHandler;
   late final RegistrationFlowHandler _registrationHandler;
 
   bool _isListening = false;
@@ -129,6 +130,7 @@ class SmsBackgroundService {
     _deliverHandler = DeliverCommandHandler(_preBookStore);
     _dropHandler = DropCommandHandler();
     _yesHandler = YesCommandHandler(_preBookStore);
+    _cancelHandler = CancelCommandHandler(_preBookStore);
     _registrationHandler = RegistrationFlowHandler();
   }
 
@@ -223,7 +225,9 @@ class SmsBackgroundService {
           smsSender: smsSender,
         );
       } else {
-        debugPrint('Message still processing, skipped: $effectiveSourceMessageId');
+        debugPrint(
+          'Message still processing, skipped: $effectiveSourceMessageId',
+        );
       }
       return;
     }
@@ -297,6 +301,9 @@ class SmsBackgroundService {
             sourceMessageId: effectiveSourceMessageId,
             smsSender: smsSender,
           );
+          break;
+        case SmsCommand.cancel:
+          await _cancelHandler.handle(sender, smsSender: smsSender);
           break;
         case SmsCommand.status:
           await SmsHandlerUtils.sendReply(
