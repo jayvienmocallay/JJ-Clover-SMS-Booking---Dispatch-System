@@ -1,15 +1,12 @@
-// Task 010 — Order card widget: displays a single order
-// Task 011 — Added pre-book badge for future-scheduled orders
-// Displays a single order with customer info, status, and action buttons
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../data/models/order_model.dart';
 import '../../data/repositories/order_repository.dart';
 import '../theme/app_theme.dart';
+import 'shared/status_badge.dart';
 
-/// Displays a single order as a card with customer info, quantity,
-/// status badge, and confirm/reject action buttons for pending orders.
+/// Order card with type icon, customer info, status badge, and action buttons.
 class OrderCard extends StatelessWidget {
   final Order order;
   final String? customerName;
@@ -38,6 +35,7 @@ class OrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDeliver = order.type == OrderType.deliver;
     final isInvalid = order.type == OrderType.unrecognized;
+
     final typeColor = isInvalid
         ? AppColors.statusMaintenance
         : isDeliver
@@ -55,19 +53,22 @@ class OrderCard extends StatelessWidget {
         : Icons.water_drop;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(kCardPadding),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(kCardRadius),
+        border: Border.all(
+          color: isInvalid
+              ? AppColors.statusMaintenance.withValues(alpha: 0.4)
+              : AppColors.border,
+        ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- Top row: icon + customer info + status badge ---
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Order type icon (Truck for deliver, Water drop for walk-in)
               Container(
                 width: 40,
                 height: 40,
@@ -78,42 +79,34 @@ class OrderCard extends StatelessWidget {
                 child: Icon(typeIcon, size: 20, color: typeColor),
               ),
               const SizedBox(width: 12),
-              // Customer details
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Customer name
                     Text(
                       customerName ?? order.phoneNumber,
-                      style: const TextStyle(
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600,
-                        fontSize: 14,
                         color: AppColors.foreground,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    // Phone number
                     if (phone != null)
                       Text(
                         phone!,
-                        style: const TextStyle(
-                          fontSize: 13,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: AppColors.mutedForeground,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    // Address & barangay — not shown for unrecognized orders
-                    // (their address field was historically misused for SMS text).
                     if (!isInvalid && (address != null || barangay != null))
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
                           [address, barangay].whereType<String>().join(' · '),
-                          style: const TextStyle(
-                            fontSize: 13,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: AppColors.mutedForeground,
                           ),
                           maxLines: 1,
@@ -121,7 +114,6 @@ class OrderCard extends StatelessWidget {
                         ),
                       ),
                     const SizedBox(height: 8),
-                    // Quantity badge + pre-book badge + time
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -137,15 +129,13 @@ class OrderCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              '${order.quantity} gallon${order.quantity > 1 ? "s" : ""}',
-                              style: const TextStyle(
-                                fontSize: 12,
+                              '${order.quantity} gal · ${order.gallonType == GallonType.newGallon ? "New" : "Old"}',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                 fontWeight: FontWeight.w500,
                                 color: AppColors.mutedForeground,
                               ),
                             ),
                           ),
-                          // Task 011 — Pre-book badge
                           if (order.isPreBook) ...[
                             const SizedBox(width: 8),
                             Container(
@@ -168,8 +158,7 @@ class OrderCard extends StatelessWidget {
                                   const SizedBox(width: 4),
                                   Text(
                                     'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                       fontWeight: FontWeight.w500,
                                       color: AppColors.primary,
                                     ),
@@ -181,10 +170,7 @@ class OrderCard extends StatelessWidget {
                           const SizedBox(width: 12),
                           Text(
                             _formatTime(order.createdAt),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.mutedForeground,
-                            ),
+                            style: Theme.of(context).textTheme.labelSmall,
                           ),
                         ],
                       ),
@@ -192,13 +178,11 @@ class OrderCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // Status badge
-              _StatusBadge(status: order.status),
+              const SizedBox(width: 8),
+              _buildStatusBadge(),
             ],
           ),
 
-          // Cancel reason / rejection message for cancelled, rejected,
-          // or unrecognized orders.
           if ((order.status == OrderStatus.cancelled ||
                   order.status == OrderStatus.rejected ||
                   order.type == OrderType.unrecognized) &&
@@ -213,35 +197,32 @@ class OrderCard extends StatelessWidget {
                 ),
                 child: Text(
                   'Reason: ${order.cancelReason}',
-                  style: const TextStyle(
-                    fontSize: 11,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: AppColors.statusMaintenance,
                   ),
                 ),
               ),
             ),
 
-          // Task 011 — Delivery log link for completed orders
           if (order.status == OrderStatus.completed && order.id != null)
             _ActionSection(
               child: InkWell(
                 onTap: () => _showDeliveryLogs(context, order.id!),
                 borderRadius: BorderRadius.circular(8),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.receipt_long,
                         size: 14,
                         color: AppColors.primary,
                       ),
-                      SizedBox(width: 6),
+                      const SizedBox(width: 6),
                       Text(
                         'View Delivery Log',
-                        style: TextStyle(
-                          fontSize: 13,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w500,
                           color: AppColors.primary,
                         ),
@@ -252,7 +233,6 @@ class OrderCard extends StatelessWidget {
               ),
             ),
 
-          // --- Action buttons for pending orders ---
           if (order.status == OrderStatus.pending &&
               (onConfirm != null || onReject != null))
             _ActionSection(
@@ -282,7 +262,6 @@ class OrderCard extends StatelessWidget {
               ),
             ),
 
-          // --- Action buttons for confirmed orders (start delivery) ---
           if (order.status == OrderStatus.confirmed && onStartDelivery != null)
             _ActionSection(
               child: _ActionButton(
@@ -293,7 +272,6 @@ class OrderCard extends StatelessWidget {
               ),
             ),
 
-          // --- Action buttons for in_transit orders (complete delivery) ---
           if (order.status == OrderStatus.inTransit && onComplete != null)
             _ActionSection(
               child: _ActionButton(
@@ -308,11 +286,44 @@ class OrderCard extends StatelessWidget {
     );
   }
 
-  /// Task 011 — Shows delivery logs for a completed order
+  Widget _buildStatusBadge() {
+    Color color;
+    Color bgColor;
+    switch (order.status) {
+      case OrderStatus.pending:
+        color = AppColors.statusAway;
+        bgColor = AppColors.statusAwayLight;
+        break;
+      case OrderStatus.confirmed:
+        color = AppColors.statusOperating;
+        bgColor = AppColors.statusOperatingLight;
+        break;
+      case OrderStatus.inTransit:
+        color = AppColors.statusBusy;
+        bgColor = AppColors.statusBusyLight;
+        break;
+      case OrderStatus.cancelled:
+      case OrderStatus.rejected:
+        color = AppColors.statusMaintenance;
+        bgColor = AppColors.statusMaintenanceLight;
+        break;
+      case OrderStatus.completed:
+        color = AppColors.statusOperating;
+        bgColor = AppColors.statusOperatingLight;
+        break;
+    }
+    return StatusBadge(
+      label: order.status.displayLabel,
+      color: color,
+      bgColor: bgColor,
+    );
+  }
+
   Future<void> _showDeliveryLogs(BuildContext context, int orderId) async {
     if (kIsWeb) return;
-    final logs = await context.read<OrderRepository>().getDeliveryLogsForOrder(orderId);
-
+    final logs = await context
+        .read<OrderRepository>()
+        .getDeliveryLogsForOrder(orderId);
     if (!context.mounted) return;
     showModalBottomSheet(
       context: context,
@@ -320,129 +331,109 @@ class OrderCard extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Delivery Log',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+            if (logs.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text(
+                    'No delivery logs recorded.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.mutedForeground,
+                    ),
+                  ),
+                ),
+              )
+            else
+              ...logs.map((log) {
+                final qty = log['quantity_delivered'] as int? ?? 0;
+                final gType = log['gallon_type'] as String? ?? '';
+                final notes = log['notes'] as String? ?? '';
+                final deliveredAt = log['delivered_at'] as String? ?? '';
+                String timeStr = '';
+                try {
+                  timeStr = _formatTime(DateTime.parse(deliveredAt));
+                } catch (_) {}
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Delivery Log',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.foreground,
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (logs.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(
-                    child: Text(
-                      'No delivery logs recorded.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.mutedForeground,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        size: 18,
+                        color: AppColors.statusOperating,
                       ),
-                    ),
-                  ),
-                )
-              else
-                ...logs.map((log) {
-                  final qty = log['quantity_delivered'] as int? ?? 0;
-                  final gType = log['gallon_type'] as String? ?? '';
-                  final notes = log['notes'] as String? ?? '';
-                  final deliveredAt = log['delivered_at'] as String? ?? '';
-                  String timeStr = '';
-                  try {
-                    final dt = DateTime.parse(deliveredAt);
-                    timeStr = _formatTime(dt);
-                  } catch (_) {}
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.check_circle,
-                          size: 18,
-                          color: AppColors.statusOperating,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$qty gallon${qty > 1 ? "s" : ""} delivered${gType.isNotEmpty ? " ($gType)" : ""}',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.foreground,
-                                ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$qty gallon${qty > 1 ? "s" : ""} delivered${gType.isNotEmpty ? " ($gType)" : ""}',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
                               ),
-                              if (notes.isNotEmpty)
-                                Text(
-                                  notes,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.mutedForeground,
-                                  ),
-                                ),
-                            ],
-                          ),
+                            ),
+                            if (notes.isNotEmpty)
+                              Text(
+                                notes,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                          ],
                         ),
-                        Text(
-                          timeStr,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.mutedForeground,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-            ],
-          ),
-        );
-      },
+                      ),
+                      Text(
+                        timeStr,
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ],
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
     );
   }
 
-  /// Formats a DateTime to a short time string (e.g., "2:30 PM")
-  String _formatTime(DateTime dateTime) {
-    final hour = dateTime.hour > 12 ? dateTime.hour - 12 : dateTime.hour;
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour > 12 ? dt.hour - 12 : dt.hour;
     final displayHour = hour == 0 ? 12 : hour;
-    final minute = dateTime.minute.toString().padLeft(2, '0');
-    final period = dateTime.hour >= 12 ? 'PM' : 'AM';
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
     return '$displayHour:$minute $period';
   }
 }
 
-/// Wraps action content with a top divider and top padding.
 class _ActionSection extends StatelessWidget {
   final Widget child;
-
   const _ActionSection({required this.child});
 
   @override
@@ -458,7 +449,6 @@ class _ActionSection extends StatelessWidget {
   }
 }
 
-/// Full-width action button with ripple feedback.
 class _ActionButton extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -476,12 +466,11 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: color,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(kButtonRadius),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         splashColor: Colors.white.withValues(alpha: 0.15),
-        highlightColor: Colors.white.withValues(alpha: 0.08),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(
@@ -491,67 +480,12 @@ class _ActionButton extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
                   color: Colors.white,
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Colored status badge (pending = orange, confirmed = green, etc.)
-class _StatusBadge extends StatelessWidget {
-  final OrderStatus status;
-
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    Color bgColor;
-    Color textColor;
-
-    switch (status) {
-      case OrderStatus.confirmed:
-        bgColor = AppColors.statusOperatingLight;
-        textColor = AppColors.statusOperating;
-        break;
-      case OrderStatus.pending:
-        bgColor = AppColors.statusAwayLight;
-        textColor = AppColors.statusAway;
-        break;
-      case OrderStatus.inTransit:
-        bgColor = AppColors.statusBusyLight;
-        textColor = AppColors.statusBusy;
-        break;
-      case OrderStatus.cancelled:
-      case OrderStatus.rejected:
-        bgColor = AppColors.statusMaintenanceLight;
-        textColor = AppColors.statusMaintenance;
-        break;
-      case OrderStatus.completed:
-        bgColor = AppColors.muted;
-        textColor = AppColors.mutedForeground;
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        status.displayLabel,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: textColor,
         ),
       ),
     );
