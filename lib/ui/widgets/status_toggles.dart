@@ -1,12 +1,9 @@
-// Task 010 — Status Toggle section: 4 large color-coded buttons
-// 2x2 grid of mode toggle buttons with glow effect
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/services/system_mode_manager.dart';
 import '../theme/app_theme.dart';
 
-/// Data class holding the visual properties for each status button
 class _StatusConfig {
   final SystemMode mode;
   final String label;
@@ -25,18 +22,16 @@ class _StatusConfig {
   });
 }
 
-/// 2x2 grid of large status toggle buttons.
-/// Tapping a button sets the system mode via [SystemModeManager].
+/// 2×2 grid of station mode toggle cards.
 class StatusToggles extends StatelessWidget {
   const StatusToggles({super.key});
 
-  // Configuration for all 4 status modes
   static const List<_StatusConfig> _statuses = [
     _StatusConfig(
       mode: SystemMode.operating,
       label: 'Operating',
       description: 'Open & accepting orders',
-      icon: Icons.check_circle_outline,
+      icon: Icons.check_circle,
       activeColor: AppColors.statusOperating,
       activeBgColor: AppColors.statusOperatingLight,
     ),
@@ -44,7 +39,7 @@ class StatusToggles extends StatelessWidget {
       mode: SystemMode.staffAway,
       label: 'Staff Away',
       description: 'Out delivering, accepting orders',
-      icon: Icons.schedule,
+      icon: Icons.access_time,
       activeColor: AppColors.statusAway,
       activeBgColor: AppColors.statusAwayLight,
     ),
@@ -52,7 +47,7 @@ class StatusToggles extends StatelessWidget {
       mode: SystemMode.full,
       label: 'Full / Busy',
       description: 'No more deliveries today',
-      icon: Icons.cancel_outlined,
+      icon: Icons.block,
       activeColor: AppColors.statusBusy,
       activeBgColor: AppColors.statusBusyLight,
     ),
@@ -60,7 +55,7 @@ class StatusToggles extends StatelessWidget {
       mode: SystemMode.maintenance,
       label: 'Maintenance',
       description: 'Station closed',
-      icon: Icons.build_outlined,
+      icon: Icons.build,
       activeColor: AppColors.statusMaintenance,
       activeBgColor: AppColors.statusMaintenanceLight,
     ),
@@ -70,10 +65,8 @@ class StatusToggles extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<SystemModeManager>(
       builder: (context, modeManager, _) {
-        // Compute aspect ratio dynamically so content fits on small screens.
         final screenWidth = MediaQuery.of(context).size.width;
         final cellWidth = (screenWidth - 32 - 12) / 2;
-        // Min cell height ~105px for icon + label + description with padding
         final cellHeight = cellWidth / 1.3 < 105 ? 105.0 : cellWidth / 1.3;
         final aspectRatio = cellWidth / cellHeight;
 
@@ -106,7 +99,6 @@ class StatusToggles extends StatelessWidget {
   }
 }
 
-/// Individual status toggle button with glow effect when active
 class _StatusButton extends StatelessWidget {
   final _StatusConfig config;
   final bool isActive;
@@ -125,26 +117,11 @@ class _StatusButton extends StatelessWidget {
       curve: Curves.easeOut,
       decoration: BoxDecoration(
         color: isActive ? config.activeBgColor : AppColors.card,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(kCardRadius),
         border: Border.all(
           color: isActive ? config.activeColor : AppColors.border,
-          width: 2,
+          width: isActive ? 2 : 1,
         ),
-        // Glow effect when active
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: config.activeColor.withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  spreadRadius: 0,
-                ),
-                BoxShadow(
-                  color: config.activeColor.withValues(alpha: 0.15),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : null,
       ),
       clipBehavior: Clip.antiAlias,
       child: Material(
@@ -158,32 +135,29 @@ class _StatusButton extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Status icon — colored when active, muted when inactive
                 Icon(
                   config.icon,
                   size: 28,
-                  color: isActive ? config.activeColor : AppColors.mutedForeground,
+                  color: isActive
+                      ? config.activeColor
+                      : AppColors.mutedForeground,
                 ),
                 const SizedBox(height: 6),
-                // Status label
                 Text(
                   config.label,
-                  style: TextStyle(
-                    fontSize: 13,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: isActive ? AppColors.foreground : AppColors.mutedForeground,
+                    color: isActive
+                        ? AppColors.foreground
+                        : AppColors.mutedForeground,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                // Status description
                 Text(
                   config.description,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.mutedForeground,
-                  ),
+                  style: Theme.of(context).textTheme.labelSmall,
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
