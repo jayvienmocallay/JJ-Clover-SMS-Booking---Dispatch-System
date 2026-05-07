@@ -145,10 +145,47 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (_isInitialLoading) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppColors.background,
         body: Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const Icon(Icons.water_drop, size: 36, color: AppColors.primary),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'JJ Clover',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.foreground,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Loading...',
+                style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+              ),
+              const SizedBox(height: 28),
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: AppColors.primary,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -172,7 +209,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       ),
       // Bottom navigation bar — uses Flutter's built-in widget for
       // reliable safe area handling and no overflow issues.
-      bottomNavigationBar: Theme(
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.border)),
+        ),
+        child: Theme(
         data: Theme.of(context).copyWith(
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,
@@ -193,6 +234,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                     label: item.label,
                   ))
               .toList(),
+        ),
         ),
       ),
     );

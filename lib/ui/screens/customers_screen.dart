@@ -687,14 +687,12 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       return;
     }
 
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final existing = await _customerRepo.getCustomerByPhone(phone);
+    if (!mounted) return;
     if (existing != null) {
-      if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text('A customer with $phone already exists')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('A customer with $phone already exists')),
+      );
       return;
     }
 
@@ -723,7 +721,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
     await customerProv.addCustomer(customerData);
     if (!mounted) return;
     navigator.pop();
-    scaffoldMessenger.showSnackBar(successSnack);
+    ScaffoldMessenger.of(context).showSnackBar(successSnack);
   }
 
   @override

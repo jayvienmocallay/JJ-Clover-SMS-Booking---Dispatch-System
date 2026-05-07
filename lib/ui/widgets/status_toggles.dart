@@ -120,70 +120,76 @@ class _StatusButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          color: isActive ? config.activeBgColor : AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isActive ? config.activeColor : AppColors.border,
-            width: 2,
-          ),
-          // Glow effect when active
-          boxShadow: isActive
-              ? [
-                  BoxShadow(
-                    color: config.activeColor.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    spreadRadius: 0,
-                  ),
-                  BoxShadow(
-                    color: config.activeColor.withValues(alpha: 0.15),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: isActive ? config.activeBgColor : AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isActive ? config.activeColor : AppColors.border,
+          width: 2,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Status icon — colored when active, muted when inactive
-              Icon(
-                config.icon,
-                size: 28,
-                color: isActive ? config.activeColor : AppColors.mutedForeground,
-              ),
-              const SizedBox(height: 6),
-              // Status label
-              Text(
-                config.label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? AppColors.foreground : AppColors.mutedForeground,
+        // Glow effect when active
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: config.activeColor.withValues(alpha: 0.3),
+                  blurRadius: 20,
+                  spreadRadius: 0,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              // Status description
-              Text(
-                config.description,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: AppColors.mutedForeground,
+                BoxShadow(
+                  color: config.activeColor.withValues(alpha: 0.15),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              ]
+            : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          splashColor: config.activeColor.withValues(alpha: 0.15),
+          highlightColor: config.activeColor.withValues(alpha: 0.08),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Status icon — colored when active, muted when inactive
+                Icon(
+                  config.icon,
+                  size: 28,
+                  color: isActive ? config.activeColor : AppColors.mutedForeground,
+                ),
+                const SizedBox(height: 6),
+                // Status label
+                Text(
+                  config.label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? AppColors.foreground : AppColors.mutedForeground,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                // Status description
+                Text(
+                  config.description,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.mutedForeground,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       ),

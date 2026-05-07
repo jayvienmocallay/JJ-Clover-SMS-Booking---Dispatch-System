@@ -16,6 +16,7 @@ class OrderProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   StreamSubscription? _orderEventSubscription;
+  bool _disposed = false;
 
   List<Map<String, dynamic>> get todayOrders => _todayOrders;
   bool get isLoading => _isLoading;
@@ -29,6 +30,7 @@ class OrderProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _orderEventSubscription?.cancel();
     super.dispose();
   }
@@ -83,7 +85,7 @@ class OrderProvider extends ChangeNotifier {
       await loadOrders();
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -95,7 +97,7 @@ class OrderProvider extends ChangeNotifier {
       await loadOrders();
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 

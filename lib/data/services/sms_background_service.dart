@@ -61,16 +61,20 @@ Future<void> smsNativeBackgroundMain() async {
         : int.tryParse(rawSubscriptionId?.toString() ?? '');
     final sourceMessageId = args['sourceMessageId']?.toString();
 
-    await _ensureSmsRuntimeReady();
-    await SmsBackgroundService.instance._processIncomingSmsPayload(
-      sender: sender,
-      message: message,
-      timestamp: timestamp,
-      subscriptionId: subscriptionId,
-      serviceCenterAddress: args['serviceCenterAddress']?.toString(),
-      sourceMessageId: sourceMessageId,
-      smsSender: Telephony.backgroundInstance,
-    );
+    try {
+      await _ensureSmsRuntimeReady();
+      await SmsBackgroundService.instance._processIncomingSmsPayload(
+        sender: sender,
+        message: message,
+        timestamp: timestamp,
+        subscriptionId: subscriptionId,
+        serviceCenterAddress: args['serviceCenterAddress']?.toString(),
+        sourceMessageId: sourceMessageId,
+        smsSender: Telephony.backgroundInstance,
+      );
+    } catch (e, st) {
+      debugPrint('smsNativeBackgroundMain processing error: $e\n$st');
+    }
     return true;
   });
 
@@ -87,11 +91,15 @@ Future<void> smsBackgroundMessageHandler(SmsMessage msg) async {
   WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
 
-  await _ensureSmsRuntimeReady();
-  await SmsBackgroundService.instance._processIncomingSms(
-    msg,
-    smsSender: Telephony.backgroundInstance,
-  );
+  try {
+    await _ensureSmsRuntimeReady();
+    await SmsBackgroundService.instance._processIncomingSms(
+      msg,
+      smsSender: Telephony.backgroundInstance,
+    );
+  } catch (e, st) {
+    debugPrint('smsBackgroundMessageHandler error: $e\n$st');
+  }
 }
 
 /// Thin command router — receives raw SMS, gates on deduplication, then
