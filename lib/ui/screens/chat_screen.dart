@@ -163,10 +163,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(backgroundColor: AppColors.background),
-        body: const Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
+        backgroundColor: AppColors.of(context).background,
+        appBar: AppBar(backgroundColor: AppColors.of(context).background),
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.of(context).primary),
         ),
       );
     }
@@ -174,7 +174,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final displayList = _buildDisplayList(_messages);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.of(context).background,
       appBar: ChatHeader(
         contactName: widget.contactName ?? 'Unknown',
         phoneNumber: widget.phoneNumber,
@@ -190,14 +190,14 @@ class _ChatScreenState extends State<ChatScreen> {
                         Icon(
                           Icons.forum_outlined,
                           size: 56,
-                          color: AppColors.mutedForeground.withValues(alpha: 0.3),
+                          color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3),
                         ),
                         const SizedBox(height: 16),
                         Text(
                           'No messages yet',
                           style: TextStyle(
                             fontSize: 16,
-                            color: AppColors.mutedForeground.withValues(alpha: 0.7),
+                            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.7),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -205,7 +205,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           'Start a conversation',
                           style: TextStyle(
                             fontSize: 14,
-                            color: AppColors.mutedForeground.withValues(alpha: 0.5),
+                            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -253,7 +253,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         _formatTime(sentAt),
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: AppColors.mutedForeground.withValues(alpha: 0.6),
+                                          color: AppColors.of(context).mutedForeground.withValues(alpha: 0.6),
                                         ),
                                       ),
                                     )
@@ -282,28 +282,28 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Divider(color: AppColors.border.withValues(alpha: 0.4), thickness: 1),
+            child: Divider(color: AppColors.of(context).border.withValues(alpha: 0.4), thickness: 1),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.muted,
+                color: AppColors.of(context).muted,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 _formatDateOnly(sentAt),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: AppColors.mutedForeground,
+                  color: AppColors.of(context).mutedForeground,
                 ),
               ),
             ),
           ),
           Expanded(
-            child: Divider(color: AppColors.border.withValues(alpha: 0.4), thickness: 1),
+            child: Divider(color: AppColors.of(context).border.withValues(alpha: 0.4), thickness: 1),
           ),
         ],
       ),

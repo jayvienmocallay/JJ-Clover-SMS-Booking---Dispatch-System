@@ -18,8 +18,8 @@ class ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bubbleColor = isIncoming ? AppColors.muted : AppColors.primary;
-    final textColor = isIncoming ? AppColors.foreground : Colors.white;
+    final bubbleColor = isIncoming ? AppColors.of(context).muted : AppColors.of(context).primary;
+    final textColor = isIncoming ? AppColors.of(context).foreground : Colors.white;
 
     return Align(
       alignment: isIncoming ? Alignment.centerLeft : Alignment.centerRight,

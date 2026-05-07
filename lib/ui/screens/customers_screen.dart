@@ -38,14 +38,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: const Text(
+        backgroundColor: AppColors.of(context).card,
+        title: Text(
           'Delete Customer',
-          style: TextStyle(color: AppColors.foreground),
+          style: TextStyle(color: AppColors.of(context).foreground),
         ),
         content: Text(
           'Delete $name and their orders history?',
-          style: const TextStyle(color: AppColors.mutedForeground),
+          style: TextStyle(color: AppColors.of(context).mutedForeground),
         ),
         actions: [
           TextButton(
@@ -54,7 +54,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.statusMaintenance,
+              backgroundColor: AppColors.of(context).statusMaintenance,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
@@ -77,7 +77,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   void _showAddCustomerSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: AppColors.of(context).card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -110,20 +110,20 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Customers',
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.foreground,
+                          color: AppColors.of(context).foreground,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '${customerProv.count} registered customers',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
-                          color: AppColors.mutedForeground,
+                          color: AppColors.of(context).mutedForeground,
                         ),
                       ),
                     ],
@@ -137,7 +137,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: AppColors.of(context).primary,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Row(
@@ -164,25 +164,25 @@ class _CustomersScreenState extends State<CustomersScreen> {
               // --- Search bar ---
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.card,
+                  color: AppColors.of(context).card,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: AppColors.of(context).border),
                 ),
                 child: TextField(
                   onChanged: (val) => setState(() => _search = val),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: AppColors.foreground,
+                    color: AppColors.of(context).foreground,
                   ),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Search by name, phone, or barangay...',
                     prefixIcon: Icon(
                       Icons.search,
                       size: 18,
-                      color: AppColors.mutedForeground,
+                      color: AppColors.of(context).mutedForeground,
                     ),
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                 ),
               ),
@@ -197,14 +197,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       Icon(
                         Icons.people,
                         size: 48,
-                        color: AppColors.mutedForeground.withValues(alpha: 0.3),
+                        color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
+                      Text(
                         'No customers found.',
                         style: TextStyle(
                           fontSize: 14,
-                          color: AppColors.mutedForeground,
+                          color: AppColors.of(context).mutedForeground,
                         ),
                       ),
                     ],
@@ -222,9 +222,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.card,
+                        color: AppColors.of(context).card,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: AppColors.of(context).border),
                       ),
                       child: Row(
                         children: [
@@ -232,17 +232,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           Container(
                             width: 40,
                             height: 40,
-                            decoration: const BoxDecoration(
-                              color: AppColors.primaryLight,
+                            decoration: BoxDecoration(
+                              color: AppColors.of(context).primaryLight,
                               shape: BoxShape.circle,
                             ),
                             child: Center(
                               child: Text(
                                 initial,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 14,
-                                  color: AppColors.primary,
+                                  color: AppColors.of(context).primary,
                                 ),
                               ),
                             ),
@@ -255,42 +255,42 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               children: [
                                 Text(
                                   name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w500,
                                     fontSize: 14,
-                                    color: AppColors.foreground,
+                                    color: AppColors.of(context).foreground,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.phone,
                                       size: 12,
-                                      color: AppColors.mutedForeground,
+                                      color: AppColors.of(context).mutedForeground,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       phone,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
-                                        color: AppColors.mutedForeground,
+                                        color: AppColors.of(context).mutedForeground,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
-                                    const Icon(
+                                    Icon(
                                       Icons.location_on,
                                       size: 12,
-                                      color: AppColors.mutedForeground,
+                                      color: AppColors.of(context).mutedForeground,
                                     ),
                                     const SizedBox(width: 4),
                                     Flexible(
                                       child: Text(
                                         barangay,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 12,
-                                          color: AppColors.mutedForeground,
+                                          color: AppColors.of(context).mutedForeground,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -305,10 +305,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             onTap: () => _editCustomer(c),
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.edit,
                                 size: 20,
-                                color: AppColors.primary,
+                                color: AppColors.of(context).primary,
                               ),
                             ),
                           ),
@@ -317,10 +317,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             onTap: () => _deleteCustomer(c['id'] as int, name),
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.delete_outline,
                                 size: 20,
-                                color: AppColors.statusMaintenance,
+                                color: AppColors.of(context).statusMaintenance,
                               ),
                             ),
                           ),
@@ -353,7 +353,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: AppColors.of(context).card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -385,26 +385,26 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         width: 40,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: AppColors.border,
+                          color: AppColors.of(context).border,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Edit Customer',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.foreground,
+                        color: AppColors.of(context).foreground,
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Text(
+                    Text(
                       'Full Name',
                       style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.mutedForeground,
+                        color: AppColors.of(context).mutedForeground,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -414,11 +414,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       TextInputType.name,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Phone Number',
                       style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.mutedForeground,
+                        color: AppColors.of(context).mutedForeground,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -428,11 +428,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       TextInputType.phone,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Full Address',
                       style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.mutedForeground,
+                        color: AppColors.of(context).mutedForeground,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -442,29 +442,29 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       TextInputType.streetAddress,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Barangay',
                       style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.mutedForeground,
+                        color: AppColors.of(context).mutedForeground,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
-                        color: AppColors.background,
+                        color: AppColors.of(context).background,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: AppColors.of(context).border),
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<int?>(
                           value: selectedBarangayId,
                           isExpanded: true,
-                          dropdownColor: AppColors.card,
-                          hint: const Text(
+                          dropdownColor: AppColors.of(context).card,
+                          hint: Text(
                             'Select Barangay...',
-                            style: TextStyle(color: AppColors.mutedForeground),
+                            style: TextStyle(color: AppColors.of(context).mutedForeground),
                           ),
                           items: barangays
                               .map(
@@ -472,8 +472,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   value: b['id'] as int,
                                   child: Text(
                                     '${b['name']} (${b['delivery_zone']})',
-                                    style: const TextStyle(
-                                      color: AppColors.foreground,
+                                    style: TextStyle(
+                                      color: AppColors.of(context).foreground,
                                     ),
                                   ),
                                 ),
@@ -548,7 +548,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
-                            color: AppColors.primary,
+                            color: AppColors.of(context).primary,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Center(
@@ -581,9 +581,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: AppColors.of(context).background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.of(context).border),
       ),
       child: TextField(
         controller: controller,
@@ -594,10 +594,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 LengthLimitingTextInputFormatter(11),
               ]
             : null,
-        style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+        style: TextStyle(fontSize: 14, color: AppColors.of(context).foreground),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: AppColors.mutedForeground),
+          hintStyle: TextStyle(color: AppColors.of(context).mutedForeground),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
@@ -750,22 +750,22 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.border,
+              color: AppColors.of(context).border,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
         ),
         const SizedBox(height: 16),
-        const Row(
+        Row(
           children: [
-            Icon(Icons.shield, size: 22, color: AppColors.primary),
-            SizedBox(width: 8),
+            Icon(Icons.shield, size: 22, color: AppColors.of(context).primary),
+            const SizedBox(width: 8),
             Text(
               'Data Privacy Consent',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: AppColors.foreground,
+                color: AppColors.of(context).foreground,
               ),
             ),
           ],
@@ -777,11 +777,11 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
           padding: const EdgeInsets.all(16),
           constraints: const BoxConstraints(maxHeight: 280),
           decoration: BoxDecoration(
-            color: AppColors.background,
+            color: AppColors.of(context).background,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: AppColors.of(context).border),
           ),
-          child: const SingleChildScrollView(
+          child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -795,24 +795,24 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                   'purpose of:\n',
                   style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.foreground,
+                    color: AppColors.of(context).foreground,
                     height: 1.5,
                   ),
                 ),
-                _PolicyBullet(
+                const _PolicyBullet(
                   'Processing and delivering your water refill orders',
                 ),
-                SizedBox(height: 6),
-                _PolicyBullet(
+                const SizedBox(height: 6),
+                const _PolicyBullet(
                   'Contacting you regarding your orders and delivery schedule',
                 ),
-                SizedBox(height: 6),
-                _PolicyBullet('Improving our service quality'),
-                SizedBox(height: 6),
-                _PolicyBullet(
+                const SizedBox(height: 6),
+                const _PolicyBullet('Improving our service quality'),
+                const SizedBox(height: 6),
+                const _PolicyBullet(
                   'Securely backing up records to cloud storage when sync is enabled',
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 Text(
                   'Your data will not be shared with third parties without '
                   'your explicit consent. Cloud backup uses encrypted storage '
@@ -822,7 +822,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                   'by contacting us.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.foreground,
+                    color: AppColors.of(context).foreground,
                     height: 1.5,
                   ),
                 ),
@@ -843,13 +843,13 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                 height: 22,
                 decoration: BoxDecoration(
                   color: _privacyConsent
-                      ? AppColors.primary
+                      ? AppColors.of(context).primary
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: _privacyConsent
-                        ? AppColors.primary
-                        : AppColors.mutedForeground,
+                        ? AppColors.of(context).primary
+                        : AppColors.of(context).mutedForeground,
                     width: 1.5,
                   ),
                 ),
@@ -858,14 +858,14 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                     : null,
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'I have read and agree to the Data Privacy Policy. '
                   'I consent to the collection and processing of my '
                   'personal information.',
                   style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.mutedForeground,
+                    color: AppColors.of(context).mutedForeground,
                     height: 1.4,
                   ),
                 ),
@@ -884,7 +884,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
-                color: _privacyConsent ? AppColors.primary : AppColors.muted,
+                color: _privacyConsent ? AppColors.of(context).primary : AppColors.of(context).muted,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
@@ -895,7 +895,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                     fontWeight: FontWeight.w600,
                     color: _privacyConsent
                         ? Colors.white
-                        : AppColors.mutedForeground,
+                        : AppColors.of(context).mutedForeground,
                   ),
                 ),
               ),
@@ -918,7 +918,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.border,
+              color: AppColors.of(context).border,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -929,19 +929,19 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
             // Back button to return to privacy consent
             GestureDetector(
               onTap: () => setState(() => _step = 0),
-              child: const Icon(
+              child: Icon(
                 Icons.arrow_back,
                 size: 20,
-                color: AppColors.mutedForeground,
+                color: AppColors.of(context).mutedForeground,
               ),
             ),
             const SizedBox(width: 12),
-            const Text(
+            Text(
               'New Customer',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: AppColors.foreground,
+                color: AppColors.of(context).foreground,
               ),
             ),
           ],
@@ -949,27 +949,27 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
         const SizedBox(height: 20),
 
         // Name
-        const Text(
+        Text(
           'Full Name',
-          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
         ),
         const SizedBox(height: 6),
         _buildTextField(_nameController, 'Full Name', TextInputType.name),
         const SizedBox(height: 16),
 
         // Phone
-        const Text(
+        Text(
           'Phone Number',
-          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
         ),
         const SizedBox(height: 6),
         _buildTextField(_phoneController, 'Phone Number', TextInputType.phone),
         const SizedBox(height: 16),
 
         // Address
-        const Text(
+        Text(
           'Full Address',
-          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
         ),
         const SizedBox(height: 6),
         _buildTextField(
@@ -980,29 +980,29 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
         const SizedBox(height: 16),
 
         // Barangay dropdown
-        const Text(
+        Text(
           'Barangay',
-          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
         ),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: AppColors.background,
+            color: AppColors.of(context).background,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: AppColors.of(context).border),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int?>(
               value: _selectedBarangayId,
               isExpanded: true,
-              dropdownColor: AppColors.card,
+              dropdownColor: AppColors.of(context).card,
               hint: Text(
                 _barangays.isEmpty
                     ? 'No barangays. Add them in Settings.'
                     : 'Select Barangay...',
-                style: const TextStyle(
-                  color: AppColors.mutedForeground,
+                style: TextStyle(
+                  color: AppColors.of(context).mutedForeground,
                   fontSize: 14,
                 ),
               ),
@@ -1012,8 +1012,8 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                       value: b['id'] as int,
                       child: Text(
                         '${b['name']} (${b['delivery_zone']})',
-                        style: const TextStyle(
-                          color: AppColors.foreground,
+                        style: TextStyle(
+                          color: AppColors.of(context).foreground,
                           fontSize: 14,
                         ),
                       ),
@@ -1036,7 +1036,7 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
+                    color: AppColors.of(context).primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(
@@ -1062,15 +1062,15 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                   vertical: 14,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.muted,
+                  color: AppColors.of(context).muted,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text(
+                child: Text(
                   'Cancel',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.mutedForeground,
+                    color: AppColors.of(context).mutedForeground,
                   ),
                 ),
               ),
@@ -1088,9 +1088,9 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: AppColors.of(context).background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.of(context).border),
       ),
       child: TextField(
         controller: controller,
@@ -1101,10 +1101,10 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
                 LengthLimitingTextInputFormatter(11),
               ]
             : null,
-        style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+        style: TextStyle(fontSize: 14, color: AppColors.of(context).foreground),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: AppColors.mutedForeground),
+          hintStyle: TextStyle(color: AppColors.of(context).mutedForeground),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
@@ -1126,16 +1126,16 @@ class _PolicyBullet extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '  \u2022  ',
-          style: TextStyle(fontSize: 13, color: AppColors.primary),
+          style: TextStyle(fontSize: 13, color: AppColors.of(context).primary),
         ),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: AppColors.foreground,
+              color: AppColors.of(context).foreground,
               height: 1.4,
             ),
           ),

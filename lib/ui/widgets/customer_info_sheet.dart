@@ -118,10 +118,10 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
     await _updateOrderStatus('confirmed');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Order confirmed'),
-          backgroundColor: AppColors.statusOperating,
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: const Text('Order confirmed'),
+          backgroundColor: AppColors.of(context).statusOperating,
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -131,10 +131,10 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
     await _updateOrderStatus('completed');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Marked as delivered'),
-          backgroundColor: AppColors.statusOperating,
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: const Text('Marked as delivered'),
+          backgroundColor: AppColors.of(context).statusOperating,
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -147,21 +147,21 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
       builder: (ctx) {
         final controller = TextEditingController();
         return AlertDialog(
-          backgroundColor: AppColors.card,
+          backgroundColor: AppColors.of(context).card,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text(
+          title: Text(
             'Reject Order',
-            style: TextStyle(color: AppColors.foreground),
+            style: TextStyle(color: AppColors.of(context).foreground),
           ),
           content: TextField(
             controller: controller,
             autofocus: true,
-            style: const TextStyle(color: AppColors.foreground),
+            style: TextStyle(color: AppColors.of(context).foreground),
             decoration: InputDecoration(
               hintText: 'Reason (optional)',
               filled: true,
-              fillColor: AppColors.muted,
+              fillColor: AppColors.of(context).muted,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
@@ -172,13 +172,13 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel',
-                  style: TextStyle(color: AppColors.mutedForeground)),
+              child: Text('Cancel',
+                  style: TextStyle(color: AppColors.of(context).mutedForeground)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Reject',
-                  style: TextStyle(color: AppColors.statusBusy)),
+              child: Text('Reject',
+                  style: TextStyle(color: AppColors.of(context).statusBusy)),
             ),
           ],
         );
@@ -197,7 +197,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
   void _showOrderHistory() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: AppColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -220,9 +220,9 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
             _buildTitle(),
             Expanded(
               child: _loading
-                  ? const Center(
+                  ? Center(
                       child:
-                          CircularProgressIndicator(color: AppColors.primary))
+                          CircularProgressIndicator(color: AppColors.of(context).primary))
                   : ListView(
                       controller: scrollController,
                       padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
@@ -254,7 +254,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           width: 40,
           height: 4,
           decoration: BoxDecoration(
-            color: AppColors.border,
+            color: AppColors.of(context).border,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -267,21 +267,21 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       child: Row(
         children: [
-          const Text(
+          Text(
             'Customer Details',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: AppColors.foreground,
+              color: AppColors.of(context).foreground,
             ),
           ),
           if (_loading) ...[
             const Spacer(),
-            const SizedBox(
+            SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.primary),
+                  strokeWidth: 2, color: AppColors.of(context).primary),
             ),
           ],
         ],
@@ -306,17 +306,17 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
                 children: [
                   Text(
                     widget.contactName,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.foreground,
+                      color: AppColors.of(context).foreground,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     widget.phoneNumber,
-                    style: const TextStyle(
-                        fontSize: 14, color: AppColors.mutedForeground),
+                    style: TextStyle(
+                        fontSize: 14, color: AppColors.of(context).mutedForeground),
                   ),
                 ],
               ),
@@ -360,16 +360,16 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
       width: 56,
       height: 56,
       decoration: BoxDecoration(
-        color: AppColors.primaryLight,
+        color: AppColors.of(context).primaryLight,
         borderRadius: BorderRadius.circular(28),
       ),
       child: Center(
         child: Text(
           initial,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w700,
-            color: AppColors.primary,
+            color: AppColors.of(context).primary,
           ),
         ),
       ),
@@ -381,8 +381,8 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: isRegistered
-            ? AppColors.statusOperatingLight
-            : AppColors.muted,
+            ? AppColors.of(context).statusOperatingLight
+            : AppColors.of(context).muted,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -391,8 +391,8 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           fontSize: 11,
           fontWeight: FontWeight.w600,
           color: isRegistered
-              ? AppColors.statusOperating
-              : AppColors.mutedForeground,
+              ? AppColors.of(context).statusOperating
+              : AppColors.of(context).mutedForeground,
         ),
       ),
     );
@@ -423,7 +423,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.muted,
+        color: AppColors.of(context).muted,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -435,33 +435,33 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
               children: [
                 Text(
                   '${order.quantity} gallon${order.quantity == 1 ? '' : 's'}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.foreground,
+                    color: AppColors.of(context).foreground,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _orderTypeLabel(order.type) +
                       (order.isPreBook ? ' • Pre-booked' : ''),
-                  style: const TextStyle(
-                      fontSize: 13, color: AppColors.mutedForeground),
+                  style: TextStyle(
+                      fontSize: 13, color: AppColors.of(context).mutedForeground),
                 ),
                 if (order.deliveryDay != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     'Scheduled for ${order.deliveryDay}',
-                    style: const TextStyle(
-                        fontSize: 13, color: AppColors.mutedForeground),
+                    style: TextStyle(
+                        fontSize: 13, color: AppColors.of(context).mutedForeground),
                   ),
                 ],
                 const SizedBox(height: 6),
                 Text(
                   'Placed ${_formatDate(order.createdAt)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.mutedForeground),
+                      color: AppColors.of(context).mutedForeground),
                 ),
               ],
             ),
@@ -507,21 +507,21 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
         _listAction(
           icon: Icons.check_circle_outline,
           label: order!.isPreBook ? 'Confirm Pre-book' : 'Confirm Order',
-          color: AppColors.statusOperating,
+          color: AppColors.of(context).statusOperating,
           onTap: _confirmOrder,
         ),
       if (canDeliver)
         _listAction(
           icon: Icons.local_shipping_outlined,
           label: 'Mark as Delivered',
-          color: AppColors.primary,
+          color: AppColors.of(context).primary,
           onTap: _markDelivered,
         ),
       if (canReject)
         _listAction(
           icon: Icons.cancel_outlined,
           label: 'Reject / Cancel',
-          color: AppColors.statusBusy,
+          color: AppColors.of(context).statusBusy,
           onTap: _rejectOrder,
         ),
     ];
@@ -536,14 +536,14 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
             _iconAction(
               icon: Icons.call,
               label: 'Call',
-              color: AppColors.statusOperating,
+              color: AppColors.of(context).statusOperating,
               onTap: _makePhoneCall,
             ),
             const SizedBox(width: 8),
             _iconAction(
               icon: Icons.add_circle_outline,
               label: 'New Order',
-              color: AppColors.primary,
+              color: AppColors.of(context).primary,
               onTap: () {
                 final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
@@ -559,7 +559,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
             _iconAction(
               icon: Icons.history,
               label: 'History',
-              color: AppColors.mutedForeground,
+              color: AppColors.of(context).mutedForeground,
               onTap: _showOrderHistory,
             ),
           ],
@@ -586,7 +586,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
             _listAction(
               icon: Icons.person_add_outlined,
               label: 'Register Customer',
-              color: AppColors.primary,
+              color: AppColors.of(context).primary,
               onTap: () {
                 final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
@@ -601,7 +601,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           _listAction(
             icon: Icons.volume_off_outlined,
             label: 'Mute Messages',
-            color: AppColors.mutedForeground,
+            color: AppColors.of(context).mutedForeground,
             onTap: () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Mute — coming soon')),
             ),
@@ -609,7 +609,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           _listAction(
             icon: Icons.block_outlined,
             label: 'Block Number',
-            color: AppColors.statusAway,
+            color: AppColors.of(context).statusAway,
             onTap: () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Block — coming soon')),
             ),
@@ -617,7 +617,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           _listAction(
             icon: Icons.report_outlined,
             label: 'Mark as Spam',
-            color: AppColors.statusAway,
+            color: AppColors.of(context).statusAway,
             onTap: () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Spam — coming soon')),
             ),
@@ -634,14 +634,14 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        color: AppColors.muted,
+        color: AppColors.of(context).muted,
         child: Column(
           children: [
             for (int i = 0; i < children.length; i++) ...[
               children[i],
               if (i < children.length - 1)
                 Divider(
-                  color: AppColors.border.withValues(alpha: 0.6),
+                  color: AppColors.of(context).border.withValues(alpha: 0.6),
                   height: 1,
                   indent: 16,
                   endIndent: 16,
@@ -658,21 +658,21 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: AppColors.mutedForeground),
+          Icon(icon, size: 18, color: AppColors.of(context).mutedForeground),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.mutedForeground)),
+                    style: TextStyle(
+                        fontSize: 11, color: AppColors.of(context).mutedForeground)),
                 const SizedBox(height: 2),
                 Text(value,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.foreground)),
+                        color: AppColors.of(context).foreground)),
               ],
             ),
           ),
@@ -704,8 +704,8 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
                     color: color),
               ),
             ),
-            const Icon(Icons.chevron_right,
-                size: 18, color: AppColors.mutedForeground),
+            Icon(Icons.chevron_right,
+                size: 18, color: AppColors.of(context).mutedForeground),
           ],
         ),
       ),
@@ -724,7 +724,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: AppColors.muted,
+            color: AppColors.of(context).muted,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -748,10 +748,10 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
   Widget _sectionLabel(String text) {
     return Text(
       text.toUpperCase(),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w600,
-        color: AppColors.mutedForeground,
+        color: AppColors.of(context).mutedForeground,
         letterSpacing: 0.8,
       ),
     );
@@ -762,34 +762,34 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
   Color _statusColor(OrderStatus status) {
     switch (status) {
       case OrderStatus.pending:
-        return AppColors.statusAway;
+        return AppColors.of(context).statusAway;
       case OrderStatus.confirmed:
-        return AppColors.primary;
+        return AppColors.of(context).primary;
       case OrderStatus.inTransit:
-        return AppColors.primary;
+        return AppColors.of(context).primary;
       case OrderStatus.completed:
-        return AppColors.statusOperating;
+        return AppColors.of(context).statusOperating;
       case OrderStatus.cancelled:
-        return AppColors.mutedForeground;
+        return AppColors.of(context).mutedForeground;
       case OrderStatus.rejected:
-        return AppColors.statusBusy;
+        return AppColors.of(context).statusBusy;
     }
   }
 
   Color _statusBgColor(OrderStatus status) {
     switch (status) {
       case OrderStatus.pending:
-        return AppColors.statusAwayLight;
+        return AppColors.of(context).statusAwayLight;
       case OrderStatus.confirmed:
-        return AppColors.primaryLight;
+        return AppColors.of(context).primaryLight;
       case OrderStatus.inTransit:
-        return AppColors.primaryLight;
+        return AppColors.of(context).primaryLight;
       case OrderStatus.completed:
-        return AppColors.statusOperatingLight;
+        return AppColors.of(context).statusOperatingLight;
       case OrderStatus.cancelled:
-        return AppColors.muted;
+        return AppColors.of(context).muted;
       case OrderStatus.rejected:
-        return AppColors.statusBusyLight;
+        return AppColors.of(context).statusBusyLight;
     }
   }
 
@@ -866,35 +866,35 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.border,
+                color: AppColors.of(context).border,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 12, 20, 12),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
           child: Text(
             'Order History',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: AppColors.foreground,
+              color: AppColors.of(context).foreground,
             ),
           ),
         ),
         if (_loading)
-          const Padding(
-            padding: EdgeInsets.all(40),
+          Padding(
+            padding: const EdgeInsets.all(40),
             child: Center(
-                child: CircularProgressIndicator(color: AppColors.primary)),
+                child: CircularProgressIndicator(color: AppColors.of(context).primary)),
           )
         else if (_orders.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 12, 20, 40),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
             child: Text(
               'No orders found for this number.',
-              style: TextStyle(color: AppColors.mutedForeground),
+              style: TextStyle(color: AppColors.of(context).mutedForeground),
             ),
           )
         else
@@ -919,21 +919,21 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
     Color statusBg;
     switch (order.status) {
       case OrderStatus.completed:
-        statusColor = AppColors.statusOperating;
-        statusBg = AppColors.statusOperatingLight;
+        statusColor = AppColors.of(context).statusOperating;
+        statusBg = AppColors.of(context).statusOperatingLight;
         break;
       case OrderStatus.rejected:
       case OrderStatus.cancelled:
-        statusColor = AppColors.statusBusy;
-        statusBg = AppColors.statusBusyLight;
+        statusColor = AppColors.of(context).statusBusy;
+        statusBg = AppColors.of(context).statusBusyLight;
         break;
       case OrderStatus.pending:
-        statusColor = AppColors.statusAway;
-        statusBg = AppColors.statusAwayLight;
+        statusColor = AppColors.of(context).statusAway;
+        statusBg = AppColors.of(context).statusAwayLight;
         break;
       default:
-        statusColor = AppColors.primary;
-        statusBg = AppColors.primaryLight;
+        statusColor = AppColors.of(context).primary;
+        statusBg = AppColors.of(context).primaryLight;
     }
 
     final typeLabel = order.type == OrderType.deliver
@@ -953,7 +953,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.muted,
+        color: AppColors.of(context).muted,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -964,23 +964,23 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
               children: [
                 Text(
                   '${order.quantity} gallon${order.quantity == 1 ? '' : 's'} · $typeLabel',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.foreground,
+                    color: AppColors.of(context).foreground,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   dateLabel,
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.mutedForeground),
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.of(context).mutedForeground),
                 ),
                 if (order.deliveryDay != null)
                   Text(
                     'Scheduled: ${order.deliveryDay}',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.mutedForeground),
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.of(context).mutedForeground),
                   ),
               ],
             ),

@@ -76,8 +76,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
+      return Center(
+        child: CircularProgressIndicator(color: AppColors.of(context).primary),
       );
     }
 
@@ -85,23 +85,23 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
 return RefreshIndicator(
       onRefresh: _loadMessages,
-      color: AppColors.primary,
+      color: AppColors.of(context).primary,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Messages',
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.foreground,
+                  color: AppColors.of(context).foreground,
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.refresh, color: AppColors.primary),
+                icon: Icon(Icons.refresh, color: AppColors.of(context).primary),
                 onPressed: _loadMessages,
               ),
             ],
@@ -109,7 +109,7 @@ return RefreshIndicator(
           const SizedBox(height: 4),
           Text(
             uniquePhones.isEmpty ? 'No conversations' : '${uniquePhones.length} ${uniquePhones.length == 1 ? 'conversation' : 'conversations'}',
-            style: const TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+            style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground),
           ),
           const SizedBox(height: 16),
           if (uniquePhones.isEmpty)
@@ -117,9 +117,9 @@ return RefreshIndicator(
               padding: const EdgeInsets.symmetric(vertical: 48),
               child: Column(
                 children: [
-                  Icon(Icons.forum_outlined, size: 48, color: AppColors.mutedForeground.withValues(alpha: 0.3)),
+                  Icon(Icons.forum_outlined, size: 48, color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3)),
                   const SizedBox(height: 12),
-                  const Text('No SMS conversations yet', style: TextStyle(fontSize: 14, color: AppColors.mutedForeground)),
+                  Text('No SMS conversations yet', style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground)),
                 ],
               ),
             )
@@ -157,9 +157,9 @@ return RefreshIndicator(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   decoration: BoxDecoration(
-                    color: AppColors.card,
+                    color: AppColors.of(context).card,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border.withValues(alpha: 0.3), width: 0.5),
+                    border: Border.all(color: AppColors.of(context).border.withValues(alpha: 0.3), width: 0.5),
                   ),
                   child: Row(
                     children: [
@@ -167,7 +167,7 @@ return RefreshIndicator(
                         width: 48,
                         height: 48,
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.15),
+                          color: AppColors.of(context).primary.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -175,10 +175,10 @@ return RefreshIndicator(
                             (displayName ?? phone).isNotEmpty
                                 ? (displayName ?? phone).substring(0, 1).toUpperCase()
                                 : '?',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
+                              color: AppColors.of(context).primary,
                             ),
                           ),
                         ),
@@ -190,10 +190,10 @@ return RefreshIndicator(
                           children: [
                             Text(
                               displayName ?? phone,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.foreground,
+                                color: AppColors.of(context).foreground,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -203,7 +203,7 @@ return RefreshIndicator(
                               message,
                               style: TextStyle(
                                 fontSize: 13,
-                                color: AppColors.mutedForeground.withValues(alpha: 0.8),
+                                color: AppColors.of(context).mutedForeground.withValues(alpha: 0.8),
                                 height: 1.3,
                               ),
                               maxLines: 1,
@@ -221,14 +221,14 @@ return RefreshIndicator(
                             _formatTimeShort(sentAt),
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.mutedForeground.withValues(alpha: 0.6),
+                              color: AppColors.of(context).mutedForeground.withValues(alpha: 0.6),
                             ),
                           ),
                           const SizedBox(height: 4),
                           Icon(
                             isIncoming ? Icons.call_received : Icons.call_made,
                             size: 14,
-                            color: isIncoming ? AppColors.primary : AppColors.statusOperating,
+                            color: isIncoming ? AppColors.of(context).primary : AppColors.of(context).statusOperating,
                           ),
                         ],
                       ),

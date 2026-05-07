@@ -28,7 +28,7 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
   void _showContactInfo(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: AppColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -43,10 +43,10 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      backgroundColor: AppColors.card,
+      backgroundColor: AppColors.of(context).card,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: AppColors.foreground),
+        icon: Icon(Icons.arrow_back, color: AppColors.of(context).foreground),
         onPressed: () => Navigator.pop(context),
       ),
       title: Column(
@@ -55,17 +55,17 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
         children: [
           Text(
             contactName,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: AppColors.foreground,
+              color: AppColors.of(context).foreground,
             ),
           ),
           Text(
             phoneNumber,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.mutedForeground,
+              color: AppColors.of(context).mutedForeground,
               fontWeight: FontWeight.w400,
             ),
           ),
@@ -73,12 +73,12 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.call_outlined, color: AppColors.primary),
+          icon: Icon(Icons.call_outlined, color: AppColors.of(context).primary),
           onPressed: _makePhoneCall,
           tooltip: 'Call customer',
         ),
         IconButton(
-          icon: const Icon(Icons.info_outlined, color: AppColors.primary),
+          icon: Icon(Icons.info_outlined, color: AppColors.of(context).primary),
           onPressed: () => _showContactInfo(context),
           tooltip: 'Contact details',
         ),

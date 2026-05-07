@@ -65,26 +65,26 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
         logs.fold<int>(0, (sum, l) => sum + l.quantityDelivered);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.of(context).background,
       appBar: AppBar(
-        backgroundColor: AppColors.card,
+        backgroundColor: AppColors.of(context).card,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.foreground),
+          icon: Icon(Icons.arrow_back, color: AppColors.of(context).foreground),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Delivery Logs',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w700,
-            color: AppColors.foreground,
+            color: AppColors.of(context).foreground,
           ),
         ),
         elevation: 0,
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+          ? Center(
+              child: CircularProgressIndicator(color: AppColors.of(context).primary),
             )
           : RefreshIndicator(
               onRefresh: _loadLogs,
@@ -98,16 +98,16 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
                         label: 'Deliveries',
                         value: '${logs.length}',
                         icon: Icons.local_shipping,
-                        iconBg: AppColors.primaryLight,
-                        iconColor: AppColors.primary,
+                        iconBg: AppColors.of(context).primaryLight,
+                        iconColor: AppColors.of(context).primary,
                       ),
                       const SizedBox(width: 12),
                       _StatCard(
                         label: 'Gallons',
                         value: '$totalGallons',
                         icon: Icons.water_drop,
-                        iconBg: AppColors.statusOperatingLight,
-                        iconColor: AppColors.statusOperating,
+                        iconBg: AppColors.of(context).statusOperatingLight,
+                        iconColor: AppColors.of(context).statusOperating,
                       ),
                     ],
                   ),
@@ -142,19 +142,19 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
                       child: Center(
                         child: Column(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.receipt_long,
                               size: 48,
-                              color: AppColors.mutedForeground,
+                              color: AppColors.of(context).mutedForeground,
                             ),
                             const SizedBox(height: 12),
                             Text(
                               _filter == 'today'
                                   ? 'No deliveries recorded today.'
                                   : 'No delivery logs found.',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
-                                color: AppColors.mutedForeground,
+                                color: AppColors.of(context).mutedForeground,
                               ),
                             ),
                           ],
@@ -196,9 +196,9 @@ class _StatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.card,
+          color: AppColors.of(context).card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: AppColors.of(context).border),
         ),
         child: Row(
           children: [
@@ -217,17 +217,17 @@ class _StatCard extends StatelessWidget {
               children: [
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.foreground,
+                    color: AppColors.of(context).foreground,
                   ),
                 ),
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.mutedForeground,
+                    color: AppColors.of(context).mutedForeground,
                   ),
                 ),
               ],
@@ -257,7 +257,7 @@ class _FilterChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : AppColors.muted,
+          color: selected ? AppColors.of(context).primary : AppColors.of(context).muted,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -265,7 +265,7 @@ class _FilterChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: selected ? Colors.white : AppColors.mutedForeground,
+            color: selected ? Colors.white : AppColors.of(context).mutedForeground,
           ),
         ),
       ),
@@ -289,9 +289,9 @@ class _DeliveryLogCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: AppColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.of(context).border),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,13 +300,13 @@ class _DeliveryLogCard extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.statusOperatingLight,
+              color: AppColors.of(context).statusOperatingLight,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.check_circle,
               size: 18,
-              color: AppColors.statusOperating,
+              color: AppColors.of(context).statusOperating,
             ),
           ),
           const SizedBox(width: 12),
@@ -316,27 +316,27 @@ class _DeliveryLogCard extends StatelessWidget {
               children: [
                 Text(
                   customerName ?? 'Walk-in',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.foreground,
+                    color: AppColors.of(context).foreground,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   gallonText,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.mutedForeground,
+                    color: AppColors.of(context).mutedForeground,
                   ),
                 ),
                 if (log.notes?.isNotEmpty == true) ...[
                   const SizedBox(height: 2),
                   Text(
                     log.notes!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.mutedForeground,
+                      color: AppColors.of(context).mutedForeground,
                     ),
                   ),
                 ],
@@ -346,34 +346,34 @@ class _DeliveryLogCard extends StatelessWidget {
                   Row(
                     children: [
                       if (log.returnedContainers != null) ...[
-                        const Icon(
+                        Icon(
                           Icons.replay,
                           size: 11,
-                          color: AppColors.mutedForeground,
+                          color: AppColors.of(context).mutedForeground,
                         ),
                         const SizedBox(width: 3),
                         Text(
                           '${log.returnedContainers} returned',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: AppColors.mutedForeground,
+                            color: AppColors.of(context).mutedForeground,
                           ),
                         ),
                         if (log.paymentMethod != null)
                           const SizedBox(width: 10),
                       ],
                       if (log.paymentMethod != null) ...[
-                        const Icon(
+                        Icon(
                           Icons.payments_outlined,
                           size: 11,
-                          color: AppColors.mutedForeground,
+                          color: AppColors.of(context).mutedForeground,
                         ),
                         const SizedBox(width: 3),
                         Text(
                           log.paymentMethod!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: AppColors.mutedForeground,
+                            color: AppColors.of(context).mutedForeground,
                           ),
                         ),
                       ],
@@ -385,9 +385,9 @@ class _DeliveryLogCard extends StatelessWidget {
           ),
           Text(
             _formatDateTime(log.deliveredAt),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
-              color: AppColors.mutedForeground,
+              color: AppColors.of(context).mutedForeground,
             ),
           ),
         ],
