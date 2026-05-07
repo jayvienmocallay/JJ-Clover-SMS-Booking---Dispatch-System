@@ -120,11 +120,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppColors.primary,
+            colorScheme: ColorScheme.light(
+              primary: AppColors.of(context).primary,
               onPrimary: Colors.white,
-              surface: AppColors.card,
-              onSurface: AppColors.foreground,
+              surface: AppColors.of(context).card,
+              onSurface: AppColors.of(context).foreground,
             ),
           ),
           child: child!,
@@ -168,8 +168,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
+      return Center(
+        child: CircularProgressIndicator(color: AppColors.of(context).primary),
       );
     }
 
@@ -213,8 +213,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // --- Cut-off Time (editable) ---
         _buildSettingCard(
           icon: Icons.schedule,
-          iconBgColor: AppColors.primaryLight,
-          iconColor: AppColors.primary,
+          iconBgColor: AppColors.of(context).primaryLight,
+          iconColor: AppColors.of(context).primary,
           title: 'Order Cut-off Time',
           description: "Orders received before this time are added to today's "
               "dispatch. Orders after will be queued for the next trip.",
@@ -223,23 +223,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.muted,
+                color: AppColors.of(context).muted,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: AppColors.of(context).border),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     _formatCutoffTime(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.foreground,
+                      color: AppColors.of(context).foreground,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.edit, size: 14, color: AppColors.primary),
+                  Icon(Icons.edit, size: 14, color: AppColors.of(context).primary),
                 ],
               ),
             ),
@@ -250,8 +250,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // --- Walk-in Alert Test ---
         _buildSettingCard(
           icon: Icons.notifications_active,
-          iconBgColor: AppColors.statusAwayLight,
-          iconColor: AppColors.statusAway,
+          iconBgColor: AppColors.of(context).statusAwayLight,
+          iconColor: AppColors.of(context).statusAway,
           title: 'Walk-in Alert',
           description: 'When a customer sends a DROP command, a loud alert '
               'will appear on screen until staff acknowledges it.',
@@ -260,7 +260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.statusAway,
+                color: AppColors.of(context).statusAway,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
@@ -287,8 +287,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // --- Data Privacy ---
         _buildSettingCard(
           icon: Icons.shield,
-          iconBgColor: AppColors.statusOperatingLight,
-          iconColor: AppColors.statusOperating,
+          iconBgColor: AppColors.of(context).statusOperatingLight,
+          iconColor: AppColors.of(context).statusOperating,
           title: 'Data Privacy',
           description: 'Customer data is stored locally with encryption. '
               'When Cloud Sync is enabled, data is backed up to Supabase. '
@@ -296,20 +296,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           trailing: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.statusOperatingLight,
+              color: AppColors.of(context).statusOperatingLight,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.shield, size: 12, color: AppColors.statusOperating),
-                SizedBox(width: 4),
+                Icon(Icons.shield, size: 12, color: AppColors.of(context).statusOperating),
+                const SizedBox(width: 4),
                 Text(
                   'Encrypted & RA 10173',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.statusOperating,
+                    color: AppColors.of(context).statusOperating,
                   ),
                 ),
               ],
@@ -321,8 +321,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // --- Delivery Manifest ---
         _buildSettingCard(
           icon: Icons.assignment,
-          iconBgColor: AppColors.statusOperatingLight,
-          iconColor: AppColors.statusOperating,
+          iconBgColor: AppColors.of(context).statusOperatingLight,
+          iconColor: AppColors.of(context).statusOperating,
           title: 'Delivery Manifest',
           description: 'View confirmed orders ready for delivery grouped by day.',
           trailing: GestureDetector(
@@ -330,7 +330,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.statusOperating,
+                color: AppColors.of(context).statusOperating,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
@@ -354,7 +354,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final customerProv = context.read<CustomerProvider>();
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: AppColors.of(context).card,
       isScrollControlled: true,
       builder: (_) => MultiProvider(
         providers: [
@@ -371,9 +371,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: AppColors.of(context).card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.of(context).border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,14 +386,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: AppColors.of(context).primaryLight,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.location_city,
-                    size: 20, color: AppColors.primary),
+                child: Icon(Icons.location_city,
+                    size: 20, color: AppColors.of(context).primary),
               ),
               const SizedBox(width: 16),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -402,14 +402,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.foreground,
+                        color: AppColors.of(context).foreground,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Manage the barangays available for customer registration and delivery scheduling.',
                       style: TextStyle(
-                          fontSize: 13, color: AppColors.mutedForeground),
+                          fontSize: 13, color: AppColors.of(context).mutedForeground),
                     ),
                   ],
                 ),
@@ -425,21 +425,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 flex: 2,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: AppColors.background,
+                    color: AppColors.of(context).background,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: AppColors.of(context).border),
                   ),
                   child: TextField(
                     controller: _barangayController,
-                    style: const TextStyle(
-                        fontSize: 14, color: AppColors.foreground),
+                    style: TextStyle(
+                        fontSize: 14, color: AppColors.of(context).foreground),
                     onSubmitted: (_) => _addBarangay(),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'e.g., Barangay San Miguel',
-                      hintStyle: TextStyle(color: AppColors.mutedForeground),
+                      hintStyle: TextStyle(color: AppColors.of(context).mutedForeground),
                       border: InputBorder.none,
                       contentPadding:
-                          EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
                   ),
                 ),
@@ -450,16 +450,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
-                    color: AppColors.background,
+                    color: AppColors.of(context).background,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: AppColors.of(context).border),
                   ),
                   child: DropdownButton<String>(
                     value: _selectedZone,
                     isExpanded: true,
                     underline: const SizedBox(),
-                    style: const TextStyle(fontSize: 13, color: AppColors.foreground),
-                    dropdownColor: AppColors.card,
+                    style: TextStyle(fontSize: 13, color: AppColors.of(context).foreground),
+                    dropdownColor: AppColors.of(context).card,
                     items: ['Zone A', 'Zone B', 'Zone C']
                         .map((z) => DropdownMenuItem(value: z, child: Text(z)))
                         .toList(),
@@ -476,7 +476,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
+                    color: AppColors.of(context).primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Text(
@@ -495,40 +495,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.calendar_today,
-                    size: 14, color: AppColors.mutedForeground),
+                Icon(Icons.calendar_today,
+                    size: 14, color: AppColors.of(context).mutedForeground),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Delivery day:',
                   style: TextStyle(
-                      fontSize: 13, color: AppColors.mutedForeground),
+                      fontSize: 13, color: AppColors.of(context).mutedForeground),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: AppColors.of(context).background,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: _selectedDay == null
-                            ? AppColors.statusMaintenance
-                            : AppColors.border,
+                            ? AppColors.of(context).statusMaintenance
+                            : AppColors.of(context).border,
                       ),
                     ),
                     child: DropdownButton<String>(
                       value: _selectedDay,
                       isExpanded: true,
                       underline: const SizedBox(),
-                      dropdownColor: AppColors.card,
-                      hint: const Text(
+                      dropdownColor: AppColors.of(context).card,
+                      hint: Text(
                         'Select day...',
                         style: TextStyle(
                             fontSize: 13,
-                            color: AppColors.mutedForeground),
+                            color: AppColors.of(context).mutedForeground),
                       ),
-                      style: const TextStyle(
-                          fontSize: 13, color: AppColors.foreground),
+                      style: TextStyle(
+                          fontSize: 13, color: AppColors.of(context).foreground),
                       items: [
                         'Monday', 'Tuesday', 'Wednesday',
                         'Thursday', 'Friday', 'Saturday',
@@ -548,12 +548,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // Barangay chips with remove buttons
           if (_barangays.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 'No barangays added yet.',
                 style:
-                    TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+                    TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
               ),
             )
           else
@@ -579,19 +579,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.only(
                         left: 12, top: 6, bottom: 6, right: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: AppColors.of(context).background,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: AppColors.of(context).border),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.edit, size: 12, color: AppColors.mutedForeground),
+                        Icon(Icons.edit, size: 12, color: AppColors.of(context).mutedForeground),
                         const SizedBox(width: 4),
                         Text(
                           label,
-                          style: const TextStyle(
-                              fontSize: 12, color: AppColors.foreground),
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.of(context).foreground),
                         ),
                         const SizedBox(width: 4),
                         GestureDetector(
@@ -599,12 +599,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: Container(
                             width: 20,
                             height: 20,
-                            decoration: const BoxDecoration(
-                              color: AppColors.muted,
+                            decoration: BoxDecoration(
+                              color: AppColors.of(context).muted,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.close,
-                                size: 12, color: AppColors.mutedForeground),
+                            child: Icon(Icons.close,
+                                size: 12, color: AppColors.of(context).mutedForeground),
                           ),
                         ),
                       ],
@@ -627,7 +627,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: AppColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -664,7 +664,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: AppColors.border,
+                        color: AppColors.of(context).border,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -674,21 +674,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   // Title
                   Text(
                     'Edit $name',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.foreground,
+                      color: AppColors.of(context).foreground,
                     ),
                   ),
                   const SizedBox(height: 16),
 
                   // Zone selector
-                  const Text(
+                  Text(
                     'Delivery Zone',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.mutedForeground,
+                      color: AppColors.of(context).mutedForeground,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -696,18 +696,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: AppColors.of(context).background,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: AppColors.of(context).border),
                     ),
                     child: DropdownButton<String>(
                       value: editZone,
                       isExpanded: true,
                       underline: const SizedBox(),
-                      dropdownColor: AppColors.card,
-                      style: const TextStyle(
+                      dropdownColor: AppColors.of(context).card,
+                      style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.foreground,
+                        color: AppColors.of(context).foreground,
                       ),
                       items: ['Zone A', 'Zone B', 'Zone C']
                           .map((z) =>
@@ -727,12 +727,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                   // Day selector (for Zone C)
                   if (editZone == 'Zone C') ...[
-                    const Text(
+                    Text(
                       'Delivery Day',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.mutedForeground,
+                        color: AppColors.of(context).mutedForeground,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -740,29 +740,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
-                        color: AppColors.background,
+                        color: AppColors.of(context).background,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: editDay == null
-                              ? AppColors.statusMaintenance
-                              : AppColors.border,
+                              ? AppColors.of(context).statusMaintenance
+                              : AppColors.of(context).border,
                         ),
                       ),
                       child: DropdownButton<String>(
                         value: editDay,
                         isExpanded: true,
                         underline: const SizedBox(),
-                        dropdownColor: AppColors.card,
-                        hint: const Text(
+                        dropdownColor: AppColors.of(context).card,
+                        hint: Text(
                           'Select day...',
                           style: TextStyle(
                             fontSize: 14,
-                            color: AppColors.mutedForeground,
+                            color: AppColors.of(context).mutedForeground,
                           ),
                         ),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
-                          color: AppColors.foreground,
+                          color: AppColors.of(context).foreground,
                         ),
                         items: [
                           'Monday', 'Tuesday', 'Wednesday',
@@ -783,19 +783,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: AppColors.of(context).background,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: AppColors.of(context).border),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Delivery Schedule',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.mutedForeground,
+                            color: AppColors.of(context).mutedForeground,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -809,26 +809,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: AppColors.primaryLight,
+                                color: AppColors.of(context).primaryLight,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 day,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: AppColors.primary,
+                                  color: AppColors.of(context).primary,
                                 ),
                               ),
                             );
                           }).toList(),
                         ),
                         if (scheduleDays.isEmpty)
-                          const Text(
+                          Text(
                             'Select a delivery day above',
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.mutedForeground,
+                              color: AppColors.of(context).mutedForeground,
                               fontStyle: FontStyle.italic,
                             ),
                           ),
@@ -868,7 +868,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
-                          color: AppColors.primary,
+                          color: AppColors.of(context).primary,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Text(
@@ -903,22 +903,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           switch (syncService.status) {
             case SyncStatus.idle:
               statusText = 'Idle';
-              statusColor = AppColors.mutedForeground;
+              statusColor = AppColors.of(context).mutedForeground;
               statusIcon = Icons.cloud_off;
               break;
             case SyncStatus.syncing:
               statusText = 'Syncing...';
-              statusColor = AppColors.primary;
+              statusColor = AppColors.of(context).primary;
               statusIcon = Icons.cloud_sync;
               break;
             case SyncStatus.success:
               statusText = 'Synced';
-              statusColor = AppColors.statusOperating;
+              statusColor = AppColors.of(context).statusOperating;
               statusIcon = Icons.cloud_done;
               break;
             case SyncStatus.error:
               statusText = 'Error';
-              statusColor = AppColors.statusMaintenance;
+              statusColor = AppColors.of(context).statusMaintenance;
               statusIcon = Icons.cloud_off;
               break;
           }
@@ -937,9 +937,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: AppColors.of(context).card,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: AppColors.of(context).border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -951,14 +951,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
+                        color: AppColors.of(context).primaryLight,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.cloud_sync,
-                          size: 20, color: AppColors.primary),
+                      child: Icon(Icons.cloud_sync,
+                          size: 20, color: AppColors.of(context).primary),
                     ),
                     const SizedBox(width: 16),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -967,16 +967,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.foreground,
+                              color: AppColors.of(context).foreground,
                             ),
                           ),
-                          SizedBox(height: 4),
+                          const SizedBox(height: 4),
                           Text(
                             'Back up your data to Supabase cloud. '
                             'Data syncs automatically when connected.',
                             style: TextStyle(
                                 fontSize: 13,
-                                color: AppColors.mutedForeground),
+                                color: AppColors.of(context).mutedForeground),
                           ),
                         ],
                       ),
@@ -1007,19 +1007,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.background,
+                    color: AppColors.of(context).background,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: AppColors.of(context).border),
                   ),
                   child: Row(
                     children: [
                       syncService.status == SyncStatus.syncing
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: AppColors.primary,
+                                color: AppColors.of(context).primary,
                               ),
                             )
                           : Icon(statusIcon, size: 16, color: statusColor),
@@ -1040,9 +1040,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 syncService.status == SyncStatus.error)
                               Text(
                                 syncService.lastError!,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: AppColors.statusMaintenance,
+                                  color: AppColors.of(context).statusMaintenance,
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -1053,19 +1053,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          const Text(
+                          Text(
                             'Last sync',
                             style: TextStyle(
                               fontSize: 10,
-                              color: AppColors.mutedForeground,
+                              color: AppColors.of(context).mutedForeground,
                             ),
                           ),
                           Text(
                             lastSyncLabel,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: AppColors.foreground,
+                              color: AppColors.of(context).foreground,
                             ),
                           ),
                         ],
@@ -1098,8 +1098,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
                       color: syncService.status == SyncStatus.syncing
-                          ? AppColors.muted
-                          : AppColors.primary,
+                          ? AppColors.of(context).muted
+                          : AppColors.of(context).primary,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -1144,29 +1144,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: AppColors.of(context).background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.of(context).border),
       ),
       child: Row(
         children: [
           Icon(icon,
               size: 18,
-              color: value ? AppColors.primary : AppColors.mutedForeground),
+              color: value ? AppColors.of(context).primary : AppColors.of(context).mutedForeground),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: AppColors.foreground,
+                color: AppColors.of(context).foreground,
               ),
             ),
           ),
           Switch(
             value: value,
-            activeThumbColor: AppColors.primary,
+            activeThumbColor: AppColors.of(context).primary,
             onChanged: onChanged,
           ),
         ],
@@ -1186,9 +1186,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: AppColors.of(context).card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.of(context).border),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1211,18 +1211,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.foreground,
+                    color: AppColors.of(context).foreground,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.mutedForeground,
+                    color: AppColors.of(context).mutedForeground,
                   ),
                 ),
                 if (trailing != null) ...[
@@ -1277,9 +1277,9 @@ class _DeliveryManifestSheet extends StatelessWidget {
           maxChildSize: 0.95,
           expand: false,
           builder: (context, scrollController) => Container(
-            decoration: const BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            decoration: BoxDecoration(
+              color: AppColors.of(context).card,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Column(
               children: [
@@ -1288,22 +1288,22 @@ class _DeliveryManifestSheet extends StatelessWidget {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: AppColors.of(context).border,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.all(16),
+                Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Icon(Icons.assignment, color: AppColors.primary),
-                      SizedBox(width: 12),
+                      Icon(Icons.assignment, color: AppColors.of(context).primary),
+                      const SizedBox(width: 12),
                       Text(
                         'Delivery Manifest',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.foreground,
+                          color: AppColors.of(context).foreground,
                         ),
                       ),
                     ],
@@ -1316,13 +1316,13 @@ class _DeliveryManifestSheet extends StatelessWidget {
                       _SummaryChip(
                         label: '$totalOrders',
                         sub: 'orders',
-                        color: AppColors.primary,
+                        color: AppColors.of(context).primary,
                       ),
                       const SizedBox(width: 8),
                       _SummaryChip(
                         label: '$totalGallons',
                         sub: 'gallons',
-                        color: AppColors.statusOperating,
+                        color: AppColors.of(context).statusOperating,
                       ),
                     ],
                   ),
@@ -1330,21 +1330,21 @@ class _DeliveryManifestSheet extends StatelessWidget {
                 const SizedBox(height: 16),
                 Expanded(
                   child: confirmed.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
                                 Icons.assignment_outlined,
                                 size: 48,
-                                color: AppColors.mutedForeground,
+                                color: AppColors.of(context).mutedForeground,
                               ),
-                              SizedBox(height: 12),
+                              const SizedBox(height: 12),
                               Text(
                                 'No confirmed orders yet.',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: AppColors.mutedForeground,
+                                  color: AppColors.of(context).mutedForeground,
                                 ),
                               ),
                             ],
@@ -1364,7 +1364,7 @@ class _DeliveryManifestSheet extends StatelessWidget {
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary,
+                                      color: AppColors.of(context).primary,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
@@ -1483,12 +1483,12 @@ class _ManifestItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: AppColors.of(context).background,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: status == 'in_transit'
-              ? AppColors.statusBusy
-              : AppColors.border,
+              ? AppColors.of(context).statusBusy
+              : AppColors.of(context).border,
         ),
       ),
       child: Row(
@@ -1496,8 +1496,8 @@ class _ManifestItem extends StatelessWidget {
           Container(
             width: 28,
             height: 28,
-            decoration: const BoxDecoration(
-              color: AppColors.muted,
+            decoration: BoxDecoration(
+              color: AppColors.of(context).muted,
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -1522,16 +1522,16 @@ class _ManifestItem extends StatelessWidget {
                 if (customerName != null)
                   Text(
                     phone,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: AppColors.mutedForeground,
+                      color: AppColors.of(context).mutedForeground,
                     ),
                   ),
                 Text(
                   '$qty gallon(s)',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.mutedForeground,
+                    color: AppColors.of(context).mutedForeground,
                   ),
                 ),
               ],
@@ -1541,8 +1541,8 @@ class _ManifestItem extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: status == 'in_transit'
-                  ? AppColors.statusBusy
-                  : AppColors.statusOperating,
+                  ? AppColors.of(context).statusBusy
+                  : AppColors.of(context).statusOperating,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -1561,8 +1561,8 @@ class _ManifestItem extends StatelessWidget {
                 onTap: onStart,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: AppColors.statusBusy,
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).statusBusy,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -1577,8 +1577,8 @@ class _ManifestItem extends StatelessWidget {
                 onTap: onComplete,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: AppColors.statusOperating,
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).statusOperating,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.check, size: 16, color: Colors.white),

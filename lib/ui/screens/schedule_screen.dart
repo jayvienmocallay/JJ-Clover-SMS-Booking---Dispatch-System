@@ -47,8 +47,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
+      return Center(
+        child: CircularProgressIndicator(color: AppColors.of(context).primary),
       );
     }
 
@@ -56,23 +56,23 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
     return RefreshIndicator(
       onRefresh: _loadBarangays,
-      color: AppColors.primary,
+      color: AppColors.of(context).primary,
       child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // --- Header ---
-        const Text(
+        Text(
           'Delivery Schedule',
           style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.w700,
-            color: AppColors.foreground,
+            color: AppColors.of(context).foreground,
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Zone-to-day mapping for delivery operations.',
-          style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+          style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground),
         ),
         const SizedBox(height: 20),
 
@@ -86,12 +86,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.card,
+                color: AppColors.of(context).card,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: isToday
-                      ? AppColors.primary.withValues(alpha: 0.4)
-                      : AppColors.border,
+                      ? AppColors.of(context).primary.withValues(alpha: 0.4)
+                      : AppColors.of(context).border,
                 ),
               ),
               child: Column(
@@ -104,8 +104,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         Icons.calendar_today,
                         size: 16,
                         color: isToday
-                            ? AppColors.primary
-                            : AppColors.mutedForeground,
+                            ? AppColors.of(context).primary
+                            : AppColors.of(context).mutedForeground,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -114,17 +114,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: isToday
-                              ? AppColors.primary
-                              : AppColors.foreground,
+                              ? AppColors.of(context).primary
+                              : AppColors.of(context).foreground,
                         ),
                       ),
                       if (isToday) ...[
                         const SizedBox(width: 8),
-                        const Text(
+                        Text(
                           '(Today)',
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.primary,
+                            color: AppColors.of(context).primary,
                           ),
                         ),
                       ],
@@ -133,12 +133,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   const SizedBox(height: 12),
                   // Barangay chips
                   if (barangays.isEmpty)
-                    const Text(
+                    Text(
                       'No deliveries',
                       style: TextStyle(
                         fontSize: 12,
                         fontStyle: FontStyle.italic,
-                        color: AppColors.mutedForeground,
+                        color: AppColors.of(context).mutedForeground,
                       ),
                     )
                   else
@@ -154,15 +154,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryLight,
+                            color: AppColors.of(context).primaryLight,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             '$name ($zone)',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: AppColors.primary,
+                              color: AppColors.of(context).primary,
                             ),
                           ),
                         );

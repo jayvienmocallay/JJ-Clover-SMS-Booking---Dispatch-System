@@ -22,17 +22,17 @@ class MessageInput extends StatelessWidget {
       top: false,
       minimum: const EdgeInsets.only(bottom: 8),
       child: Container(
-        color: AppColors.background,
+        color: AppColors.of(context).background,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: AppColors.muted,
+                  color: AppColors.of(context).muted,
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(
-                    color: AppColors.border.withValues(alpha: 0.5),
+                    color: AppColors.of(context).border.withValues(alpha: 0.5),
                     width: 0.5,
                   ),
                 ),
@@ -40,14 +40,14 @@ class MessageInput extends StatelessWidget {
                   controller: controller,
                   maxLines: null,
                   textCapitalization: TextCapitalization.sentences,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
-                    color: AppColors.foreground,
+                    color: AppColors.of(context).foreground,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Message',
                     hintStyle: TextStyle(
-                      color: AppColors.mutedForeground.withValues(alpha: 0.6),
+                      color: AppColors.of(context).mutedForeground.withValues(alpha: 0.6),
                       fontSize: 15,
                     ),
                     border: InputBorder.none,
@@ -66,12 +66,12 @@ class MessageInput extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: isComposing ? AppColors.primary : AppColors.muted,
+                  color: isComposing ? AppColors.of(context).primary : AppColors.of(context).muted,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   Icons.send_rounded,
-                  color: isComposing ? Colors.white : AppColors.mutedForeground,
+                  color: isComposing ? Colors.white : AppColors.of(context).mutedForeground,
                   size: 20,
                 ),
               ),
