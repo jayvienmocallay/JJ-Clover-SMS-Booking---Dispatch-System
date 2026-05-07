@@ -176,40 +176,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // --- Theme Toggle ---
-        ValueListenableBuilder<ThemeMode>(
-          valueListenable: themeNotifier,
-          builder: (context, mode, _) => SwitchListTile(
-            value: mode == ThemeMode.light,
-            onChanged: (val) {
-              themeNotifier.value = val ? ThemeMode.light : ThemeMode.dark;
-            },
-            title: Text('Light Mode', style: Theme.of(context).textTheme.titleSmall),
-            subtitle: Text(
-              mode == ThemeMode.light ? 'Light theme active' : 'Dark theme active',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            secondary: Icon(
-              mode == ThemeMode.light ? Icons.light_mode : Icons.dark_mode,
-            ),
-            activeThumbColor: Theme.of(context).colorScheme.primary,
-          ),
-        ),
-        const SizedBox(height: 8),
-
         // --- Header ---
-        const Text(
-          'Settings',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-            color: AppColors.foreground,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Settings',
+                style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                  fontSize: 26,
+                ),
+              ),
+            ),
+            ValueListenableBuilder<ThemeMode>(
+              valueListenable: themeNotifier,
+              builder: (context, mode, _) => IconButton(
+                onPressed: () {
+                  themeNotifier.value =
+                      mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+                },
+                icon: Icon(
+                  mode == ThemeMode.light ? Icons.light_mode : Icons.dark_mode,
+                  color: AppColors.of(context).mutedForeground,
+                ),
+                tooltip: mode == ThemeMode.light ? 'Switch to dark' : 'Switch to light',
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           "Configure your station's dispatch rules.",
-          style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+          style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground),
         ),
         const SizedBox(height: 24),
 
