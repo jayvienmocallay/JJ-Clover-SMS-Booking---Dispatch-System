@@ -17,7 +17,7 @@ class DangerActionButton extends StatelessWidget {
     return PrimaryActionButton(
       label: label,
       onTap: onTap,
-      backgroundColor: AppColors.statusMaintenance,
+      backgroundColor: AppColors.of(context).statusMaintenance,
     );
   }
 }

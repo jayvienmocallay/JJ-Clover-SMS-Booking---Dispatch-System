@@ -17,7 +17,7 @@ class PrimaryActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = backgroundColor ?? AppColors.primary;
+    final bg = backgroundColor ?? AppColors.of(context).primary;
     return Material(
       color: bg,
       borderRadius: BorderRadius.circular(kButtonRadius),

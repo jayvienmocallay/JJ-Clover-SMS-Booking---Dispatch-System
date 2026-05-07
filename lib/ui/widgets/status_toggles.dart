@@ -112,14 +112,15 @@ class _StatusButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: isActive ? config.activeBgColor : AppColors.card,
+        color: isActive ? config.activeBgColor : palette.card,
         borderRadius: BorderRadius.circular(kCardRadius),
         border: Border.all(
-          color: isActive ? config.activeColor : AppColors.border,
+          color: isActive ? config.activeColor : palette.border,
           width: isActive ? 2 : 1,
         ),
       ),
@@ -140,7 +141,7 @@ class _StatusButton extends StatelessWidget {
                   size: 28,
                   color: isActive
                       ? config.activeColor
-                      : AppColors.mutedForeground,
+                      : palette.mutedForeground,
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -148,8 +149,8 @@ class _StatusButton extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: isActive
-                        ? AppColors.foreground
-                        : AppColors.mutedForeground,
+                        ? palette.foreground
+                        : palette.mutedForeground,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

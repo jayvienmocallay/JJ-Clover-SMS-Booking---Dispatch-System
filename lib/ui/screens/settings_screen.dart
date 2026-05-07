@@ -11,6 +11,7 @@ import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/supabase_sync_service.dart';
 import '../theme/app_theme.dart';
+import 'package:jj_clover_sms/main.dart' show themeNotifier;
 
 class SettingsScreen extends StatefulWidget {
   /// Callback to trigger the walk-in alert overlay for testing
@@ -175,6 +176,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // --- Theme Toggle ---
+        ValueListenableBuilder<ThemeMode>(
+          valueListenable: themeNotifier,
+          builder: (context, mode, _) => SwitchListTile(
+            value: mode == ThemeMode.light,
+            onChanged: (val) {
+              themeNotifier.value = val ? ThemeMode.light : ThemeMode.dark;
+            },
+            title: Text('Light Mode', style: Theme.of(context).textTheme.titleSmall),
+            subtitle: Text(
+              mode == ThemeMode.light ? 'Light theme active' : 'Dark theme active',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            secondary: Icon(
+              mode == ThemeMode.light ? Icons.light_mode : Icons.dark_mode,
+            ),
+            activeThumbColor: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 8),
+
         // --- Header ---
         const Text(
           'Settings',

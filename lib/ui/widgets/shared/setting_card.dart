@@ -19,18 +19,19 @@ class SettingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
     final accentColor = isDanger
-        ? AppColors.statusMaintenance
-        : AppColors.foreground;
+        ? palette.statusMaintenance
+        : palette.foreground;
     return Container(
       padding: const EdgeInsets.all(kCardPadding),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: palette.card,
         borderRadius: BorderRadius.circular(kCardRadius),
         border: Border.all(
           color: isDanger
-              ? AppColors.statusMaintenance.withValues(alpha: 0.3)
-              : AppColors.border,
+              ? palette.statusMaintenance.withValues(alpha: 0.3)
+              : palette.border,
         ),
       ),
       child: Row(

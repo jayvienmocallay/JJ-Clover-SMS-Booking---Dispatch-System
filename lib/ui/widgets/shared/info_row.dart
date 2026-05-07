@@ -20,7 +20,7 @@ class InfoRow extends StatelessWidget {
         Icon(
           icon,
           size: 16,
-          color: iconColor ?? AppColors.mutedForeground,
+          color: iconColor ?? AppColors.of(context).mutedForeground,
         ),
         const SizedBox(width: kCompactGap),
         Text(

@@ -26,6 +26,9 @@ import 'package:jj_clover_sms/data/providers/customer_provider.dart';
 import 'package:jj_clover_sms/ui/theme/app_theme.dart';
 import 'package:jj_clover_sms/ui/screens/app_shell.dart';
 
+/// Global theme mode — toggled from Settings screen.
+final themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
+
 /// Application entry point.
 ///
 /// Initializes the encrypted database and requests all required
@@ -102,12 +105,16 @@ class MyApp extends StatelessWidget {
           create: (ctx) => CustomerProvider(ctx.read<CustomerRepository>()),
         ),
       ],
-      child: MaterialApp(
-        title: 'JJ Clover',
-        // Task 010 — Use custom dark theme
-        theme: AppTheme.darkTheme,
-        home: const PermissionGate(),
-        debugShowCheckedModeBanner: false,
+      child: ValueListenableBuilder<ThemeMode>(
+        valueListenable: themeNotifier,
+        builder: (_, mode, __) => MaterialApp(
+          title: 'JJ Clover',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: mode,
+          home: const PermissionGate(),
+          debugShowCheckedModeBanner: false,
+        ),
       ),
     );
   }
@@ -274,18 +281,20 @@ class _PermissionGateState extends State<PermissionGate>
   Widget build(BuildContext context) {
     // Show loading indicator while checking permissions
     if (_isChecking) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Spinning indicator while permissions are being requested
-              CircularProgressIndicator(color: AppColors.primary),
-              SizedBox(height: 16),
+              CircularProgressIndicator(
+                  color: Theme.of(context).colorScheme.primary),
+              const SizedBox(height: 16),
               Text(
                 'Requesting permissions...',
-                style: TextStyle(color: AppColors.foreground),
+                style: TextStyle(
+                    color: Theme.of(context).textTheme.bodyMedium?.color),
               ),
             ],
           ),
@@ -296,7 +305,7 @@ class _PermissionGateState extends State<PermissionGate>
     // Show retry prompt if critical permissions were denied
     if (!_permissionsGranted) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -314,10 +323,10 @@ class _PermissionGateState extends State<PermissionGate>
                   _isDefaultSmsApp
                       ? 'SMS Permissions Required'
                       : 'Default SMS App Required',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.foreground,
+                    color: Theme.of(context).textTheme.bodyMedium?.color,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -329,7 +338,8 @@ class _PermissionGateState extends State<PermissionGate>
                       : 'Set JJ Clover as the default SMS app so Android can '
                             'deliver customer order messages to it.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.mutedForeground),
+                  style: TextStyle(
+                      color: Theme.of(context).textTheme.bodySmall?.color),
                 ),
                 const SizedBox(height: 24),
                 // Retry button — re-requests all permissions
@@ -345,9 +355,10 @@ class _PermissionGateState extends State<PermissionGate>
                 // Open settings button — in case the user permanently denied
                 TextButton(
                   onPressed: () => openAppSettings(),
-                  child: const Text(
+                  child: Text(
                     'Open App Settings',
-                    style: TextStyle(color: AppColors.primary),
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary),
                   ),
                 ),
               ],

@@ -130,6 +130,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildStatusBanner(
       BuildContext context, SystemModeManager modeManager) {
+    final palette = AppColors.of(context);
     final mode = modeManager.currentMode;
     Color accentColor;
     Color bgColor;
@@ -138,26 +139,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     switch (mode) {
       case SystemMode.operating:
-        accentColor = AppColors.statusOperating;
-        bgColor = AppColors.statusOperatingLight;
+        accentColor = palette.statusOperating;
+        bgColor = palette.statusOperatingLight;
         label = 'Operating';
         icon = Icons.check_circle;
         break;
       case SystemMode.staffAway:
-        accentColor = AppColors.statusAway;
-        bgColor = AppColors.statusAwayLight;
+        accentColor = palette.statusAway;
+        bgColor = palette.statusAwayLight;
         label = 'Staff Away';
         icon = Icons.access_time;
         break;
       case SystemMode.full:
-        accentColor = AppColors.statusBusy;
-        bgColor = AppColors.statusBusyLight;
+        accentColor = palette.statusBusy;
+        bgColor = palette.statusBusyLight;
         label = 'Full / Busy';
         icon = Icons.block;
         break;
       case SystemMode.maintenance:
-        accentColor = AppColors.statusMaintenance;
-        bgColor = AppColors.statusMaintenanceLight;
+        accentColor = palette.statusMaintenance;
+        bgColor = palette.statusMaintenanceLight;
         label = 'Maintenance';
         icon = Icons.build;
         break;
@@ -200,22 +201,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (
         label: 'Total Gallons',
         value: '${orderProv.totalGallons}',
-        color: AppColors.primary,
+        color: AppColors.of(context).primary,
       ),
       (
         label: 'Pending',
         value: '${orderProv.pendingCount}',
-        color: AppColors.statusAway,
+        color: AppColors.of(context).statusAway,
       ),
       (
         label: 'Confirmed',
         value: '${orderProv.confirmedCount}',
-        color: AppColors.statusOperating,
+        color: AppColors.of(context).statusOperating,
       ),
       (
         label: 'Customers',
         value: '${customerProv.count}',
-        color: AppColors.primary,
+        color: AppColors.of(context).primary,
       ),
     ];
 
@@ -237,13 +238,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildTodayZones(BuildContext context) {
+    final palette = AppColors.of(context);
     final today = DeliveryDays.getToday();
     return Container(
       padding: const EdgeInsets.all(kCardPadding + 4),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: palette.card,
         borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -268,11 +270,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         style: Theme.of(context)
                             .textTheme
                             .labelMedium
-                            ?.copyWith(color: AppColors.primary),
+                            ?.copyWith(color: palette.primary),
                       ),
                       const SizedBox(width: 2),
-                      const Icon(Icons.arrow_forward,
-                          size: 12, color: AppColors.primary),
+                      Icon(Icons.arrow_forward,
+                          size: 12, color: palette.primary),
                     ],
                   ),
                 ),
@@ -284,7 +286,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(
               'No deliveries scheduled today.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.mutedForeground,
+                    color: palette.mutedForeground,
                   ),
             )
           else
@@ -296,7 +298,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
+                          color: palette.primaryLight,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -305,7 +307,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               .textTheme
                               .bodyMedium
                               ?.copyWith(
-                                color: AppColors.primary,
+                                color: palette.primary,
                                 fontWeight: FontWeight.w500,
                               ),
                         ),
@@ -318,9 +320,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showScheduleSheet(BuildContext context) {
+    final palette = AppColors.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: palette.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -342,7 +345,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: AppColors.border,
+                      color: palette.border,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -360,11 +363,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(kCardPadding),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: palette.background,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color:
-                            isToday ? AppColors.primary : AppColors.border,
+                        color: isToday ? palette.primary : palette.border,
                       ),
                     ),
                     child: Column(
@@ -379,8 +381,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   .titleSmall
                                   ?.copyWith(
                                     color: isToday
-                                        ? AppColors.primary
-                                        : AppColors.foreground,
+                                        ? palette.primary
+                                        : palette.foreground,
                                   ),
                             ),
                             if (isToday) ...[
@@ -389,7 +391,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primaryLight,
+                                  color: palette.primaryLight,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
@@ -397,7 +399,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   style: Theme.of(context)
                                       .textTheme
                                       .labelSmall
-                                      ?.copyWith(color: AppColors.primary),
+                                      ?.copyWith(color: palette.primary),
                                 ),
                               ),
                             ],
@@ -418,7 +420,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: AppColors.primaryLight,
+                                        color: palette.primaryLight,
                                         borderRadius:
                                             BorderRadius.circular(16),
                                       ),
@@ -428,7 +430,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             .textTheme
                                             .labelSmall
                                             ?.copyWith(
-                                              color: AppColors.primary,
+                                              color: palette.primary,
                                             ),
                                       ),
                                     ))
@@ -462,6 +464,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildRecentOrders(BuildContext context, OrderProvider orderProv,
       CustomerProvider customerProv) {
+    final palette = AppColors.of(context);
     final customerCache = <int, Map<String, dynamic>>{};
     for (final c in customerProv.customers) {
       final id = c['id'] as int?;
@@ -476,9 +479,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(kCardPadding + 4),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: palette.card,
         borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,11 +506,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         style: Theme.of(context)
                             .textTheme
                             .labelMedium
-                            ?.copyWith(color: AppColors.primary),
+                            ?.copyWith(color: palette.primary),
                       ),
                       const SizedBox(width: 2),
-                      const Icon(Icons.arrow_forward,
-                          size: 12, color: AppColors.primary),
+                      Icon(Icons.arrow_forward,
+                          size: 12, color: palette.primary),
                     ],
                   ),
                 ),
@@ -536,9 +539,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               return Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: i < recentOrders.length - 1
-                    ? const BoxDecoration(
+                    ? BoxDecoration(
                         border: Border(
-                          bottom: BorderSide(color: AppColors.border),
+                          bottom: BorderSide(color: palette.border),
                         ),
                       )
                     : null,
@@ -549,16 +552,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       height: 36,
                       decoration: BoxDecoration(
                         color: isDeliver
-                            ? AppColors.primaryLight
-                            : AppColors.statusAwayLight,
+                            ? palette.primaryLight
+                            : palette.statusAwayLight,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
                         isDeliver ? Icons.local_shipping : Icons.water_drop,
                         size: 16,
                         color: isDeliver
-                            ? AppColors.primary
-                            : AppColors.statusAway,
+                            ? palette.primary
+                            : palette.statusAway,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -580,7 +583,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
                     ),
-                    _orderStatusBadge(status),
+                    _orderStatusBadge(context, status),
                   ],
                 ),
               );
@@ -609,30 +612,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Widget _orderStatusBadge(String status) {
+  Widget _orderStatusBadge(BuildContext context, String status) {
+    final palette = AppColors.of(context);
     Color color;
     Color bgColor;
     switch (status) {
       case 'confirmed':
-        color = AppColors.statusOperating;
-        bgColor = AppColors.statusOperatingLight;
+        color = palette.statusOperating;
+        bgColor = palette.statusOperatingLight;
         break;
       case 'pending':
-        color = AppColors.statusAway;
-        bgColor = AppColors.statusAwayLight;
+        color = palette.statusAway;
+        bgColor = palette.statusAwayLight;
         break;
       case 'in_transit':
-        color = AppColors.statusBusy;
-        bgColor = AppColors.statusBusyLight;
+        color = palette.statusBusy;
+        bgColor = palette.statusBusyLight;
         break;
       case 'cancelled':
       case 'rejected':
-        color = AppColors.statusMaintenance;
-        bgColor = AppColors.statusMaintenanceLight;
+        color = palette.statusMaintenance;
+        bgColor = palette.statusMaintenanceLight;
         break;
       default:
-        color = AppColors.statusOperating;
-        bgColor = AppColors.statusOperatingLight;
+        color = palette.statusOperating;
+        bgColor = palette.statusOperatingLight;
     }
     return StatusBadge(label: _statusDisplayLabel(status), color: color, bgColor: bgColor);
   }

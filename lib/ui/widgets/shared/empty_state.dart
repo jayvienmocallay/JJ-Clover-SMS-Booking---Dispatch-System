@@ -21,13 +21,13 @@ class EmptyState extends StatelessWidget {
           Icon(
             icon,
             size: 48,
-            color: AppColors.mutedForeground.withValues(alpha: 0.4),
+            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.4),
           ),
           const SizedBox(height: 12),
           Text(
             message,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.mutedForeground,
+              color: AppColors.of(context).mutedForeground,
             ),
             textAlign: TextAlign.center,
           ),

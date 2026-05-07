@@ -39,7 +39,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   void _showAddOrderSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: AppColors.of(context).card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -93,13 +93,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: AppColors.muted,
+                          color: AppColors.of(context).muted,
                           borderRadius: BorderRadius.circular(kButtonRadius),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.receipt_long,
                           size: 20,
-                          color: AppColors.mutedForeground,
+                          color: AppColors.of(context).mutedForeground,
                         ),
                       ),
                     ),
@@ -110,7 +110,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         height: 40,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         decoration: BoxDecoration(
-                          color: AppColors.primary,
+                          color: AppColors.of(context).primary,
                           borderRadius: BorderRadius.circular(kButtonRadius),
                         ),
                         child: Row(
@@ -142,17 +142,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   children: [
                     _SummaryChip(
                       label: 'Pending ${orderProv.pendingCount}',
-                      color: AppColors.statusAway,
+                      color: AppColors.of(context).statusAway,
                     ),
                     const SizedBox(width: 8),
                     _SummaryChip(
                       label: 'Confirmed ${orderProv.confirmedCount}',
-                      color: AppColors.statusOperating,
+                      color: AppColors.of(context).statusOperating,
                     ),
                     const SizedBox(width: 8),
                     _SummaryChip(
                       label: 'In Transit $inTransitCount',
-                      color: AppColors.statusBusy,
+                      color: AppColors.of(context).statusBusy,
                     ),
                   ],
                 ),
@@ -251,7 +251,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
+        backgroundColor: AppColors.of(context).card,
         title: Text(
           'Reject Order',
           style: Theme.of(context).textTheme.headlineSmall,
@@ -263,7 +263,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             Text(
               'Are you sure you want to reject this order?',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.mutedForeground,
+                    color: AppColors.of(context).mutedForeground,
                   ),
             ),
             const SizedBox(height: 16),
@@ -273,7 +273,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               decoration: InputDecoration(
                 hintText: 'Reason (optional)',
                 filled: true,
-                fillColor: AppColors.background,
+                fillColor: AppColors.of(context).background,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(kButtonRadius),
                   borderSide: BorderSide.none,
@@ -289,7 +289,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.statusMaintenance,
+              backgroundColor: AppColors.of(context).statusMaintenance,
             ),
             onPressed: () async {
               Navigator.pop(ctx);
@@ -437,19 +437,19 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           if (_customerMode == 'existing') ...[
             Container(
               decoration: BoxDecoration(
-                color: AppColors.background,
+                color: AppColors.of(context).background,
                 borderRadius: BorderRadius.circular(kButtonRadius),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: AppColors.of(context).border),
               ),
               child: TextField(
                 onChanged: (v) => setState(() => _customerSearch = v),
                 style: Theme.of(context).textTheme.bodyMedium,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Search customer...',
                   prefixIcon: Icon(Icons.search,
-                      size: 18, color: AppColors.mutedForeground),
+                      size: 18, color: AppColors.of(context).mutedForeground),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
             ),
@@ -476,13 +476,13 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppColors.primaryLight
-                            : AppColors.background,
+                            ? AppColors.of(context).primaryLight
+                            : AppColors.of(context).background,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: isSelected
-                              ? AppColors.primary
-                              : AppColors.border,
+                              ? AppColors.of(context).primary
+                              : AppColors.of(context).border,
                         ),
                       ),
                       child: Row(
@@ -497,15 +497,15 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                                   .bodyMedium
                                   ?.copyWith(
                                     color: isSelected
-                                        ? AppColors.primary
-                                        : AppColors.foreground,
+                                        ? AppColors.of(context).primary
+                                        : AppColors.of(context).foreground,
                                   ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           if (isSelected)
-                            const Icon(Icons.check_circle,
-                                size: 16, color: AppColors.primary),
+                            Icon(Icons.check_circle,
+                                size: 16, color: AppColors.of(context).primary),
                         ],
                       ),
                     ),
@@ -552,12 +552,12 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: AppColors.background,
+                    color: AppColors.of(context).background,
                     borderRadius: BorderRadius.circular(kButtonRadius),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: AppColors.of(context).border),
                   ),
-                  child: const Icon(Icons.remove,
-                      size: 18, color: AppColors.mutedForeground),
+                  child: Icon(Icons.remove,
+                      size: 18, color: AppColors.of(context).mutedForeground),
                 ),
               ),
               Expanded(
@@ -578,12 +578,12 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
+                    color: AppColors.of(context).primaryLight,
                     borderRadius: BorderRadius.circular(kButtonRadius),
-                    border: Border.all(color: AppColors.primary),
+                    border: Border.all(color: AppColors.of(context).primary),
                   ),
-                  child: const Icon(Icons.add,
-                      size: 18, color: AppColors.primary),
+                  child: Icon(Icons.add,
+                      size: 18, color: AppColors.of(context).primary),
                 ),
               ),
             ],
@@ -610,6 +610,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
 
   Widget _buildModeOption(String value, String label, IconData icon) {
     final isSelected = _customerMode == value;
+    final palette = AppColors.of(context);
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() {
@@ -621,10 +622,10 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primaryLight : AppColors.background,
+            color: isSelected ? palette.primaryLight : palette.background,
             borderRadius: BorderRadius.circular(kButtonRadius),
             border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.border,
+              color: isSelected ? palette.primary : palette.border,
             ),
           ),
           child: Row(
@@ -632,9 +633,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
             children: [
               Icon(icon,
                   size: 14,
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.mutedForeground),
+                  color: isSelected ? palette.primary : palette.mutedForeground),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
@@ -642,8 +641,8 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w500,
                         color: isSelected
-                            ? AppColors.primary
-                            : AppColors.mutedForeground,
+                            ? palette.primary
+                            : palette.mutedForeground,
                       ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -657,11 +656,12 @@ class _AddOrderFormState extends State<_AddOrderForm> {
 
   Widget _buildTextField(
       TextEditingController ctrl, String hint, TextInputType type) {
+    final palette = AppColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: palette.background,
         borderRadius: BorderRadius.circular(kButtonRadius),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: palette.border),
       ),
       child: TextField(
         controller: ctrl,
@@ -685,6 +685,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
 
   Widget _buildTypeOption(String value, String label, IconData icon) {
     final isSelected = _type == value;
+    final palette = AppColors.of(context);
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _type = value),
@@ -692,27 +693,25 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primaryLight : AppColors.background,
+            color: isSelected ? palette.primaryLight : palette.background,
             borderRadius: BorderRadius.circular(kButtonRadius),
             border: Border.all(
-                color: isSelected ? AppColors.primary : AppColors.border),
+                color: isSelected ? palette.primary : palette.border),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon,
                   size: 16,
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.mutedForeground),
+                  color: isSelected ? palette.primary : palette.mutedForeground),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w500,
                       color: isSelected
-                          ? AppColors.primary
-                          : AppColors.mutedForeground,
+                          ? palette.primary
+                          : palette.mutedForeground,
                     ),
               ),
             ],
@@ -724,6 +723,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
 
   Widget _buildGallonTypeOption(String value, String label, IconData icon) {
     final isSelected = _gallonType == value;
+    final palette = AppColors.of(context);
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _gallonType = value),
@@ -731,27 +731,25 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primaryLight : AppColors.background,
+            color: isSelected ? palette.primaryLight : palette.background,
             borderRadius: BorderRadius.circular(kButtonRadius),
             border: Border.all(
-                color: isSelected ? AppColors.primary : AppColors.border),
+                color: isSelected ? palette.primary : palette.border),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon,
                   size: 16,
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.mutedForeground),
+                  color: isSelected ? palette.primary : palette.mutedForeground),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w500,
                       color: isSelected
-                          ? AppColors.primary
-                          : AppColors.mutedForeground,
+                          ? palette.primary
+                          : palette.mutedForeground,
                     ),
               ),
             ],
