@@ -1,7 +1,3 @@
-// Task 010 — Dashboard screen: main home with greeting, status toggles,
-// stats cards, today's zones, and recent orders
-// Task 011 — Connected to OrderProvider and CustomerProvider via Consumer
-// Main home with greeting, status toggles, stats cards, zones, and recent orders
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
@@ -9,11 +5,15 @@ import '../../core/constants/app_constants.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/repositories/barangay_repository.dart';
+import '../../data/services/system_mode_manager.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/metric_card.dart';
+import '../widgets/shared/status_badge.dart';
+import '../widgets/shared/empty_state.dart';
 import '../widgets/status_toggles.dart';
 
 class DashboardScreen extends StatefulWidget {
-  /// Callback to navigate to a specific tab in AppShell
   final void Function(int tabIndex)? onNavigateToTab;
 
   const DashboardScreen({super.key, this.onNavigateToTab});
@@ -33,7 +33,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadBarangays();
   }
 
-  /// Loads today's scheduled barangays (zone data is static, not in provider)
   Future<void> _loadBarangays() async {
     if (kIsWeb) return;
     final today = DeliveryDays.getToday();
@@ -45,8 +44,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final name = brgy['name'] as String;
       final dbDeliveryDay = brgy['delivery_day'] as String?;
 
-      // For Zone C, prefer the DB-stored delivery_day so dynamically added
-      // barangays (not in the hardcoded map) also appear on the dashboard.
       List<String> days;
       if (zone == 'Zone C' && dbDeliveryDay != null) {
         days = [dbDeliveryDay];
@@ -70,7 +67,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _loadBarangays();
   }
 
-  /// Returns a greeting based on the current hour
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good Morning!';
@@ -84,101 +80,144 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onRefresh: _refresh,
       child: Consumer2<OrderProvider, CustomerProvider>(
         builder: (context, orderProv, customerProv, _) {
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // --- Header greeting ---
-              Text(
-                _getGreeting(),
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.foreground,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                "Here's what's happening at JJ Clover today.",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.mutedForeground,
-                ),
-              ),
-              const SizedBox(height: 24),
+          return Consumer<SystemModeManager>(
+            builder: (context, modeManager, _) {
+              return ListView(
+                padding: const EdgeInsets.all(kPagePadding),
+                children: [
+                  AppPageHeader(
+                    title: _getGreeting(),
+                    subtitle: "Here's what's happening at JJ Clover today.",
+                  ),
+                  const SizedBox(height: kSectionGap),
 
-              // --- Station Status toggles ---
-              const Text(
-                'STATION STATUS',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.mutedForeground,
-                  letterSpacing: 1.0,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const StatusToggles(),
-              const SizedBox(height: 24),
+                  _buildStatusBanner(context, modeManager),
+                  const SizedBox(height: 16),
 
-              // --- Stats cards (2x2 grid) ---
-              _buildStatsGrid(orderProv, customerProv),
-              const SizedBox(height: 24),
+                  Text(
+                    'STATION STATUS',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const StatusToggles(),
+                  const SizedBox(height: kSectionGap),
 
-              // --- Today's Zones card ---
-              _buildTodayZones(),
-              const SizedBox(height: 24),
+                  _buildMetricsGrid(context, orderProv, customerProv),
+                  const SizedBox(height: kSectionGap),
 
-              // --- Recent Orders card ---
-              _buildRecentOrders(orderProv, customerProv),
-              const SizedBox(height: 16),
-            ],
+                  _buildTodayZones(context),
+                  const SizedBox(height: kSectionGap),
+
+                  _buildRecentOrders(context, orderProv, customerProv),
+                  const SizedBox(height: 16),
+
+                  Text(
+                    'Auto-refresh: 15s',
+                    style: Theme.of(context).textTheme.labelSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              );
+            },
           );
         },
       ),
     );
   }
 
-  /// Builds the 2x2 stats grid (Total Gallons, Pending, Confirmed, Customers)
-  Widget _buildStatsGrid(
-    OrderProvider orderProv,
-    CustomerProvider customerProv,
-  ) {
-    final stats = [
-      _StatItem(
-        Icons.water_drop,
-        'Total Gallons',
-        orderProv.totalGallons,
-        AppColors.primary,
-      ),
-      _StatItem(
-        Icons.inventory_2,
-        'Pending',
-        orderProv.pendingCount,
-        AppColors.statusAway,
-      ),
-      _StatItem(
-        Icons.local_shipping,
-        'Confirmed',
-        orderProv.confirmedCount,
-        AppColors.statusOperating,
-      ),
-      _StatItem(
-        Icons.people,
-        'Customers',
-        customerProv.count,
-        AppColors.primary,
-      ),
-    ];
+  Widget _buildStatusBanner(
+      BuildContext context, SystemModeManager modeManager) {
+    final mode = modeManager.currentMode;
+    Color accentColor;
+    Color bgColor;
+    String label;
+    IconData icon;
 
-    // Compute aspect ratio dynamically so content fits on small screens.
-    // Available width = screen width - 32 (ListView padding) - 12 (grid spacing)
-    // Each cell width = (availableWidth - crossAxisSpacing) / 2
+    switch (mode) {
+      case SystemMode.operating:
+        accentColor = AppColors.statusOperating;
+        bgColor = AppColors.statusOperatingLight;
+        label = 'Operating';
+        icon = Icons.check_circle;
+        break;
+      case SystemMode.staffAway:
+        accentColor = AppColors.statusAway;
+        bgColor = AppColors.statusAwayLight;
+        label = 'Staff Away';
+        icon = Icons.access_time;
+        break;
+      case SystemMode.full:
+        accentColor = AppColors.statusBusy;
+        bgColor = AppColors.statusBusyLight;
+        label = 'Full / Busy';
+        icon = Icons.block;
+        break;
+      case SystemMode.maintenance:
+        accentColor = AppColors.statusMaintenance;
+        bgColor = AppColors.statusMaintenanceLight;
+        label = 'Maintenance';
+        icon = Icons.build;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: kCardPadding, vertical: 12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(kCardRadius),
+        border: Border.all(color: accentColor.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: accentColor),
+          const SizedBox(width: 10),
+          Text(
+            'Station is currently: $label',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: accentColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricsGrid(BuildContext context, OrderProvider orderProv,
+      CustomerProvider customerProv) {
     final screenWidth = MediaQuery.of(context).size.width;
     final cellWidth = (screenWidth - 32 - 12) / 2;
-    // Content needs ~100px: 12(pad)*2 + 20(icon) + 4(gap) + 32(value) + 16(label)
-    const minHeight = 112.0;
-    final cellHeight = cellWidth / 1.4 < minHeight ? minHeight : cellWidth / 1.4;
+    const minHeight = 100.0;
+    final cellHeight =
+        cellWidth / 1.4 < minHeight ? minHeight : cellWidth / 1.4;
     final aspectRatio = cellWidth / cellHeight;
+
+    final metrics = [
+      (
+        label: 'Total Gallons',
+        value: '${orderProv.totalGallons}',
+        color: AppColors.primary,
+      ),
+      (
+        label: 'Pending',
+        value: '${orderProv.pendingCount}',
+        color: AppColors.statusAway,
+      ),
+      (
+        label: 'Confirmed',
+        value: '${orderProv.confirmedCount}',
+        color: AppColors.statusOperating,
+      ),
+      (
+        label: 'Customers',
+        value: '${customerProv.count}',
+        color: AppColors.primary,
+      ),
+    ];
 
     return GridView.count(
       crossAxisCount: 2,
@@ -187,93 +226,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
       childAspectRatio: aspectRatio,
-      children: stats.map((stat) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(stat.icon, size: 20, color: stat.color),
-              const SizedBox(height: 4),
-              Text(
-                '${stat.value}',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.foreground,
-                ),
-              ),
-              Text(
-                stat.label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.mutedForeground,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        );
-      }).toList(),
+      children: metrics
+          .map((m) => MetricCard(
+                label: m.label,
+                value: m.value,
+                valueColor: m.color,
+              ))
+          .toList(),
     );
   }
 
-  /// Builds the Today's Zones card showing scheduled barangays
-  Widget _buildTodayZones() {
+  Widget _buildTodayZones(BuildContext context) {
     final today = DeliveryDays.getToday();
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(kCardPadding + 4),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(kCardRadius),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with "View schedule" link
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 "Today's Zones ($today)",
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.foreground,
-                ),
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              // Task 011 — Tappable "View schedule" navigates to Schedule tab
-              // Schedule is not a tab, so we show it in a dialog or we could
-              // navigate if we add it. For now, we'll show it in the bottom sheet.
               InkWell(
                 onTap: () => _showScheduleSheet(context),
                 borderRadius: BorderRadius.circular(6),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 4, vertical: 2),
                   child: Row(
                     children: [
                       Text(
                         'View schedule',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.primary,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(color: AppColors.primary),
                       ),
-                      SizedBox(width: 2),
-                      Icon(
-                        Icons.arrow_forward,
-                        size: 12,
-                        color: AppColors.primary,
-                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.arrow_forward,
+                          size: 12, color: AppColors.primary),
                     ],
                   ),
                 ),
@@ -281,43 +280,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          // Barangay chips
           if (_todayBarangays.isEmpty)
-            const Text(
+            Text(
               'No deliveries scheduled today.',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.mutedForeground,
+                  ),
             )
           else
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _todayBarangays.map((brgy) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    brgy,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                );
-              }).toList(),
+              children: _todayBarangays
+                  .map((brgy) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryLight,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          brgy,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                      ))
+                  .toList(),
             ),
         ],
       ),
     );
   }
 
-  /// Shows the full weekly schedule in a bottom sheet
   void _showScheduleSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -338,7 +337,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               controller: scrollController,
               padding: const EdgeInsets.all(20),
               children: [
-                // Handle bar
                 Center(
                   child: Container(
                     width: 40,
@@ -350,13 +348,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Delivery Schedule',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.foreground,
-                  ),
+                  style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 16),
                 ...DeliveryDays.days.map((day) {
@@ -364,12 +358,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   final barangays = _getBarangaysForDay(day);
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(kCardPadding),
                     decoration: BoxDecoration(
                       color: AppColors.background,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isToday ? AppColors.primary : AppColors.border,
+                        color:
+                            isToday ? AppColors.primary : AppColors.border,
                       ),
                     ),
                     child: Column(
@@ -379,32 +374,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             Text(
                               day,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: isToday
-                                    ? AppColors.primary
-                                    : AppColors.foreground,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(
+                                    color: isToday
+                                        ? AppColors.primary
+                                        : AppColors.foreground,
+                                  ),
                             ),
                             if (isToday) ...[
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
+                                    horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: AppColors.primaryLight,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   'Today',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(color: AppColors.primary),
                                 ),
                               ),
                             ],
@@ -412,37 +405,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 8),
                         if (barangays.isEmpty)
-                          const Text(
+                          Text(
                             'No deliveries',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.mutedForeground,
-                            ),
+                            style: Theme.of(context).textTheme.bodySmall,
                           )
                         else
                           Wrap(
                             spacing: 6,
                             runSpacing: 6,
                             children: barangays
-                                .map(
-                                  (b) => Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryLight,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Text(
-                                      b,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.primary,
+                                .map((b) => Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryLight,
+                                        borderRadius:
+                                            BorderRadius.circular(16),
                                       ),
-                                    ),
-                                  ),
-                                )
+                                      child: Text(
+                                        b,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: AppColors.primary,
+                                            ),
+                                      ),
+                                    ))
                                 .toList(),
                           ),
                       ],
@@ -457,29 +446,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Gets barangays scheduled for a given day
   List<String> _getBarangaysForDay(String day) {
     final result = <String>[];
-    // Zone A: Mon-Sat
     if (ZoneScheduleMap.zoneADays.contains(day)) {
       result.addAll(['San Isidro', 'San Jose']);
     }
-    // Zone B: Mon/Wed/Fri
     if (ZoneScheduleMap.zoneBDays.contains(day)) {
       result.addAll(['Poblacion', 'Santa Rosa']);
     }
-    // Zone C: individual days
     ZoneScheduleMap.zoneCBarangayDays.forEach((brgy, brgyDay) {
       if (brgyDay == day) result.add(brgy);
     });
     return result;
   }
 
-  /// Builds the Recent Orders card showing up to 5 latest orders
-  Widget _buildRecentOrders(
-    OrderProvider orderProv,
-    CustomerProvider customerProv,
-  ) {
+  Widget _buildRecentOrders(BuildContext context, OrderProvider orderProv,
+      CustomerProvider customerProv) {
     final customerCache = <int, Map<String, dynamic>>{};
     for (final c in customerProv.customers) {
       final id = c['id'] as int?;
@@ -487,54 +469,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final recentOrders = orderProv.todayOrders
-        .where((order) => order['type'] != 'unrecognized')
+        .where((o) => o['type'] != 'unrecognized')
         .take(5)
         .toList();
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(kCardPadding + 4),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(kCardRadius),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Recent Orders',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.foreground,
-                ),
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              // Task 011 — Tappable "View all" navigates to Orders tab
               InkWell(
                 onTap: () => widget.onNavigateToTab?.call(1),
                 borderRadius: BorderRadius.circular(6),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 4, vertical: 2),
                   child: Row(
                     children: [
                       Text(
                         'View all',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.primary,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(color: AppColors.primary),
                       ),
-                      SizedBox(width: 2),
-                      Icon(
-                        Icons.arrow_forward,
-                        size: 12,
-                        color: AppColors.primary,
-                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.arrow_forward,
+                          size: 12, color: AppColors.primary),
                     ],
                   ),
                 ),
@@ -542,11 +515,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // Order list
           if (recentOrders.isEmpty)
-            const Text(
-              'No orders today yet.',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+            const EmptyState(
+              icon: Icons.local_shipping,
+              message: 'No orders today yet.',
             )
           else
             ...List.generate(recentOrders.length, (i) {
@@ -562,7 +534,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               final isDeliver = type == 'deliver';
 
               return Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: i < recentOrders.length - 1
                     ? const BoxDecoration(
                         border: Border(
@@ -572,7 +544,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     : null,
                 child: Row(
                   children: [
-                    // Type icon
                     Container(
                       width: 36,
                       height: 36,
@@ -580,7 +551,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         color: isDeliver
                             ? AppColors.primaryLight
                             : AppColors.statusAwayLight,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
                         isDeliver ? Icons.local_shipping : Icons.water_drop,
@@ -591,48 +562,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Order info
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             customerName ?? phone,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.foreground,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w500),
                           ),
                           Text(
                             '${isDeliver ? "Delivery" : "Walk-in"} · $quantity gal',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.mutedForeground,
-                            ),
+                            style: Theme.of(context).textTheme.labelSmall,
                           ),
                         ],
                       ),
                     ),
-                    // Status badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getStatusBgColor(status),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        status,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: _getStatusTextColor(status),
-                        ),
-                      ),
-                    ),
+                    _orderStatusBadge(status),
                   ],
                 ),
               );
@@ -642,39 +590,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Color _getStatusBgColor(String status) {
+  Widget _orderStatusBadge(String status) {
+    Color color;
+    Color bgColor;
     switch (status) {
       case 'confirmed':
-        return AppColors.statusOperatingLight;
+        color = AppColors.statusOperating;
+        bgColor = AppColors.statusOperatingLight;
+        break;
       case 'pending':
-        return AppColors.statusAwayLight;
+        color = AppColors.statusAway;
+        bgColor = AppColors.statusAwayLight;
+        break;
+      case 'in_transit':
+        color = AppColors.statusBusy;
+        bgColor = AppColors.statusBusyLight;
+        break;
       case 'cancelled':
-        return AppColors.statusMaintenanceLight;
+      case 'rejected':
+        color = AppColors.statusMaintenance;
+        bgColor = AppColors.statusMaintenanceLight;
+        break;
       default:
-        return AppColors.muted;
+        color = AppColors.statusOperating;
+        bgColor = AppColors.statusOperatingLight;
     }
+    return StatusBadge(label: status, color: color, bgColor: bgColor);
   }
-
-  Color _getStatusTextColor(String status) {
-    switch (status) {
-      case 'confirmed':
-        return AppColors.statusOperating;
-      case 'pending':
-        return AppColors.statusAway;
-      case 'cancelled':
-        return AppColors.statusMaintenance;
-      default:
-        return AppColors.mutedForeground;
-    }
-  }
-}
-
-/// Simple data class for stat card items
-class _StatItem {
-  final IconData icon;
-  final String label;
-  final int value;
-  final Color color;
-
-  const _StatItem(this.icon, this.label, this.value, this.color);
 }
