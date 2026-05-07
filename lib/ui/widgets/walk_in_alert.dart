@@ -49,10 +49,7 @@ class WalkInAlert extends StatelessWidget {
                 const SizedBox(height: 20),
                 Text(
                   'Walk-in Request',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(context).textTheme.headlineLarge,
                 ),
                 const SizedBox(height: 16),
                 Container(
