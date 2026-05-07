@@ -69,3 +69,6 @@ audit/
 .codex/skills/flutter-expert
 .codex/skills/flutter-testing
 android/app/upload-keystore.p12
+
+# Brainstorming sessions
+.superpowers/
