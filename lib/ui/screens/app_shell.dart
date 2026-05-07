@@ -146,7 +146,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     if (_isInitialLoading) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.of(context).background,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -155,32 +155,32 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: AppColors.of(context).primaryLight,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: AppColors.of(context).border),
                 ),
-                child: const Icon(Icons.water_drop, size: 36, color: AppColors.primary),
+                child: Icon(Icons.water_drop, size: 36, color: AppColors.of(context).primary),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'JJ Clover',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.foreground,
+                  color: AppColors.of(context).foreground,
                 ),
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Loading...',
-                style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+                style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
               ),
               const SizedBox(height: 28),
-              const SizedBox(
+              SizedBox(
                 width: 24,
                 height: 24,
                 child: CircularProgressIndicator(
-                  color: AppColors.primary,
+                  color: AppColors.of(context).primary,
                   strokeWidth: 2.5,
                 ),
               ),
@@ -191,7 +191,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.of(context).background,
       // Stack allows the walk-in alert to overlay on top of the active screen
       body: Stack(
         children: [
@@ -210,8 +210,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       // Bottom navigation bar — uses Flutter's built-in widget for
       // reliable safe area handling and no overflow issues.
       bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.border)),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.of(context).border)),
         ),
         child: Theme(
         data: Theme.of(context).copyWith(
@@ -222,9 +222,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           currentIndex: _currentIndex,
           onTap: (i) => setState(() => _currentIndex = i),
           type: BottomNavigationBarType.fixed,
-          backgroundColor: AppColors.card,
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: AppColors.mutedForeground,
+          backgroundColor: AppColors.of(context).card,
+          selectedItemColor: AppColors.of(context).primary,
+          unselectedItemColor: AppColors.of(context).mutedForeground,
           selectedFontSize: 11,
           unselectedFontSize: 11,
           iconSize: 22,
