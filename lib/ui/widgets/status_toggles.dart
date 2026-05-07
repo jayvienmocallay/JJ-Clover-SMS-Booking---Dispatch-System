@@ -110,17 +110,36 @@ class _StatusButton extends StatelessWidget {
     required this.onTap,
   });
 
+  Color _activeBg(AppPalette p) {
+    switch (config.mode) {
+      case SystemMode.operating: return p.statusOperatingLight;
+      case SystemMode.staffAway: return p.statusAwayLight;
+      case SystemMode.full: return p.statusBusyLight;
+      case SystemMode.maintenance: return p.statusMaintenanceLight;
+    }
+  }
+
+  Color _activeColor(AppPalette p) {
+    switch (config.mode) {
+      case SystemMode.operating: return p.statusOperating;
+      case SystemMode.staffAway: return p.statusAway;
+      case SystemMode.full: return p.statusBusy;
+      case SystemMode.maintenance: return p.statusMaintenance;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = AppColors.of(context);
+    final accent = _activeColor(palette);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: isActive ? config.activeBgColor : palette.card,
+        color: isActive ? _activeBg(palette) : palette.card,
         borderRadius: BorderRadius.circular(kCardRadius),
         border: Border.all(
-          color: isActive ? config.activeColor : palette.border,
+          color: isActive ? accent : palette.border,
           width: isActive ? 2 : 1,
         ),
       ),
@@ -129,8 +148,8 @@ class _StatusButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          splashColor: config.activeColor.withValues(alpha: 0.15),
-          highlightColor: config.activeColor.withValues(alpha: 0.08),
+          splashColor: accent.withValues(alpha: 0.15),
+          highlightColor: accent.withValues(alpha: 0.08),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -139,9 +158,7 @@ class _StatusButton extends StatelessWidget {
                 Icon(
                   config.icon,
                   size: 28,
-                  color: isActive
-                      ? config.activeColor
-                      : palette.mutedForeground,
+                  color: isActive ? accent : palette.mutedForeground,
                 ),
                 const SizedBox(height: 6),
                 Text(
