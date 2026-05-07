@@ -11,7 +11,7 @@ class FilterChipRow extends StatelessWidget {
     required this.labels,
     required this.selectedIndex,
     required this.onSelected,
-  });
+  }) : assert(labels.length > 0, 'labels must not be empty');
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +36,7 @@ class FilterChipRow extends StatelessWidget {
                 child: Text(
                   labels[i],
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isActive ? Colors.white : AppColors.mutedForeground,
+                    color: isActive ? AppColors.primaryForeground : AppColors.mutedForeground,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
