@@ -29,6 +29,46 @@ import 'package:jj_clover_sms/ui/screens/app_shell.dart';
 /// Global theme mode — toggled from Settings screen.
 final themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
 
+const String _themeModeSettingKey = 'theme_mode';
+
+/// Loads the saved light/dark preference before the first frame renders.
+Future<void> loadPersistedThemeMode() async {
+  if (kIsWeb) return;
+
+  try {
+    final savedMode = await SettingsRepository().getSetting(_themeModeSettingKey);
+    themeNotifier.value = _parseThemeMode(savedMode);
+  } catch (e) {
+    debugPrint('Failed to load theme mode: $e');
+  }
+}
+
+/// Updates the app theme and persists the choice for the next launch.
+Future<void> setThemeMode(ThemeMode mode) async {
+  themeNotifier.value = mode;
+
+  if (kIsWeb) return;
+
+  try {
+    await SettingsRepository().setSetting(_themeModeSettingKey, mode.name);
+  } catch (e) {
+    debugPrint('Failed to persist theme mode: $e');
+  }
+}
+
+ThemeMode _parseThemeMode(String? savedMode) {
+  switch (savedMode) {
+    case 'light':
+      return ThemeMode.light;
+    case 'dark':
+      return ThemeMode.dark;
+    case 'system':
+      return ThemeMode.system;
+    default:
+      return ThemeMode.dark;
+  }
+}
+
 /// Application entry point.
 ///
 /// Initializes the encrypted database and requests all required
@@ -44,6 +84,7 @@ Future<void> main() async {
   if (!kIsWeb) {
     try {
       await DatabaseRuntimeRepository().ensureReady();
+      await loadPersistedThemeMode();
       await SystemModeManager.instance.loadPersistedMode(notify: false);
       await PushNotificationService.instance.initialize();
       debugPrint('Database initialized successfully');

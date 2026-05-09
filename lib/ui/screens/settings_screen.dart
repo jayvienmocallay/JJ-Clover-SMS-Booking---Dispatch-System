@@ -11,7 +11,7 @@ import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/supabase_sync_service.dart';
 import '../theme/app_theme.dart';
-import 'package:jj_clover_sms/main.dart' show themeNotifier;
+import 'package:jj_clover_sms/main.dart' show setThemeMode, themeNotifier;
 
 class SettingsScreen extends StatefulWidget {
   /// Callback to trigger the walk-in alert overlay for testing
@@ -190,9 +190,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ValueListenableBuilder<ThemeMode>(
               valueListenable: themeNotifier,
               builder: (context, mode, _) => IconButton(
-                onPressed: () {
-                  themeNotifier.value =
+                onPressed: () async {
+                  final nextMode =
                       mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+                  await setThemeMode(nextMode);
                 },
                 icon: Icon(
                   mode == ThemeMode.light ? Icons.light_mode : Icons.dark_mode,
