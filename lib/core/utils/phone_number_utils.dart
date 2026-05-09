@@ -7,10 +7,12 @@ class PhoneNumberUtils {
   ///
   /// Accepts common forms such as +639171234567, 639171234567,
   /// 09171234567, and values with spaces or punctuation.
-  /// Returns the raw digit-only string for unrecognized formats
-  /// (e.g., short codes, alphanumeric senders).
+  /// Returns a trimmed fallback string for unrecognized formats
+  /// (e.g., short codes, alphanumeric senders) instead of collapsing
+  /// everything to an empty string.
   static String normalize(String value) {
-    final digits = value.replaceAll(RegExp(r'\D'), '');
+    final trimmed = value.trim();
+    final digits = trimmed.replaceAll(RegExp(r'\D'), '');
 
     if (digits.length == 12 && digits.startsWith('63')) {
       return '0${digits.substring(2)}';
@@ -24,7 +26,11 @@ class PhoneNumberUtils {
       return '0$digits';
     }
 
-    return digits;
+    if (digits.isNotEmpty) {
+      return digits;
+    }
+
+    return trimmed;
   }
 
   /// Returns true for customer-entered phone numbers accepted by the UI.

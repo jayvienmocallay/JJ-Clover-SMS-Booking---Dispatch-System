@@ -35,6 +35,10 @@ class OrderProvider extends ChangeNotifier {
     super.dispose();
   }
 
+  void _notifyIfActive() {
+    if (!_disposed) notifyListeners();
+  }
+
   /// Stats computed from today's orders
   Iterable<Map<String, dynamic>> get _operationalOrders =>
       _todayOrders.where((o) => o['type'] != 'unrecognized');
@@ -52,19 +56,24 @@ class OrderProvider extends ChangeNotifier {
 
   /// Loads today's orders from the database and notifies listeners
   Future<void> loadOrders() async {
+    if (_disposed) return;
+
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    _notifyIfActive();
 
     try {
-      _todayOrders = await _repository.getOrders();
+      final orders = await _repository.getTodayOrders();
+      if (_disposed) return;
+      _todayOrders = orders;
     } catch (e) {
+      if (_disposed) return;
       debugPrint('OrderProvider.loadOrders error: $e');
       _error = e.toString();
     }
 
     _isLoading = false;
-    notifyListeners();
+    _notifyIfActive();
   }
 
   /// Updates an order's status and refreshes the list
@@ -85,7 +94,7 @@ class OrderProvider extends ChangeNotifier {
       await loadOrders();
     } catch (e) {
       _error = e.toString();
-      if (!_disposed) notifyListeners();
+      _notifyIfActive();
     }
   }
 
@@ -97,12 +106,12 @@ class OrderProvider extends ChangeNotifier {
       await loadOrders();
     } catch (e) {
       _error = e.toString();
-      if (!_disposed) notifyListeners();
+      _notifyIfActive();
     }
   }
 
   void clearError() {
     _error = null;
-    notifyListeners();
+    _notifyIfActive();
   }
 }

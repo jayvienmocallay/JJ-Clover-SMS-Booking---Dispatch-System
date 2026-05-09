@@ -13,6 +13,10 @@ class OrderRepository {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getTodayOrders() {
+    return DatabaseHelper.instance.getTodayOrders();
+  }
+
   Future<int> insertOrder(Map<String, dynamic> orderData) {
     return DatabaseHelper.instance.insertOrder(orderData);
   }

@@ -33,7 +33,6 @@ const MethodChannel _nativeSmsBackgroundChannel = MethodChannel(
 
 final _databaseRuntime = DatabaseRuntimeRepository();
 
-/// Dart entry point started directly by Android's default SMS receiver.
 @pragma('vm:entry-point')
 Future<void> smsNativeBackgroundMain() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -86,7 +85,6 @@ Future<void> _ensureSmsRuntimeReady() async {
   await _databaseRuntime.ensureReady();
 }
 
-/// Entry point used by Android when an SMS arrives while Flutter is backgrounded.
 @pragma('vm:entry-point')
 Future<void> smsBackgroundMessageHandler(SmsMessage msg) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -103,10 +101,6 @@ Future<void> smsBackgroundMessageHandler(SmsMessage msg) async {
   }
 }
 
-/// Thin command router — receives raw SMS, gates on deduplication, then
-/// delegates to the appropriate command handler.
-///
-/// Business logic lives in the handler classes under command_handlers/.
 class SmsBackgroundService {
   static final SmsBackgroundService instance = SmsBackgroundService._internal();
 
@@ -199,6 +193,8 @@ class SmsBackgroundService {
     Telephony? smsSender,
   }) async {
     if (sender.isEmpty) return;
+    final normalizedSender = PhoneNumberUtils.normalize(sender);
+    if (normalizedSender.isEmpty) return;
 
     final effectiveSourceMessageId =
         sourceMessageId ??
@@ -223,11 +219,10 @@ class SmsBackgroundService {
           sender,
           'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
           smsSender: smsSender,
+          sourceMessageId: effectiveSourceMessageId,
         );
       } else {
-        debugPrint(
-          'Message still processing, skipped: $effectiveSourceMessageId',
-        );
+        debugPrint('Message still processing, skipped: $effectiveSourceMessageId');
       }
       return;
     }
@@ -239,7 +234,7 @@ class SmsBackgroundService {
       }
 
       await _messages.insertSmsMessage({
-        'phone_number': PhoneNumberUtils.normalize(sender),
+        'phone_number': normalizedSender,
         'message': message,
         'direction': 'incoming',
         'source_message_id': effectiveSourceMessageId,
@@ -252,17 +247,16 @@ class SmsBackgroundService {
         sender: sender,
       );
 
-      // Refresh persisted mode — background isolate may have a stale singleton
       await _modeManager.loadPersistedMode();
 
       await _sendFirstContactRepliesIfNeeded(
         sender: sender,
         smsSender: smsSender,
+        sourceMessageId: effectiveSourceMessageId,
       );
 
       final parsed = SmsParser.parse(message);
 
-      // Task 020 — privacy / registration takes priority over delivery commands
       final handledByPrivacyFlow = await _registrationHandler.handle(
         sender: sender,
         parsed: parsed,
@@ -299,17 +293,20 @@ class SmsBackgroundService {
           );
           break;
         case SmsCommand.cancel:
-          await _cancelHandler.handle(sender, smsSender: smsSender);
+          await _cancelHandler.handle(
+            sender,
+            sourceMessageId: effectiveSourceMessageId,
+            smsSender: smsSender,
+          );
           break;
         case SmsCommand.status:
           await SmsHandlerUtils.sendReply(
             sender,
             'Current status: ${_modeManager.currentMode.displayName}',
             smsSender: smsSender,
+            sourceMessageId: effectiveSourceMessageId,
           );
           break;
-        // Registration / privacy commands are handled above; reaching here means
-        // the sender is registered and not in an active flow — treat as unknown.
         case SmsCommand.register:
         case SmsCommand.agree:
         case SmsCommand.stop:
@@ -332,6 +329,7 @@ class SmsBackgroundService {
             sender,
             SmsParser.getUnknownCommandReply(),
             smsSender: smsSender,
+            sourceMessageId: effectiveSourceMessageId,
           );
           break;
       }
@@ -367,6 +365,7 @@ class SmsBackgroundService {
   Future<void> _sendFirstContactRepliesIfNeeded({
     required String sender,
     Telephony? smsSender,
+    String? sourceMessageId,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
     final alreadyNotified = await DatabaseHelper.instance
@@ -375,10 +374,7 @@ class SmsBackgroundService {
 
     final customerData = await _customers.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
-      await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
-      debugPrint(
-        'First-contact registration prompt deferred for $normalizedSender',
-      );
+      debugPrint('First-contact registration prompt skipped for unregistered $normalizedSender');
       return;
     }
 
@@ -386,6 +382,7 @@ class SmsBackgroundService {
       sender,
       SmsRegistrationCopy.firstContactWelcome,
       smsSender: smsSender,
+      sourceMessageId: sourceMessageId,
     );
 
     await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);

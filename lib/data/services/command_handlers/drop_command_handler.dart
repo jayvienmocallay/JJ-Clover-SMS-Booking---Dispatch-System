@@ -40,6 +40,7 @@ class DropCommandHandler {
         sender,
         _modeManager.getDropReply(),
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return;
     }
@@ -59,7 +60,17 @@ class DropCommandHandler {
       sourceMessageId: sourceMessageId,
     );
 
-    await _orders.insertOrder(order.toMap());
+    final orderId = await _orders.insertOrder(order.toMap());
+    if (orderId == 0) {
+      await SmsHandlerUtils.sendReply(
+        sender,
+        'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
+        smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
+      );
+      return;
+    }
+
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
       title: 'Walk-in DROP Order',
@@ -72,6 +83,7 @@ class DropCommandHandler {
       sender,
       _modeManager.getDropReply(),
       smsSender: smsSender,
+      sourceMessageId: sourceMessageId,
     );
 
     // Task 012 — Trigger loud alarm for walk-in customer
