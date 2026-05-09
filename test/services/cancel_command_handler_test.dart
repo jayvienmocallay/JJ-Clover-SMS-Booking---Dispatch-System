@@ -15,6 +15,7 @@ void main() {
   late CancelCommandHandler handler;
 
   const sender = '+63 917 555 0000';
+  const sourceMessageId = 'test-cancel-source-message';
   final normalizedSender = PhoneNumberUtils.normalize(sender);
 
   setUpAll(sqfliteFfiInit);
@@ -60,7 +61,7 @@ void main() {
         'is_pre_book': 0,
       });
 
-      await handler.handle(sender);
+      await handler.handle(sender, sourceMessageId: sourceMessageId);
 
       final olderOrder = (await helper.getOrders(
         where: 'id = ?',
@@ -95,7 +96,7 @@ void main() {
       'is_pre_book': 0,
     });
 
-    await handler.handle(sender);
+    await handler.handle(sender, sourceMessageId: sourceMessageId);
 
     final olderOrder = (await helper.getOrders(
       where: 'id = ?',
@@ -121,7 +122,7 @@ void main() {
       ),
     );
 
-    await handler.handle(sender);
+    await handler.handle(sender, sourceMessageId: sourceMessageId);
 
     expect(preBookStore[normalizedSender], isNull);
     expect(await helper.getPreBookPending(), isEmpty);

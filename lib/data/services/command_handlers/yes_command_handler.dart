@@ -27,6 +27,7 @@ class YesCommandHandler {
         sender,
         'No pending pre-book found. Please send a DELIVER command first.',
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return;
     }
@@ -37,6 +38,7 @@ class YesCommandHandler {
         sender,
         'Pre-book offer has expired. Please send a new DELIVER command.',
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return;
     }
@@ -55,7 +57,18 @@ class YesCommandHandler {
       sourceMessageId: sourceMessageId,
     );
 
-    await _orders.insertOrder(order.toMap());
+    final orderId = await _orders.insertOrder(order.toMap());
+    if (orderId == 0) {
+      await _preBookStore.remove(normalizedSender);
+      await SmsHandlerUtils.sendReply(
+        sender,
+        'This pre-book was already confirmed. Reply CANCEL to cancel it, or send a new DELIVER command later.',
+        smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
+      );
+      return;
+    }
+
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
       title: 'Pre-book Confirmed',
@@ -71,6 +84,7 @@ class YesCommandHandler {
       'Pre-book confirmed! Your order of ${context.quantity} gallon(s) '
       'is scheduled for ${context.deliveryDay}.',
       smsSender: smsSender,
+      sourceMessageId: sourceMessageId,
     );
   }
 }
