@@ -144,6 +144,7 @@ class SmsBackgroundService {
     if (_isListening) return;
 
     await _preBookStore.loadFromDb();
+    unawaited(SmsHandlerUtils.drainOutgoingQueue());
 
     _telephony.listenIncomingSms(
       onNewMessage: (SmsMessage msg) {
@@ -373,20 +374,20 @@ class SmsBackgroundService {
         .isFirstContactNotified(normalizedSender);
     if (alreadyNotified) return;
 
+    final customerData = await _customers.getCustomerByPhone(normalizedSender);
+    if (customerData == null) {
+      await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
+      debugPrint(
+        'First-contact registration prompt deferred for $normalizedSender',
+      );
+      return;
+    }
+
     await SmsHandlerUtils.sendReply(
       sender,
       SmsRegistrationCopy.firstContactWelcome,
       smsSender: smsSender,
     );
-
-    final customerData = await _customers.getCustomerByPhone(normalizedSender);
-    if (customerData == null) {
-      await SmsHandlerUtils.sendReply(
-        sender,
-        SmsRegistrationCopy.firstContactPrivacyNotice,
-        smsSender: smsSender,
-      );
-    }
 
     await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
     debugPrint('First-contact automated reply sent to $normalizedSender');

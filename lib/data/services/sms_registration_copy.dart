@@ -94,8 +94,8 @@ class SmsRegistrationCopy {
   /// Replaces the old "Unknown number. Please register first..." reply so
   /// new senders always see the self-registration path.
   static const String unknownNumberPrompt =
-      'Unknown number. Reply REGISTER [your full name] to register, '
-      'or call the station.';
+      'Unknown number. Reply REGISTER [your full name] to register. '
+      'Example: REGISTER Juan Dela Cruz. Or call the station.';
 
   /// Sent once, the first time any mobile number texts the app.
   static const String firstContactWelcome =

@@ -4,6 +4,7 @@ import '../../../core/utils/phone_number_utils.dart';
 import '../../models/customer_model.dart';
 import '../../repositories/barangay_repository.dart';
 import '../../repositories/customer_repository.dart';
+import '../../repositories/outgoing_sms_queue_repository.dart';
 import '../../repositories/pending_sms_action_repository.dart';
 import '../app_event_bus.dart';
 import '../sms_parser.dart';
@@ -20,6 +21,7 @@ class RegistrationFlowHandler {
   final _barangays = BarangayRepository();
   final _customers = CustomerRepository();
   final _pendingActions = PendingSmsActionRepository();
+  final _outgoingSmsQueue = OutgoingSmsQueueRepository();
 
   Future<bool> handle({
     required String sender,
@@ -99,6 +101,7 @@ class RegistrationFlowHandler {
       }
       await _customers.deleteCustomerByPhone(normalizedSender);
       await _pendingActions.delete(normalizedSender);
+      await _outgoingSmsQueue.deleteForPhoneNumber(normalizedSender);
       try {
         await SupabaseSyncService.instance.deleteCustomerFromSupabase(
           normalizedSender,
