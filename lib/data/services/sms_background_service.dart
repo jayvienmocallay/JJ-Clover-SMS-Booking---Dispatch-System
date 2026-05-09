@@ -144,7 +144,6 @@ class SmsBackgroundService {
     if (_isListening) return;
 
     await _preBookStore.loadFromDb();
-    unawaited(SmsHandlerUtils.drainOutgoingQueue());
 
     _telephony.listenIncomingSms(
       onNewMessage: (SmsMessage msg) {

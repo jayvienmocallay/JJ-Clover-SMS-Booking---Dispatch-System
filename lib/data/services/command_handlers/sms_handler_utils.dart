@@ -1,13 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:telephony/telephony.dart';
-
 import '../../../core/utils/phone_number_utils.dart';
 import '../../models/order_model.dart';
 import '../../repositories/customer_repository.dart';
 import '../../repositories/order_repository.dart';
-import '../../repositories/outgoing_sms_queue_repository.dart';
 import '../../repositories/sms_message_repository.dart';
 import '../app_event_bus.dart';
 import '../push_notification_service.dart';
@@ -17,119 +13,37 @@ class SmsHandlerUtils {
   static final _customers = CustomerRepository();
   static final _messages = SmsMessageRepository();
   static final _orders = OrderRepository();
-  static final _outgoingQueue = OutgoingSmsQueueRepository();
 
-  /// Default delay between transactional SMS sends from the same SIM.
-  ///
-  /// This keeps replies responsive while avoiding bursty sending patterns that
-  /// Android, the SIM, or the carrier may throttle.
-  static const Duration _sendDelay = Duration(seconds: 5);
-
-  static bool _isSending = false;
-  static Timer? _retryTimer;
-
-  /// Queues an SMS reply for persisted, throttled delivery.
-  ///
-  /// The queue is database-backed, so replies survive process restarts. Recent
-  /// duplicate replies to the same number are suppressed by the repository.
+  /// Sends an SMS reply immediately and records the send result.
   static Future<void> sendReply(
     String phoneNumber,
     String message, {
     Telephony? smsSender,
     String? sourceMessageId,
   }) async {
-    final queueId = await _outgoingQueue.enqueue(
-      phoneNumber: phoneNumber,
-      message: message,
-      sourceMessageId: sourceMessageId,
-    );
-
-    if (queueId == null) {
-      debugPrint('Duplicate SMS reply suppressed for $phoneNumber: $message');
-      return;
-    }
-
-    return _drainQueue(smsSender: smsSender);
-  }
-
-  /// Drains all currently due outgoing replies.
-  ///
-  /// Failed sends are left in the persisted queue for bounded retry. This method
-  /// intentionally does not throw into command handlers: an order should still
-  /// be recorded even if the SMS transport is temporarily unavailable.
-  static Future<void> drainOutgoingQueue({Telephony? smsSender}) {
-    return _drainQueue(smsSender: smsSender);
-  }
-
-  static Future<void> _drainQueue({Telephony? smsSender}) async {
-    if (_isSending) return;
-    _isSending = true;
-    _retryTimer?.cancel();
-    _retryTimer = null;
-
+    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
     try {
-      var sentAny = false;
-      while (true) {
-        final row = await _outgoingQueue.claimNextDue();
-        if (row == null) break;
-
-        final id = row['id'] as int;
-        final phoneNumber = row['phone_number'] as String;
-        final message = row['message'] as String;
-
-        if (sentAny) {
-          await Future<void>.delayed(_sendDelay);
-        }
-
-        try {
-          await _doSend(
-            phoneNumber,
-            message,
-            smsSender: smsSender,
-          );
-          await _outgoingQueue.markSent(id);
-          await _messages.insertSmsMessage({
-            'phone_number': PhoneNumberUtils.normalize(phoneNumber),
-            'message': message,
-            'direction': 'outgoing',
-            'status': 'sent',
-            'sent_at': DateTime.now().toIso8601String(),
-          });
-        } catch (e, st) {
-          debugPrint('Failed to send queued reply #$id: $e');
-          debugPrintStack(stackTrace: st);
-          await _outgoingQueue.markFailedOrRetry(id, e);
-          await _messages.insertSmsMessage({
-            'phone_number': PhoneNumberUtils.normalize(phoneNumber),
-            'message': message,
-            'direction': 'outgoing',
-            'status': 'failed',
-            'sent_at': DateTime.now().toIso8601String(),
-          });
-        }
-        sentAny = true;
-      }
-    } finally {
-      _isSending = false;
-      unawaited(_scheduleNextRetry(smsSender: smsSender));
+      await _doSend(phoneNumber, message, smsSender: smsSender);
+      await _messages.insertSmsMessage({
+        'phone_number': normalizedPhone,
+        'message': message,
+        'direction': 'outgoing',
+        'status': 'sent',
+        'source_message_id': sourceMessageId,
+        'sent_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e, st) {
+      debugPrint('SMS reply send failed for $phoneNumber: $e');
+      debugPrintStack(stackTrace: st);
+      await _messages.insertSmsMessage({
+        'phone_number': normalizedPhone,
+        'message': message,
+        'direction': 'outgoing',
+        'status': 'failed',
+        'source_message_id': sourceMessageId,
+        'sent_at': DateTime.now().toIso8601String(),
+      });
     }
-  }
-
-  static Future<void> _scheduleNextRetry({Telephony? smsSender}) async {
-    _retryTimer?.cancel();
-    _retryTimer = null;
-
-    final nextAttemptAt = await _outgoingQueue.getNextPendingAttemptAt();
-    if (nextAttemptAt == null) return;
-
-    final now = DateTime.now();
-    final delay = nextAttemptAt.isAfter(now)
-        ? nextAttemptAt.difference(now)
-        : Duration.zero;
-
-    _retryTimer = Timer(delay, () {
-      unawaited(_drainQueue(smsSender: smsSender));
-    });
   }
 
   static Future<void> _doSend(
