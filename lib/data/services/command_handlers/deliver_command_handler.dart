@@ -40,7 +40,6 @@ class DeliverCommandHandler {
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
 
-    // Step 1: Mode gate
     if (!_modeManager.canAcceptDelivery()) {
       await SmsHandlerUtils.saveUnrecognized(
         sender,
@@ -54,11 +53,11 @@ class DeliverCommandHandler {
         sender,
         _modeManager.getDeliveryReply(),
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return;
     }
 
-    // Step 2: Customer lookup
     final customerData = await _customers.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
       await SmsHandlerUtils.saveUnrecognized(
@@ -73,11 +72,11 @@ class DeliverCommandHandler {
         sender,
         SmsRegistrationCopy.unknownNumberPrompt,
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return;
     }
 
-    // Step 3: Customer profile + schedules
     final customerJoined = await _customers.getCustomerWithBarangayByPhone(
       normalizedSender,
     );
@@ -94,9 +93,11 @@ class DeliverCommandHandler {
         sender,
         'Customer profile is incomplete. Please call the station.',
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return;
     }
+
     final customer = Customer.fromMap(customerJoined);
     final schedulesData = await _schedules.getSchedulesForCustomer(
       customer.id!,
@@ -104,7 +105,6 @@ class DeliverCommandHandler {
     final schedules = schedulesData.map((s) => Schedule.fromMap(s)).toList();
     final today = DeliveryDays.getToday();
 
-    // Step 4: Zone validation
     final validation = ZoneValidator.validate(
       customer: customer,
       schedules: schedules,
@@ -120,6 +120,7 @@ class DeliverCommandHandler {
         quantity: parsed.quantity ?? 0,
         gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
       );
+
       if (validation.correctDay != null) {
         await _preBookStore.put(
           normalizedSender,
@@ -133,15 +134,16 @@ class DeliverCommandHandler {
           ),
         );
       }
+
       await SmsHandlerUtils.sendReply(
         sender,
         validation.message!,
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return;
     }
 
-    // Step 5: Cutoff check
     final now = DateTime.now();
     final cutoffHour = await _settings.getCutoffHour();
     final cutoffMinute = await _settings.getCutoffMinute();
@@ -166,7 +168,25 @@ class DeliverCommandHandler {
       orderStatus = OrderStatus.pending;
     }
 
-    // Step 6: Create order
+    if (deliveryDay == null) {
+      await SmsHandlerUtils.saveUnrecognized(
+        sender,
+        'DELIVER ${parsed.quantity ?? 0} - No active delivery schedule',
+        'Incomplete',
+        sourceMessageId: sourceMessageId,
+        quantity: parsed.quantity ?? 0,
+        gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
+      );
+
+      await SmsHandlerUtils.sendReply(
+        sender,
+        'No active delivery schedule found for your account. Please call the station.',
+        smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
+      );
+      return;
+    }
+
     final order = Order(
       customerId: customer.id,
       phoneNumber: normalizedSender,
@@ -180,7 +200,17 @@ class DeliverCommandHandler {
       sourceMessageId: sourceMessageId,
     );
 
-    await _orders.insertOrder(order.toMap());
+    final orderId = await _orders.insertOrder(order.toMap());
+    if (orderId == 0) {
+      await SmsHandlerUtils.sendReply(
+        sender,
+        'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
+        smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
+      );
+      return;
+    }
+
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
       title: 'New Delivery Order',
@@ -188,7 +218,6 @@ class DeliverCommandHandler {
       sender: sender,
     );
 
-    // Step 7: Auto-reply
     if (isStaffAway) {
       await SmsHandlerUtils.sendReply(
         sender,
@@ -196,19 +225,21 @@ class DeliverCommandHandler {
           queuedDeliveryDay: isBeforeCutoff ? null : deliveryDay,
         ),
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
     } else if (isBeforeCutoff) {
       await SmsHandlerUtils.sendReply(
         sender,
         _modeManager.getDeliveryReply(),
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
     } else {
       await SmsHandlerUtils.sendReply(
         sender,
-        'Order received. Past today\'s cutoff time. '
-        'Your order has been queued for $deliveryDay.',
+        'Order received. Past today\'s cutoff time. Your order has been queued for $deliveryDay.',
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
     }
   }
