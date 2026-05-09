@@ -255,14 +255,10 @@ class SmsBackgroundService {
       // Refresh persisted mode — background isolate may have a stale singleton
       await _modeManager.loadPersistedMode();
 
-      final handledByFirstContact = await _handleFirstContactIfNeeded(
+      await _sendFirstContactRepliesIfNeeded(
         sender: sender,
         smsSender: smsSender,
       );
-      if (handledByFirstContact) {
-        await _receipts.complete(effectiveSourceMessageId);
-        return;
-      }
 
       final parsed = SmsParser.parse(message);
 
@@ -368,14 +364,14 @@ class SmsBackgroundService {
     );
   }
 
-  Future<bool> _handleFirstContactIfNeeded({
+  Future<void> _sendFirstContactRepliesIfNeeded({
     required String sender,
     Telephony? smsSender,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
     final alreadyNotified = await DatabaseHelper.instance
         .isFirstContactNotified(normalizedSender);
-    if (alreadyNotified) return false;
+    if (alreadyNotified) return;
 
     await SmsHandlerUtils.sendReply(
       sender,
@@ -394,6 +390,5 @@ class SmsBackgroundService {
 
     await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
     debugPrint('First-contact automated reply sent to $normalizedSender');
-    return true;
   }
 }

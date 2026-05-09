@@ -106,7 +106,7 @@ class SmsRegistrationCopy {
       'DELIVER [qty] NEW - for new gallons\n'
       'DROP [qty] - for walk-in pickup\n'
       'STATUS - to check station status\n\n'
-      'Your next message will be processed automatically.';
+      'Your message will be processed automatically.';
 
   /// Sent with [firstContactWelcome] when the first-time sender is not yet in
   /// the customer database.

@@ -200,8 +200,8 @@ class RegistrationFlowHandler {
       return true;
     }
 
-    // --- Unregistered sender sending an unrecognized command ---
-    if (customerData == null && parsed.command == SmsCommand.unknown) {
+    // --- Unregistered sender sending any command that requires a customer record ---
+    if (customerData == null && _requiresRegisteredCustomer(parsed.command)) {
       await SmsHandlerUtils.saveUnrecognized(
         sender,
         parsed.rawMessage,
@@ -219,6 +219,28 @@ class RegistrationFlowHandler {
     }
 
     return false;
+  }
+
+  bool _requiresRegisteredCustomer(SmsCommand command) {
+    switch (command) {
+      case SmsCommand.deliver:
+      case SmsCommand.drop:
+      case SmsCommand.yes:
+      case SmsCommand.cancel:
+      case SmsCommand.status:
+      case SmsCommand.unknown:
+        return true;
+      case SmsCommand.register:
+      case SmsCommand.agree:
+      case SmsCommand.stop:
+      case SmsCommand.barangay:
+      case SmsCommand.address:
+      case SmsCommand.myData:
+      case SmsCommand.deleteData:
+      case SmsCommand.confirmDelete:
+      case SmsCommand.optOut:
+        return false;
+    }
   }
 
   /// Drives per-step transitions for a registration flow already recorded in
