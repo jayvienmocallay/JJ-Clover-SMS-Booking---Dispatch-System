@@ -10,6 +10,7 @@ class PreBookContext {
   final String? gallonType;
   final String? address;
   final String deliveryDay;
+  final DateTime scheduledFor;
   final DateTime createdAt;
 
   static const expirationHours = 48;
@@ -21,8 +22,10 @@ class PreBookContext {
     this.gallonType,
     this.address,
     required this.deliveryDay,
+    DateTime? scheduledFor,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+  }) : scheduledFor = scheduledFor ?? createdAt ?? DateTime.now(),
+       createdAt = createdAt ?? DateTime.now();
 
   bool get isExpired =>
       DateTime.now().difference(createdAt).inHours > expirationHours;

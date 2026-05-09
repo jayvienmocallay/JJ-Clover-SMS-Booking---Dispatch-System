@@ -251,10 +251,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.of(context).card,
+        backgroundColor: AppColors.of(ctx).card,
         title: Text(
           'Reject Order',
-          style: Theme.of(context).textTheme.headlineSmall,
+          style: Theme.of(ctx).textTheme.headlineSmall,
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -262,18 +262,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
           children: [
             Text(
               'Are you sure you want to reject this order?',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.of(context).mutedForeground,
+              style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.of(ctx).mutedForeground,
                   ),
             ),
             const SizedBox(height: 16),
             TextField(
               onChanged: (v) => reason = v,
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: Theme.of(ctx).textTheme.bodyMedium,
               decoration: InputDecoration(
                 hintText: 'Reason (optional)',
                 filled: true,
-                fillColor: AppColors.of(context).background,
+                fillColor: AppColors.of(ctx).background,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(kButtonRadius),
                   borderSide: BorderSide.none,
@@ -289,13 +289,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.of(context).statusMaintenance,
+              backgroundColor: AppColors.of(ctx).statusMaintenance,
             ),
             onPressed: () async {
               Navigator.pop(ctx);
               final prov = orderProv;
-              await prov.updateStatus(orderId, 'cancelled',
-                  reason: reason);
+              await prov.updateStatus(orderId, 'rejected',
+                  reason: reason?.trim());
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Order rejected ✓')),
@@ -383,6 +383,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
       return;
     }
 
+    final now = DateTime.now();
     final orderProv = context.read<OrderProvider>();
     await orderProv.addOrder({
       'customer_id': _selectedCustomerId,
@@ -391,7 +392,8 @@ class _AddOrderFormState extends State<_AddOrderForm> {
       'quantity': _quantity,
       'gallon_type': _gallonType,
       'status': 'pending',
-      'created_at': DateTime.now().toIso8601String(),
+      'created_at': now.toIso8601String(),
+      'scheduled_for': now.toIso8601String(),
       'is_pre_book': 0,
     });
 

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:jj_clover_sms/data/models/order_model.dart';
 import 'package:jj_clover_sms/data/repositories/order_repository.dart';
 import 'package:jj_clover_sms/database_helper.dart';
+import 'package:jj_clover_sms/ui/theme/app_theme.dart';
 import 'package:jj_clover_sms/ui/widgets/order_card.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   Database? db;
 
@@ -81,6 +84,7 @@ void main() {
       Provider<OrderRepository>(
         create: (_) => OrderRepository(),
         child: MaterialApp(
+          theme: AppTheme.darkTheme,
           home: Scaffold(
             body: OrderCard(
               order: Order.fromMap(orderMap),

@@ -39,7 +39,7 @@ class DatabaseHelper {
   // `pending_sms_actions` table that tracks multi-step SMS flows
   // (registration & DELETEDATA confirmation).
   // v8 — adds returned_containers and payment_method to delivery_logs.
-  static const int databaseVersion = 8;
+  static const int databaseVersion = 9;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
   static const Duration _resubmitCooldownAfter = Duration(hours: 1);
   final DatabaseEncryptionKeyRepository _encryptionKeyRepository =
@@ -189,6 +189,7 @@ class DatabaseHelper {
         cancel_reason TEXT,
         created_at TEXT NOT NULL,
         delivery_day TEXT,
+        scheduled_for TEXT,
         is_pre_book INTEGER DEFAULT 0,
         staff_id INTEGER,
         source_message_id TEXT,
@@ -211,6 +212,9 @@ class DatabaseHelper {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_orders_delivery_day ON orders(delivery_day)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_scheduled_for ON orders(scheduled_for)',
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)',
@@ -397,6 +401,14 @@ class DatabaseHelper {
       await _addColumnIfMissing(db, 'delivery_logs', 'payment_method', 'TEXT');
     }
 
+    if (oldVersion < 9) {
+      await _addColumnIfMissing(db, 'orders', 'scheduled_for', 'TEXT');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_orders_scheduled_for '
+        'ON orders(scheduled_for)',
+      );
+    }
+
     // Create sms_messages table if not exists (for old databases)
     await _createSmsMessagesTable(db);
     await _createIncomingSmsReceiptsTable(db);
@@ -467,6 +479,7 @@ class DatabaseHelper {
 
   Future<void> _createSourceMessageIndexes(Database db) async {
     await _addColumnIfMissing(db, 'orders', 'source_message_id', 'TEXT');
+    await _addColumnIfMissing(db, 'orders', 'scheduled_for', 'TEXT');
     await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
 
     await db.execute(
@@ -985,7 +998,7 @@ class DatabaseHelper {
     final today = DateTime.now().toIso8601String().split('T')[0];
     return await db.query(
       'orders',
-      where: 'date(created_at) = ?',
+      where: 'date(COALESCE(scheduled_for, created_at)) = ?',
       whereArgs: [today],
       orderBy: 'created_at DESC',
     );
@@ -1577,6 +1590,7 @@ class DatabaseHelper {
       'gallonType': _asNonEmptyString(value['gallonType']),
       'address': _asNonEmptyString(value['address']),
       'deliveryDay': deliveryDay,
+      'scheduledFor': _asNonEmptyString(value['scheduledFor']),
       'timestamp': _asInt(value['timestamp']) ?? 0,
     };
   }

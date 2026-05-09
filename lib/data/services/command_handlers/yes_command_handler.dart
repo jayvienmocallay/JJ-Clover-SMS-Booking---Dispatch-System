@@ -53,6 +53,7 @@ class YesCommandHandler {
       status: OrderStatus.pending,
       createdAt: DateTime.now(),
       deliveryDay: context.deliveryDay,
+      scheduledFor: context.scheduledFor,
       isPreBook: true,
       sourceMessageId: sourceMessageId,
     );

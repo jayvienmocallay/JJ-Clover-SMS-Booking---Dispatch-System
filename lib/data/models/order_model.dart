@@ -73,6 +73,9 @@ class Order {
   /// The scheduled delivery day (e.g., 'Monday'), null if not yet assigned
   final String? deliveryDay;
 
+  /// The concrete calendar date this order should appear on operational lists.
+  final DateTime? scheduledFor;
+
   /// Whether this order was pre-booked for a future delivery day
   final bool isPreBook;
 
@@ -96,6 +99,7 @@ class Order {
     required this.status,
     required this.createdAt,
     this.deliveryDay,
+    this.scheduledFor,
     this.isPreBook = false,
     this.staffId,
     this.cancelReason,
@@ -120,6 +124,9 @@ class Order {
       // Parse ISO 8601 date string back to DateTime
       createdAt: DateTime.parse(map['created_at'] as String),
       deliveryDay: map['delivery_day'] as String?,
+      scheduledFor: map['scheduled_for'] == null
+          ? null
+          : DateTime.tryParse(map['scheduled_for'] as String),
       // SQLite stores booleans as 0/1 integers
       isPreBook: (map['is_pre_book'] as int?) == 1,
       staffId: map['staff_id'] as int?,
@@ -229,6 +236,7 @@ class Order {
       // Store DateTime as ISO 8601 string for consistent parsing
       'created_at': createdAt.toIso8601String(),
       if (deliveryDay != null) 'delivery_day': deliveryDay,
+      if (scheduledFor != null) 'scheduled_for': scheduledFor!.toIso8601String(),
       // Store boolean as integer: 1 = true, 0 = false
       'is_pre_book': isPreBook ? 1 : 0,
       if (staffId != null) 'staff_id': staffId,

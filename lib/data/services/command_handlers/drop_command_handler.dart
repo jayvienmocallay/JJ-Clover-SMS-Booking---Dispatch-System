@@ -50,13 +50,16 @@ class DropCommandHandler {
     final customerId = customerData?['id'] as int?;
 
     // Step 3: Create order
+    final now = DateTime.now();
+
     final order = Order(
       customerId: customerId,
       phoneNumber: normalizedSender,
       type: OrderType.drop,
       quantity: parsed.quantity ?? 0,
       status: OrderStatus.pending,
-      createdAt: DateTime.now(),
+      createdAt: now,
+      scheduledFor: now,
       sourceMessageId: sourceMessageId,
     );
 

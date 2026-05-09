@@ -104,6 +104,7 @@ class DeliverCommandHandler {
     );
     final schedules = schedulesData.map((s) => Schedule.fromMap(s)).toList();
     final today = DeliveryDays.getToday();
+    final requestTime = DateTime.now();
 
     final validation = ZoneValidator.validate(
       customer: customer,
@@ -131,6 +132,10 @@ class DeliverCommandHandler {
             gallonType: parsed.gallonType,
             address: parsed.address,
             deliveryDay: validation.correctDay!,
+            scheduledFor: _scheduledDateForDay(
+              validation.correctDay!,
+              from: requestTime,
+            ),
           ),
         );
       }
@@ -144,7 +149,7 @@ class DeliverCommandHandler {
       return;
     }
 
-    final now = DateTime.now();
+    final now = requestTime;
     final cutoffHour = await _settings.getCutoffHour();
     final cutoffMinute = await _settings.getCutoffMinute();
     final isBeforeCutoff =
@@ -197,6 +202,7 @@ class DeliverCommandHandler {
       status: orderStatus,
       createdAt: now,
       deliveryDay: deliveryDay,
+      scheduledFor: _scheduledDateForDay(deliveryDay, from: now),
       sourceMessageId: sourceMessageId,
     );
 
@@ -242,6 +248,15 @@ class DeliverCommandHandler {
         sourceMessageId: sourceMessageId,
       );
     }
+  }
+
+  DateTime _scheduledDateForDay(String deliveryDay, {required DateTime from}) {
+    final currentIndex = from.weekday - 1;
+    final targetIndex = DeliveryDays.days.indexOf(deliveryDay);
+    if (targetIndex == -1) return from;
+    final offset = (targetIndex - currentIndex) % 7;
+    return DateTime(from.year, from.month, from.day)
+        .add(Duration(days: offset));
   }
 
   String? _findNextAvailableDay(List<Schedule> schedules, String currentDay) {
