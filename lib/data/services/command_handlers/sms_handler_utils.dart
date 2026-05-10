@@ -94,6 +94,7 @@ class SmsHandlerUtils {
       status: orderStatus,
       createdAt: DateTime.now(),
       sourceMessageId: sourceMessageId,
+      source: 'sms',
     );
     await _orders.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();

@@ -3,19 +3,19 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/phone_number_utils.dart';
 import '../../models/customer_model.dart';
 import '../../models/order_model.dart';
-import '../../models/schedule_model.dart';
 import '../../models/pre_book_context.dart';
+import '../../models/schedule_model.dart';
 import '../../repositories/customer_repository.dart';
-import '../../repositories/order_repository.dart';
 import '../../repositories/schedule_repository.dart';
 import '../../repositories/settings_repository.dart';
 import '../app_event_bus.dart';
+import '../order_creation_service.dart';
+import '../pre_book_store.dart';
 import '../push_notification_service.dart';
 import '../sms_parser.dart';
 import '../sms_registration_copy.dart';
 import '../system_mode_manager.dart';
 import '../zone_validator.dart';
-import '../pre_book_store.dart';
 import 'sms_handler_utils.dart';
 
 /// Handles the DELIVER command end-to-end:
@@ -27,9 +27,9 @@ class DeliverCommandHandler {
   final PreBookStore _preBookStore;
 
   final _customers = CustomerRepository();
-  final _orders = OrderRepository();
   final _schedules = ScheduleRepository();
   final _settings = SettingsRepository();
+  final _orderCreation = OrderCreationService();
   final _modeManager = SystemModeManager.instance;
 
   Future<void> handle(
@@ -204,9 +204,14 @@ class DeliverCommandHandler {
       deliveryDay: deliveryDay,
       scheduledFor: _scheduledDateForDay(deliveryDay, from: now),
       sourceMessageId: sourceMessageId,
+      source: 'sms',
     );
 
-    final orderId = await _orders.insertOrder(order.toMap());
+    final orderId = await _orderCreation.createOrderFromModel(
+      order,
+      source: 'sms',
+      validateSystemMode: false,
+    );
     if (orderId == 0) {
       await SmsHandlerUtils.sendReply(
         sender,

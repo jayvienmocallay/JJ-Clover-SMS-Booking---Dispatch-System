@@ -2,9 +2,9 @@ import 'package:another_telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
 import '../../models/order_model.dart';
 import '../../repositories/customer_repository.dart';
-import '../../repositories/order_repository.dart';
 import '../alarm_service.dart';
 import '../app_event_bus.dart';
+import '../order_creation_service.dart';
 import '../push_notification_service.dart';
 import '../sms_parser.dart';
 import '../system_mode_manager.dart';
@@ -15,8 +15,8 @@ import 'sms_handler_utils.dart';
 /// DROP bypasses zone validation because the customer is physically present.
 class DropCommandHandler {
   final _customers = CustomerRepository();
-  final _orders = OrderRepository();
   final _modeManager = SystemModeManager.instance;
+  final _orderCreation = OrderCreationService();
 
   Future<void> handle(
     String sender,
@@ -61,9 +61,14 @@ class DropCommandHandler {
       createdAt: now,
       scheduledFor: now,
       sourceMessageId: sourceMessageId,
+      source: 'sms',
     );
 
-    final orderId = await _orders.insertOrder(order.toMap());
+    final orderId = await _orderCreation.createOrderFromModel(
+      order,
+      source: 'sms',
+      validateSystemMode: false,
+    );
     if (orderId == 0) {
       await SmsHandlerUtils.sendReply(
         sender,

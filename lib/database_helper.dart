@@ -40,7 +40,7 @@ class DatabaseHelper {
   // `pending_sms_actions` table that tracks multi-step SMS flows
   // (registration & DELETEDATA confirmation).
   // v8 — adds returned_containers and payment_method to delivery_logs.
-  static const int databaseVersion = 9;
+  static const int databaseVersion = 10;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
   static const Duration _resubmitCooldownAfter = Duration(hours: 1);
   final DatabaseEncryptionKeyRepository _encryptionKeyRepository =
@@ -194,6 +194,7 @@ class DatabaseHelper {
         is_pre_book INTEGER DEFAULT 0,
         staff_id INTEGER,
         source_message_id TEXT,
+        source TEXT,
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
       )
     ''');
@@ -219,6 +220,9 @@ class DatabaseHelper {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(type)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_source ON orders(source)',
     );
 
     // Task 005 — 5. Delivery Logs Table (per-household accountability)
@@ -410,6 +414,13 @@ class DatabaseHelper {
       );
     }
 
+    if (oldVersion < 10) {
+      await _addColumnIfMissing(db, 'orders', 'source', 'TEXT');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_orders_source ON orders(source)',
+      );
+    }
+
     // Create sms_messages table if not exists (for old databases)
     await _createSmsMessagesTable(db);
     await _createIncomingSmsReceiptsTable(db);
@@ -481,6 +492,7 @@ class DatabaseHelper {
   Future<void> _createSourceMessageIndexes(Database db) async {
     await _addColumnIfMissing(db, 'orders', 'source_message_id', 'TEXT');
     await _addColumnIfMissing(db, 'orders', 'scheduled_for', 'TEXT');
+    await _addColumnIfMissing(db, 'orders', 'source', 'TEXT');
     await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
 
     await db.execute(
@@ -575,6 +587,7 @@ class DatabaseHelper {
     await _createIncomingSmsReceiptsTable(db);
     await _addColumnIfMissing(db, 'orders', 'cancel_reason', 'TEXT');
     await _addColumnIfMissing(db, 'orders', 'source_message_id', 'TEXT');
+    await _addColumnIfMissing(db, 'orders', 'source', 'TEXT');
     await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
     await _createSourceMessageIndexes(db);
     await _addColumnIfMissing(db, 'barangays', 'delivery_day', 'TEXT');

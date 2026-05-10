@@ -88,6 +88,9 @@ class Order {
   /// Stable native SMS source ID used to prevent duplicate SMS-created orders.
   final String? sourceMessageId;
 
+  /// Origin of the order: sms, manual, prebook, or imported.
+  final String? source;
+
   Order({
     this.id,
     this.customerId,
@@ -104,6 +107,7 @@ class Order {
     this.staffId,
     this.cancelReason,
     this.sourceMessageId,
+    this.source,
   });
 
   /// Creates an [Order] instance from a database row map.
@@ -132,6 +136,7 @@ class Order {
       staffId: map['staff_id'] as int?,
       cancelReason: map['cancel_reason'] as String?,
       sourceMessageId: map['source_message_id'] as String?,
+      source: map['source'] as String?,
     );
   }
 
@@ -242,6 +247,7 @@ class Order {
       if (staffId != null) 'staff_id': staffId,
       if (cancelReason != null) 'cancel_reason': cancelReason,
       if (sourceMessageId != null) 'source_message_id': sourceMessageId,
+      if (source != null) 'source': source,
     };
   }
 }

@@ -7,6 +7,7 @@ import '../../data/models/order_model.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_order_form.dart';
 import '../widgets/complete_order_sheet.dart';
 import '../widgets/order_card.dart';
 import '../widgets/order_detail_sheet.dart';
@@ -50,7 +51,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         value: context.read<OrderProvider>(),
         child: ChangeNotifierProvider.value(
           value: context.read<CustomerProvider>(),
-          child: const _AddOrderForm(),
+          child: const AddOrderForm(),
         ),
       ),
     );

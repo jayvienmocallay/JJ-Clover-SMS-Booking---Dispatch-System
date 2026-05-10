@@ -1,8 +1,8 @@
 import 'package:another_telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
 import '../../models/order_model.dart';
-import '../../repositories/order_repository.dart';
 import '../app_event_bus.dart';
+import '../order_creation_service.dart';
 import '../pre_book_store.dart';
 import '../push_notification_service.dart';
 import 'sms_handler_utils.dart';
@@ -12,7 +12,7 @@ class YesCommandHandler {
   YesCommandHandler(this._preBookStore);
 
   final PreBookStore _preBookStore;
-  final _orders = OrderRepository();
+  final _orderCreation = OrderCreationService();
 
   Future<void> handle(
     String sender, {
@@ -56,9 +56,14 @@ class YesCommandHandler {
       scheduledFor: context.scheduledFor,
       isPreBook: true,
       sourceMessageId: sourceMessageId,
+      source: 'prebook',
     );
 
-    final orderId = await _orders.insertOrder(order.toMap());
+    final orderId = await _orderCreation.createOrderFromModel(
+      order,
+      source: 'prebook',
+      validateSystemMode: false,
+    );
     if (orderId == 0) {
       await _preBookStore.remove(normalizedSender);
       await SmsHandlerUtils.sendReply(
