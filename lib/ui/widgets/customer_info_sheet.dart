@@ -906,7 +906,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               itemCount: _orders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (_, i) => _buildHistoryItem(_orders[i]),
             ),
           ),

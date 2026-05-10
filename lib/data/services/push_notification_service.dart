@@ -27,7 +27,6 @@ class PushNotificationService {
   /// Prevents notification spam from the same sender within this window
   static const int _notificationRateLimitMs = 5000; // 5 seconds
 
-
   /// Whether the service has been initialized
   static bool _isInitialized = false;
 
@@ -44,7 +43,7 @@ class PushNotificationService {
     const initSettings =
         InitializationSettings(android: androidSettings, iOS: iosSettings);
 
-    await _plugin.initialize(initSettings);
+    await _plugin.initialize(settings: initSettings);
 
     // Create notification channels for Android 8.0+
     await _createNotificationChannels();
@@ -153,7 +152,7 @@ class PushNotificationService {
         timeSinceLastMs < _notificationRateLimitMs) {
       debugPrint(
         'Notification rate limited for $sender: '
-        '${timeSinceLastMs}ms since last $notificationType notification'
+        '${timeSinceLastMs}ms since last $notificationType notification',
       );
       return false;
     }
@@ -205,10 +204,10 @@ class PushNotificationService {
       );
 
       await _plugin.show(
-        notificationId,
-        title,
-        body,
-        notificationDetails,
+        id: notificationId,
+        title: title,
+        body: body,
+        notificationDetails: notificationDetails,
       );
 
       // Track this notification for rate limiting

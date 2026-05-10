@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:jj_clover_sms/data/models/order_model.dart';
 import 'package:jj_clover_sms/data/repositories/order_repository.dart';
 import 'package:jj_clover_sms/database_helper.dart';
@@ -11,7 +10,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  GoogleFonts.config.allowRuntimeFetching = false;
 
   Database? db;
 
@@ -84,7 +82,7 @@ void main() {
       Provider<OrderRepository>(
         create: (_) => OrderRepository(),
         child: MaterialApp(
-          theme: AppTheme.darkTheme,
+          theme: _testTheme,
           home: Scaffold(
             body: OrderCard(
               order: Order.fromMap(orderMap),
@@ -111,3 +109,35 @@ void main() {
     expect(find.text('9:30 AM'), findsOneWidget);
   });
 }
+
+final ThemeData _testTheme = ThemeData.dark().copyWith(
+  scaffoldBackgroundColor: AppColors.background,
+  colorScheme: const ColorScheme.dark(
+    surface: AppColors.card,
+    primary: AppColors.primary,
+    onPrimary: AppColors.primaryForeground,
+    onSurface: AppColors.foreground,
+    error: AppColors.statusMaintenance,
+  ),
+  extensions: const [
+    AppPalette(
+      background: AppColors.background,
+      card: AppColors.card,
+      foreground: AppColors.foreground,
+      primary: AppColors.primary,
+      primaryForeground: AppColors.primaryForeground,
+      muted: AppColors.muted,
+      mutedForeground: AppColors.mutedForeground,
+      border: AppColors.border,
+      statusOperating: AppColors.statusOperating,
+      statusOperatingLight: AppColors.statusOperatingLight,
+      statusAway: AppColors.statusAway,
+      statusAwayLight: AppColors.statusAwayLight,
+      statusBusy: AppColors.statusBusy,
+      statusBusyLight: AppColors.statusBusyLight,
+      statusMaintenance: AppColors.statusMaintenance,
+      statusMaintenanceLight: AppColors.statusMaintenanceLight,
+      primaryLight: AppColors.primaryLight,
+    ),
+  ],
+);

@@ -148,7 +148,7 @@ class MyApp extends StatelessWidget {
       ],
       child: ValueListenableBuilder<ThemeMode>(
         valueListenable: themeNotifier,
-        builder: (_, mode, __) => MaterialApp(
+        builder: (context, mode, child) => MaterialApp(
           title: 'JJ Clover',
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,

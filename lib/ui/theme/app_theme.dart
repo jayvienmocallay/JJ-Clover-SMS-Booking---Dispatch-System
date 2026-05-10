@@ -293,7 +293,7 @@ class AppTheme {
   }
 }
 
-/// Dynamic color palette accessed via Theme.of(context).extension<AppPalette>().
+/// Dynamic color palette accessed via Theme.of(context).extension for AppPalette.
 /// Provides light and dark variants for all app-specific colors.
 class AppPalette extends ThemeExtension<AppPalette> {
   final Color background;
