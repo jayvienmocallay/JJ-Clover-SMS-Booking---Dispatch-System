@@ -22,28 +22,60 @@ class SmsHandlerUtils {
     String? sourceMessageId,
   }) async {
     final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
+    final outgoingSourceMessageId = _outgoingSourceMessageId(
+      sourceMessageId,
+      message,
+    );
+
     try {
       await _doSend(phoneNumber, message, smsSender: smsSender);
+      await _insertOutgoingMessage(
+        phoneNumber: normalizedPhone,
+        message: message,
+        status: 'sent',
+        sourceMessageId: outgoingSourceMessageId,
+      );
+    } catch (e, st) {
+      debugPrint('SMS reply send failed for $phoneNumber: $e');
+      debugPrintStack(stackTrace: st);
+      await _insertOutgoingMessage(
+        phoneNumber: normalizedPhone,
+        message: message,
+        status: 'failed',
+        sourceMessageId: outgoingSourceMessageId,
+      );
+    } finally {
+      AppEventBus().notifyMessageReceived();
+    }
+  }
+
+  static Future<void> _insertOutgoingMessage({
+    required String phoneNumber,
+    required String message,
+    required String status,
+    required String? sourceMessageId,
+  }) async {
+    try {
       await _messages.insertSmsMessage({
-        'phone_number': normalizedPhone,
+        'phone_number': phoneNumber,
         'message': message,
         'direction': 'outgoing',
-        'status': 'sent',
+        'status': status,
         'source_message_id': sourceMessageId,
         'sent_at': DateTime.now().toIso8601String(),
       });
     } catch (e, st) {
-      debugPrint('SMS reply send failed for $phoneNumber: $e');
+      debugPrint('Failed to record outgoing SMS as $status: $e');
       debugPrintStack(stackTrace: st);
-      await _messages.insertSmsMessage({
-        'phone_number': normalizedPhone,
-        'message': message,
-        'direction': 'outgoing',
-        'status': 'failed',
-        'source_message_id': sourceMessageId,
-        'sent_at': DateTime.now().toIso8601String(),
-      });
     }
+  }
+
+  static String? _outgoingSourceMessageId(String? incomingSourceMessageId, String message) {
+    if (incomingSourceMessageId == null || incomingSourceMessageId.isEmpty) {
+      return null;
+    }
+    final hash = message.hashCode.toRadixString(16);
+    return 'reply|$incomingSourceMessageId|$hash';
   }
 
   static Future<void> _doSend(

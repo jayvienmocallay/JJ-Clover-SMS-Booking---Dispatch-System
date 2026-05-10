@@ -9,7 +9,6 @@ import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/alarm_service.dart';
 import '../../data/services/app_event_bus.dart';
-import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/walk_in_alert.dart';
 import 'dashboard_screen.dart';
@@ -31,15 +30,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _showWalkInAlert = false;
   bool _isInitialLoading = true;
+  bool _isAutoRefreshing = false;
+  bool _autoRefreshPending = false;
 
   StreamSubscription? _messageSubscription;
   StreamSubscription? _orderSubscription;
-
-  late final _refreshTimer = !kIsWeb
-      ? Stream.periodic(
-          Duration(seconds: AppConstants.autoRefreshSeconds),
-        ).listen((_) => _autoRefresh())
-      : null;
 
   @override
   void initState() {
@@ -55,11 +50,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
 
     _messageSubscription = AppEventBus().onMessageReceived.listen((_) {
-      _autoRefresh();
+      unawaited(_autoRefresh());
     });
 
     _orderSubscription = AppEventBus().onOrderReceived.listen((_) {
-      _autoRefresh();
+      unawaited(_autoRefresh());
     });
 
     AlarmService.instance.addListener(_onAlarmChanged);
@@ -84,23 +79,38 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
   }
 
-  void _autoRefresh() {
+  Future<void> _autoRefresh() async {
     if (!mounted || kIsWeb) return;
-    context.read<OrderProvider>().loadOrders();
-    context.read<CustomerProvider>().loadCustomers();
-    unawaited(AlarmService.instance.syncPendingAlert());
+    if (_isAutoRefreshing) {
+      _autoRefreshPending = true;
+      return;
+    }
+
+    _isAutoRefreshing = true;
+    try {
+      await Future.wait([
+        context.read<OrderProvider>().loadOrders(),
+        context.read<CustomerProvider>().loadCustomers(),
+        AlarmService.instance.syncPendingAlert(),
+      ]);
+    } finally {
+      _isAutoRefreshing = false;
+      if (_autoRefreshPending && mounted) {
+        _autoRefreshPending = false;
+        unawaited(_autoRefresh());
+      }
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && !kIsWeb) {
-      _autoRefresh();
+      unawaited(_autoRefresh());
     }
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
     _messageSubscription?.cancel();
     _orderSubscription?.cancel();
     AlarmService.instance.removeListener(_onAlarmChanged);

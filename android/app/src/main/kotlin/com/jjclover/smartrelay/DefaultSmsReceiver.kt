@@ -16,20 +16,25 @@ class DefaultSmsReceiver : BroadcastReceiver() {
 
         executor.execute {
             try {
+                if (!isDeliver) {
+                    Log.i(TAG, "Ignoring ${intent.action}; default SMS processing uses SMS_DELIVER only.")
+                    return@execute
+                }
+
                 Log.i(TAG, "Received ${intent.action}; enqueueing SMS processing.")
 
                 val payloads = buildPayloads(intent)
-                if (isDeliver) {
-                    persistIncomingSms(appContext, payloads)
-                }
+                persistIncomingSms(appContext, payloads)
 
                 payloads.forEach { payload ->
-                    val started = SmsProcessingService.enqueue(appContext, payload)
-                    if (!started) {
-                        Log.w(TAG, "Falling back to direct Dart bridge processing.")
-                        SmsBackgroundBridge.processPayload(appContext, payload) { success ->
-                            if (!success) {
-                                Log.w(TAG, "Fallback SMS processing failed.")
+                    if (!MainActivity.dispatchSmsToForeground(payload)) {
+                        val started = SmsProcessingService.enqueue(appContext, payload)
+                        if (!started) {
+                            Log.w(TAG, "Falling back to direct Dart bridge processing.")
+                            SmsBackgroundBridge.processPayload(appContext, payload) { success ->
+                                if (!success) {
+                                    Log.w(TAG, "Fallback SMS processing failed.")
+                                }
                             }
                         }
                     }
@@ -137,10 +142,13 @@ class DefaultSmsReceiver : BroadcastReceiver() {
         body: String,
         timestamp: Long,
     ): Boolean {
+        val where = Telephony.Sms.ADDRESS + " = ? AND " +
+            Telephony.Sms.DATE + " = ? AND " +
+            Telephony.Sms.BODY + " = ?"
         val cursor = context.contentResolver.query(
             Telephony.Sms.Inbox.CONTENT_URI,
             arrayOf(Telephony.Sms._ID),
-            "${Telephony.Sms.ADDRESS} = ? AND ${Telephony.Sms.DATE} = ? AND ${Telephony.Sms.BODY} = ?",
+            where,
             arrayOf(address, timestamp.toString(), body),
             null,
         )

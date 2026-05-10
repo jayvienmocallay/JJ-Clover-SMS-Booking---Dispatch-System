@@ -12,7 +12,7 @@ import '../supabase_sync_service.dart';
 import 'sms_handler_utils.dart';
 
 /// Handles all RA 10173 privacy commands and the multi-step SMS registration
-/// state machine (REGISTER → AGREE → BARANGAY → ADDRESS).
+/// state machine (REGISTER -> AGREE -> BARANGAY -> ADDRESS).
 ///
 /// Returns `true` if the message was fully handled so the caller can skip
 /// the normal command dispatch (DELIVER / DROP / YES / STATUS).
@@ -33,6 +33,12 @@ class RegistrationFlowHandler {
       maxAge: SmsRegistrationCopy.pendingActionTtl,
     );
     final customerData = await _customers.getCustomerByPhone(normalizedSender);
+
+    // DROP is intentionally allowed for unregistered walk-in customers and
+    // must not be trapped by an unfinished registration flow.
+    if (parsed.command == SmsCommand.drop) {
+      return false;
+    }
 
     // --- Right to access (MYDATA) ---
     if (parsed.command == SmsCommand.myData) {
@@ -65,7 +71,7 @@ class RegistrationFlowHandler {
       return true;
     }
 
-    // --- Right to erasure / right to object — request phase ---
+    // --- Right to erasure / right to object - request phase ---
     if (parsed.command == SmsCommand.deleteData ||
         parsed.command == SmsCommand.optOut) {
       if (customerData == null && pending == null) {
@@ -91,7 +97,7 @@ class RegistrationFlowHandler {
       return true;
     }
 
-    // --- Right to erasure — confirmation phase ---
+    // --- Right to erasure - confirmation phase ---
     if (parsed.command == SmsCommand.confirmDelete) {
       if (pending == null || pending['action'] != 'delete') {
         await SmsHandlerUtils.sendReply(
@@ -415,7 +421,7 @@ class RegistrationFlowHandler {
         return true;
     }
 
-    // Unknown step — clear the row and treat as fresh
+    // Unknown step - clear the row and treat as fresh.
     await _pendingActions.delete(normalizedSender);
     return false;
   }

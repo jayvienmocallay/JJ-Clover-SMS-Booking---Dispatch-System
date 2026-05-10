@@ -3,26 +3,61 @@ package com.jjclover.smartrelay
 import android.app.role.RoleManager
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Telephony
-import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val channelName = "com.jjclover.smartrelay/default_sms"
+    private val defaultSmsChannelName = "com.jjclover.smartrelay/default_sms"
+    private val foregroundSmsChannelName = "com.jjclover.smartrelay/sms_foreground"
     private val requestDefaultSmsCode = 4107
     private var pendingDefaultSmsResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, defaultSmsChannelName).setMethodCallHandler { call, result ->
             when (call.method) {
                 "isDefaultSmsApp" -> result.success(isDefaultSmsApp())
                 "requestDefaultSmsApp" -> requestDefaultSmsApp(result)
                 else -> result.notImplemented()
             }
         }
+
+        foregroundSmsChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            foregroundSmsChannelName,
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setForegroundReady" -> {
+                        isForegroundSmsReady = call.arguments as? Boolean == true
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        isActivityResumed = true
+    }
+
+    override fun onPause() {
+        isActivityResumed = false
+        super.onPause()
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        isForegroundSmsReady = false
+        foregroundSmsChannel?.setMethodCallHandler(null)
+        foregroundSmsChannel = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     private fun isDefaultSmsApp(): Boolean {
@@ -70,6 +105,30 @@ class MainActivity : FlutterActivity() {
         if (requestCode == requestDefaultSmsCode) {
             pendingDefaultSmsResult?.success(isDefaultSmsApp())
             pendingDefaultSmsResult = null
+        }
+    }
+
+    companion object {
+        private var foregroundSmsChannel: MethodChannel? = null
+        private val mainHandler = Handler(Looper.getMainLooper())
+        @Volatile private var isActivityResumed = false
+        @Volatile private var isForegroundSmsReady = false
+
+        fun dispatchSmsToForeground(payload: SmsPayload): Boolean {
+            val channel = foregroundSmsChannel ?: return false
+            if (!isActivityResumed || !isForegroundSmsReady) return false
+            mainHandler.post {
+                channel.invokeMethod("processSms", payload.toMap())
+            }
+            return true
+        }
+
+        fun notifySmsDataChanged() {
+            val channel = foregroundSmsChannel ?: return
+            if (!isActivityResumed || !isForegroundSmsReady) return
+            mainHandler.post {
+                channel.invokeMethod("smsDataChanged", null)
+            }
         }
     }
 }
