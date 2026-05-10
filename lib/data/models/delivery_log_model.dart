@@ -21,9 +21,6 @@ class DeliveryLog {
   /// Number of gallons actually delivered to this household
   final int quantityDelivered;
 
-  /// Classification of gallons delivered: 'new' (household) or 'old' (store)
-  final String? gallonType;
-
   /// Optional notes about the delivery (e.g., 'left at gate', 'short 1 gallon')
   final String? notes;
 
@@ -42,7 +39,6 @@ class DeliveryLog {
     required this.customerId,
     this.staffId,
     required this.quantityDelivered,
-    this.gallonType,
     this.notes,
     this.returnedContainers,
     this.paymentMethod,
@@ -57,7 +53,6 @@ class DeliveryLog {
       customerId: map['customer_id'] as int,
       staffId: map['staff_id'] as int?,
       quantityDelivered: map['quantity_delivered'] as int,
-      gallonType: map['gallon_type'] as String?,
       notes: map['notes'] as String?,
       returnedContainers: map['returned_containers'] as int?,
       paymentMethod: map['payment_method'] as String?,
@@ -74,7 +69,6 @@ class DeliveryLog {
       'customer_id': customerId,
       if (staffId != null) 'staff_id': staffId,
       'quantity_delivered': quantityDelivered,
-      if (gallonType != null) 'gallon_type': gallonType,
       if (notes != null) 'notes': notes,
       if (returnedContainers != null) 'returned_containers': returnedContainers,
       if (paymentMethod != null) 'payment_method': paymentMethod,

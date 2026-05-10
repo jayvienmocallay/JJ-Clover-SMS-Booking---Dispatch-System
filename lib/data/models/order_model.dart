@@ -32,12 +32,6 @@ extension OrderStatusLabel on OrderStatus {
   }
 }
 
-/// Classifies gallons to prevent mixing between household and store use.
-/// Based on Scope & Zone Mapping document business rule:
-/// - [newGallon]: For household delivery (sealed, new water)
-/// - [oldGallon]: For store/refill use only
-enum GallonType { newGallon, oldGallon }
-
 /// Represents a customer order placed via SMS or walk-in.
 ///
 /// Orders are created by the background SMS service when a valid
@@ -57,9 +51,6 @@ class Order {
 
   /// Number of gallons requested
   final int quantity;
-
-  /// Classification of gallons: new (household) or old (store use)
-  final GallonType? gallonType;
 
   /// Optional delivery address (only for DELIVER commands with address)
   final String? address;
@@ -97,7 +88,6 @@ class Order {
     required this.phoneNumber,
     required this.type,
     required this.quantity,
-    this.gallonType,
     this.address,
     required this.status,
     required this.createdAt,
@@ -120,8 +110,6 @@ class Order {
       // Map string 'deliver'/'drop'/'unrecognized' back to the OrderType enum
       type: _parseType(map['type'] as String?),
       quantity: map['quantity'] as int,
-      // Map string 'new'/'old' back to GallonType enum, null if not set
-      gallonType: _parseGallonType(map['gallon_type'] as String?),
       address: map['address'] as String?,
       // Map string status back to OrderStatus enum
       status: _parseStatus(map['status'] as String),
@@ -171,21 +159,7 @@ class Order {
       case 'rejected':
         return OrderStatus.rejected;
       default:
-        return OrderStatus.pending;
-    }
-  }
-
-  /// Converts a gallon type string from the database to a [GallonType] enum.
-  /// Returns null if the value is not set or unrecognized.
-  static GallonType? _parseGallonType(String? gallonType) {
-    switch (gallonType) {
-      case 'new':
-        return GallonType.newGallon;
-      case 'old':
-        return GallonType.oldGallon;
-      default:
-        // null or unrecognized — gallon type not specified
-        return null;
+        throw ArgumentError('Unknown order status: $status');
     }
   }
 
@@ -233,15 +207,13 @@ class Order {
       'phone_number': phoneNumber,
       'type': typeStr,
       'quantity': quantity,
-      // Store gallon type as 'new' or 'old', omit if null
-      if (gallonType != null)
-        'gallon_type': gallonType == GallonType.newGallon ? 'new' : 'old',
       if (address != null) 'address': address,
       'status': statusStr,
       // Store DateTime as ISO 8601 string for consistent parsing
       'created_at': createdAt.toIso8601String(),
       if (deliveryDay != null) 'delivery_day': deliveryDay,
-      if (scheduledFor != null) 'scheduled_for': scheduledFor!.toIso8601String(),
+      if (scheduledFor != null)
+        'scheduled_for': scheduledFor!.toIso8601String(),
       // Store boolean as integer: 1 = true, 0 = false
       'is_pre_book': isPreBook ? 1 : 0,
       if (staffId != null) 'staff_id': staffId,

@@ -47,7 +47,6 @@ class DeliverCommandHandler {
         'rejected',
         sourceMessageId: sourceMessageId,
         quantity: parsed.quantity ?? 0,
-        gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
       );
       await SmsHandlerUtils.sendReply(
         sender,
@@ -66,7 +65,6 @@ class DeliverCommandHandler {
         'Unregistered',
         sourceMessageId: sourceMessageId,
         quantity: parsed.quantity ?? 0,
-        gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
       );
       await SmsHandlerUtils.sendReply(
         sender,
@@ -87,7 +85,6 @@ class DeliverCommandHandler {
         'Incomplete',
         sourceMessageId: sourceMessageId,
         quantity: parsed.quantity ?? 0,
-        gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
       );
       await SmsHandlerUtils.sendReply(
         sender,
@@ -119,7 +116,6 @@ class DeliverCommandHandler {
         'prebook',
         sourceMessageId: sourceMessageId,
         quantity: parsed.quantity ?? 0,
-        gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
       );
 
       if (validation.correctDay != null) {
@@ -129,7 +125,6 @@ class DeliverCommandHandler {
             customerId: customer.id!,
             phoneNumber: normalizedSender,
             quantity: parsed.quantity ?? 0,
-            gallonType: parsed.gallonType,
             address: parsed.address,
             deliveryDay: validation.correctDay!,
             scheduledFor: _scheduledDateForDay(
@@ -180,7 +175,6 @@ class DeliverCommandHandler {
         'Incomplete',
         sourceMessageId: sourceMessageId,
         quantity: parsed.quantity ?? 0,
-        gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
       );
 
       await SmsHandlerUtils.sendReply(
@@ -197,7 +191,6 @@ class DeliverCommandHandler {
       phoneNumber: normalizedSender,
       type: OrderType.deliver,
       quantity: parsed.quantity ?? 0,
-      gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
       address: parsed.address,
       status: orderStatus,
       createdAt: now,
@@ -260,8 +253,11 @@ class DeliverCommandHandler {
     final targetIndex = DeliveryDays.days.indexOf(deliveryDay);
     if (targetIndex == -1) return from;
     final offset = (targetIndex - currentIndex) % 7;
-    return DateTime(from.year, from.month, from.day)
-        .add(Duration(days: offset));
+    return DateTime(
+      from.year,
+      from.month,
+      from.day,
+    ).add(Duration(days: offset));
   }
 
   String? _findNextAvailableDay(List<Schedule> schedules, String currentDay) {

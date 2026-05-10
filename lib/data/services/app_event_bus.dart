@@ -13,11 +13,30 @@ class AppEventBus {
   Stream<void> get onMessageReceived => _messageReceivedController.stream;
   Stream<void> get onOrderReceived => _orderReceivedController.stream;
 
-  void notifyMessageReceived() => _messageReceivedController.add(null);
-  void notifyOrderReceived() => _orderReceivedController.add(null);
+  void notifyMessageReceived() {
+    if (_messageReceivedController.isClosed) return;
+    try {
+      _messageReceivedController.add(null);
+    } catch (_) {
+      // Event delivery must never break SMS processing or auto-replies.
+    }
+  }
+
+  void notifyOrderReceived() {
+    if (_orderReceivedController.isClosed) return;
+    try {
+      _orderReceivedController.add(null);
+    } catch (_) {
+      // Event delivery must never break SMS processing or order creation.
+    }
+  }
 
   void dispose() {
-    _messageReceivedController.close();
-    _orderReceivedController.close();
+    if (!_messageReceivedController.isClosed) {
+      _messageReceivedController.close();
+    }
+    if (!_orderReceivedController.isClosed) {
+      _orderReceivedController.close();
+    }
   }
 }

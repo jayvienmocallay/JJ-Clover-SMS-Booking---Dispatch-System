@@ -16,20 +16,25 @@ class DefaultSmsReceiver : BroadcastReceiver() {
 
         executor.execute {
             try {
+                if (!isDeliver) {
+                    Log.i(TAG, "Ignoring ${intent.action}; default SMS processing uses SMS_DELIVER only.")
+                    return@execute
+                }
+
                 Log.i(TAG, "Received ${intent.action}; enqueueing SMS processing.")
 
                 val payloads = buildPayloads(intent)
-                if (isDeliver) {
-                    persistIncomingSms(appContext, payloads)
-                }
+                persistIncomingSms(appContext, payloads)
 
                 payloads.forEach { payload ->
-                    val started = SmsProcessingService.enqueue(appContext, payload)
-                    if (!started) {
-                        Log.w(TAG, "Falling back to direct Dart bridge processing.")
-                        SmsBackgroundBridge.processPayload(appContext, payload) { success ->
-                            if (!success) {
-                                Log.w(TAG, "Fallback SMS processing failed.")
+                    if (!MainActivity.dispatchSmsToForeground(payload)) {
+                        val started = SmsProcessingService.enqueue(appContext, payload)
+                        if (!started) {
+                            Log.w(TAG, "Falling back to direct Dart bridge processing.")
+                            SmsBackgroundBridge.processPayload(appContext, payload) { success ->
+                                if (!success) {
+                                    Log.w(TAG, "Fallback SMS processing failed.")
+                                }
                             }
                         }
                     }
@@ -61,13 +66,21 @@ class DefaultSmsReceiver : BroadcastReceiver() {
 
         val subscriptionId = extractSubscriptionId(intent)
         return messages
-            .groupBy { it.originatingAddress.orEmpty() }
-            .mapNotNull { (sender, parts) ->
-                val body = parts.joinToString(separator = "") { it.messageBody.orEmpty() }
+            .groupBy { message ->
+                listOf(
+                    message.originatingAddress.orEmpty(),
+                    message.timestampMillis,
+                    message.indexOnIcc,
+                )
+            }
+            .mapNotNull { (_, parts) ->
+                val sortedParts = parts.sortedBy { it.indexOnIcc }
+                val first = sortedParts.first()
+                val sender = first.originatingAddress.orEmpty()
+                val body = sortedParts.joinToString(separator = "") { it.messageBody.orEmpty() }
                 if (sender.isBlank() || body.isBlank()) {
                     null
                 } else {
-                    val first = parts.first()
                     SmsPayload.create(
                         sender = sender,
                         message = body,
@@ -129,10 +142,13 @@ class DefaultSmsReceiver : BroadcastReceiver() {
         body: String,
         timestamp: Long,
     ): Boolean {
+        val where = Telephony.Sms.ADDRESS + " = ? AND " +
+            Telephony.Sms.DATE + " = ? AND " +
+            Telephony.Sms.BODY + " = ?"
         val cursor = context.contentResolver.query(
             Telephony.Sms.Inbox.CONTENT_URI,
             arrayOf(Telephony.Sms._ID),
-            "${Telephony.Sms.ADDRESS} = ? AND ${Telephony.Sms.DATE} = ? AND ${Telephony.Sms.BODY} = ?",
+            where,
             arrayOf(address, timestamp.toString(), body),
             null,
         )

@@ -40,7 +40,6 @@ class _AddOrderFormState extends State<AddOrderForm> {
 
   String _type = 'deliver';
   int _quantity = 1;
-  String _gallonType = 'new';
 
   @override
   void initState() {
@@ -71,9 +70,6 @@ class _AddOrderFormState extends State<AddOrderForm> {
     setState(() => _isSubmitting = true);
     try {
       final type = _type == 'deliver' ? OrderType.deliver : OrderType.drop;
-      final gallonType = _gallonType == 'new'
-          ? GallonType.newGallon
-          : GallonType.oldGallon;
 
       int? customerId;
       String phone = _phoneController.text.trim();
@@ -98,13 +94,17 @@ class _AddOrderFormState extends State<AddOrderForm> {
           throw const OrderCreationException('Please enter the phone number.');
         }
         if (address == null) {
-          throw const OrderCreationException('Please enter the delivery address.');
+          throw const OrderCreationException(
+            'Please enter the delivery address.',
+          );
         }
         if (_selectedBarangayId == null) {
           throw const OrderCreationException('Please select a barangay.');
         }
         if (!_consentGiven) {
-          throw const OrderCreationException('Please confirm customer consent.');
+          throw const OrderCreationException(
+            'Please confirm customer consent.',
+          );
         }
 
         customerId = await _customerRepository.insertCustomer({
@@ -124,7 +124,6 @@ class _AddOrderFormState extends State<AddOrderForm> {
         phoneNumber: phone,
         type: type,
         quantity: _quantity,
-        gallonType: gallonType,
         address: address,
       );
 
@@ -133,19 +132,19 @@ class _AddOrderFormState extends State<AddOrderForm> {
       await customerProvider.loadCustomers();
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order created ✓')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Order created ✓')));
     } on OrderCreationException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -201,7 +200,10 @@ class _AddOrderFormState extends State<AddOrderForm> {
               ],
             ),
             const SizedBox(height: 16),
-            Text('Quantity (gallons)', style: Theme.of(context).textTheme.labelMedium),
+            Text(
+              'Quantity (gallons)',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
             const SizedBox(height: 6),
             Row(
               children: [
@@ -225,16 +227,7 @@ class _AddOrderFormState extends State<AddOrderForm> {
                 }),
               ],
             ),
-            const SizedBox(height: 16),
-            Text('Gallon Type', style: Theme.of(context).textTheme.labelMedium),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                _buildGallonTypeOption('new', 'New', Icons.water_drop),
-                const SizedBox(width: 12),
-                _buildGallonTypeOption('old', 'Old', Icons.local_gas_station),
-              ],
-            ),
+
             const SizedBox(height: 24),
             PrimaryActionButton(
               label: _isSubmitting ? 'Creating...' : 'Create Order',
@@ -246,7 +239,9 @@ class _AddOrderFormState extends State<AddOrderForm> {
     );
   }
 
-  List<Map<String, dynamic>> _filteredCustomers(List<Map<String, dynamic>> customers) {
+  List<Map<String, dynamic>> _filteredCustomers(
+    List<Map<String, dynamic>> customers,
+  ) {
     if (_customerSearch.isEmpty) return customers;
     return customers.where((c) {
       final name = (c['name'] as String? ?? '').toLowerCase();
@@ -256,7 +251,9 @@ class _AddOrderFormState extends State<AddOrderForm> {
     }).toList();
   }
 
-  Widget _buildExistingCustomerPicker(List<Map<String, dynamic>> filteredCustomers) {
+  Widget _buildExistingCustomerPicker(
+    List<Map<String, dynamic>> filteredCustomers,
+  ) {
     final palette = AppColors.of(context);
     return Column(
       children: [
@@ -281,13 +278,19 @@ class _AddOrderFormState extends State<AddOrderForm> {
                   _selectedCustomerId = id;
                   _phoneController.text =
                       customer['contact_number'] as String? ?? '';
-                  _addressController.text = customer['address'] as String? ?? '';
+                  _addressController.text =
+                      customer['address'] as String? ?? '';
                 }),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   margin: const EdgeInsets.only(bottom: 4),
                   decoration: BoxDecoration(
-                    color: isSelected ? palette.primaryLight : palette.background,
+                    color: isSelected
+                        ? palette.primaryLight
+                        : palette.background,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isSelected ? palette.primary : palette.border,
@@ -300,14 +303,21 @@ class _AddOrderFormState extends State<AddOrderForm> {
                       Expanded(
                         child: Text(
                           '$name — ${customer['contact_number']}',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: isSelected ? palette.primary : palette.foreground,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: isSelected
+                                    ? palette.primary
+                                    : palette.foreground,
                               ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (isSelected)
-                        Icon(Icons.check_circle, size: 16, color: palette.primary),
+                        Icon(
+                          Icons.check_circle,
+                          size: 16,
+                          color: palette.primary,
+                        ),
                     ],
                   ),
                 ),
@@ -327,15 +337,23 @@ class _AddOrderFormState extends State<AddOrderForm> {
         const SizedBox(height: 6),
         _textField(
           controller: _phoneController,
-          hint: _type == 'drop' ? 'Optional for walk-in' : 'Required for delivery',
+          hint: _type == 'drop'
+              ? 'Optional for walk-in'
+              : 'Required for delivery',
           keyboardType: TextInputType.phone,
           digitsOnly: true,
         ),
         if (_type == 'deliver') ...[
           const SizedBox(height: 12),
-          Text('Delivery Address', style: Theme.of(context).textTheme.labelMedium),
+          Text(
+            'Delivery Address',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
           const SizedBox(height: 6),
-          _textField(controller: _addressController, hint: 'Required for guest delivery'),
+          _textField(
+            controller: _addressController,
+            hint: 'Required for guest delivery',
+          ),
         ],
       ],
     );
@@ -358,7 +376,10 @@ class _AddOrderFormState extends State<AddOrderForm> {
           digitsOnly: true,
         ),
         const SizedBox(height: 12),
-        Text('Delivery Address', style: Theme.of(context).textTheme.labelMedium),
+        Text(
+          'Delivery Address',
+          style: Theme.of(context).textTheme.labelMedium,
+        ),
         const SizedBox(height: 6),
         _textField(controller: _addressController, hint: 'Full address'),
         const SizedBox(height: 12),
@@ -418,17 +439,23 @@ class _AddOrderFormState extends State<AddOrderForm> {
           decoration: BoxDecoration(
             color: isSelected ? palette.primaryLight : palette.background,
             borderRadius: BorderRadius.circular(kButtonRadius),
-            border: Border.all(color: isSelected ? palette.primary : palette.border),
+            border: Border.all(
+              color: isSelected ? palette.primary : palette.border,
+            ),
           ),
           child: Column(
             children: [
-              Icon(icon, size: 16, color: isSelected ? palette.primary : palette.mutedForeground),
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? palette.primary : palette.mutedForeground,
+              ),
               const SizedBox(height: 4),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: isSelected ? palette.primary : palette.mutedForeground,
-                    ),
+                  color: isSelected ? palette.primary : palette.mutedForeground,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -448,16 +475,6 @@ class _AddOrderFormState extends State<AddOrderForm> {
     );
   }
 
-  Widget _buildGallonTypeOption(String value, String label, IconData icon) {
-    final isSelected = _gallonType == value;
-    return _choiceBox(
-      selected: isSelected,
-      label: label,
-      icon: icon,
-      onTap: () => setState(() => _gallonType = value),
-    );
-  }
-
   Widget _choiceBox({
     required bool selected,
     required String label,
@@ -474,19 +491,25 @@ class _AddOrderFormState extends State<AddOrderForm> {
           decoration: BoxDecoration(
             color: selected ? palette.primaryLight : palette.background,
             borderRadius: BorderRadius.circular(kButtonRadius),
-            border: Border.all(color: selected ? palette.primary : palette.border),
+            border: Border.all(
+              color: selected ? palette.primary : palette.border,
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: selected ? palette.primary : palette.mutedForeground),
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? palette.primary : palette.mutedForeground,
+              ),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: selected ? palette.primary : palette.mutedForeground,
-                    ),
+                  fontWeight: FontWeight.w500,
+                  color: selected ? palette.primary : palette.mutedForeground,
+                ),
               ),
             ],
           ),
@@ -544,7 +567,10 @@ class _AddOrderFormState extends State<AddOrderForm> {
               ? null
               : Icon(icon, size: 18, color: palette.mutedForeground),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
         ),
       ),
     );

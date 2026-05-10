@@ -27,7 +27,9 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
 
   Future<void> _loadLogs() async {
     setState(() => _loading = true);
-    final rawLogs = await context.read<DeliveryLogRepository>().getDeliveryLogs();
+    final rawLogs = await context
+        .read<DeliveryLogRepository>()
+        .getDeliveryLogs();
     setState(() {
       _allLogs = rawLogs.map(DeliveryLog.fromMap).toList();
       _loading = false;
@@ -61,8 +63,10 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
     }
 
     final logs = _filteredLogs;
-    final totalGallons =
-        logs.fold<int>(0, (sum, l) => sum + l.quantityDelivered);
+    final totalGallons = logs.fold<int>(
+      0,
+      (sum, l) => sum + l.quantityDelivered,
+    );
 
     return Scaffold(
       backgroundColor: AppColors.of(context).background,
@@ -84,7 +88,9 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
       ),
       body: _loading
           ? Center(
-              child: CircularProgressIndicator(color: AppColors.of(context).primary),
+              child: CircularProgressIndicator(
+                color: AppColors.of(context).primary,
+              ),
             )
           : RefreshIndicator(
               onRefresh: _loadLogs,
@@ -257,7 +263,9 @@ class _FilterChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.of(context).primary : AppColors.of(context).muted,
+          color: selected
+              ? AppColors.of(context).primary
+              : AppColors.of(context).muted,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -265,7 +273,9 @@ class _FilterChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: selected ? Colors.white : AppColors.of(context).mutedForeground,
+            color: selected
+                ? Colors.white
+                : AppColors.of(context).mutedForeground,
           ),
         ),
       ),
@@ -282,8 +292,7 @@ class _DeliveryLogCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final qty = log.quantityDelivered;
-    final gallonText =
-        '$qty gallon${qty > 1 ? "s" : ""}${log.gallonType?.isNotEmpty == true ? " (${log.gallonType})" : ""}';
+    final quantityText = '$qty gallon${qty > 1 ? "s" : ""}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -324,7 +333,7 @@ class _DeliveryLogCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  gallonText,
+                  quantityText,
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.of(context).mutedForeground,
@@ -397,9 +406,8 @@ class _DeliveryLogCard extends StatelessWidget {
 
   String _formatDateTime(DateTime dt) {
     final now = DateTime.now();
-    final isToday = dt.year == now.year &&
-        dt.month == now.month &&
-        dt.day == now.day;
+    final isToday =
+        dt.year == now.year && dt.month == now.month && dt.day == now.day;
     final hour = dt.hour > 12 ? dt.hour - 12 : dt.hour;
     final displayHour = hour == 0 ? 12 : hour;
     final minute = dt.minute.toString().padLeft(2, '0');
@@ -407,8 +415,18 @@ class _DeliveryLogCard extends StatelessWidget {
     final timeStr = '$displayHour:$minute $period';
     if (isToday) return timeStr;
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[dt.month - 1]} ${dt.day}, $timeStr';
   }

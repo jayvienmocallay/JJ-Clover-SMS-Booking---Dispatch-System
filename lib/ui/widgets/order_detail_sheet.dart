@@ -51,7 +51,9 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     final id = widget.order.id;
     if (id == null) return;
     setState(() => _loadingLogs = true);
-    final logs = await context.read<OrderRepository>().getDeliveryLogsForOrder(id);
+    final logs = await context.read<OrderRepository>().getDeliveryLogsForOrder(
+      id,
+    );
     if (!mounted) return;
     setState(() {
       _logs = logs;
@@ -86,22 +88,23 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => StaffAssignmentSheet(initialStaffId: widget.order.staffId),
+      builder: (_) =>
+          StaffAssignmentSheet(initialStaffId: widget.order.staffId),
     );
     if (staffId == null) return;
     await provider.assignStaffToOrder(orderId, staffId);
     if (!mounted) return;
     if (provider.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.error!)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(provider.error!)));
       return;
     }
     widget.onCompleted?.call();
     Navigator.pop(context, true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Staff assigned ✓')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Staff assigned ✓')));
   }
 
   Future<void> _showDeliveryIssueSheet() async {
@@ -125,9 +128,9 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     );
     if (!mounted) return;
     if (provider.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.error!)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(provider.error!)));
       return;
     }
     widget.onCompleted?.call();
@@ -161,15 +164,23 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
               _detailRow('Phone', widget.phone ?? order.phoneNumber),
               _detailRow('Type', _typeLabel(order.type)),
               _detailRow('Status', order.status.displayLabel),
-              _detailRow('Quantity', '${order.quantity} gallon${order.quantity == 1 ? '' : 's'}'),
-              _detailRow('Gallon type', order.gallonType == GallonType.oldGallon ? 'Old' : 'New'),
-              if (order.staffId != null) _detailRow('Assigned staff', '#${order.staffId}'),
-              if (widget.address?.isNotEmpty == true) _detailRow('Address', widget.address!),
-              if (widget.barangay?.isNotEmpty == true) _detailRow('Barangay', widget.barangay!),
-              if (order.deliveryDay != null) _detailRow('Delivery day', order.deliveryDay!),
-              if (order.scheduledFor != null) _detailRow('Scheduled date', _formatDate(order.scheduledFor!)),
+              _detailRow(
+                'Quantity',
+                '${order.quantity} gallon${order.quantity == 1 ? '' : 's'}',
+              ),
+              if (order.staffId != null)
+                _detailRow('Assigned staff', '#${order.staffId}'),
+              if (widget.address?.isNotEmpty == true)
+                _detailRow('Address', widget.address!),
+              if (widget.barangay?.isNotEmpty == true)
+                _detailRow('Barangay', widget.barangay!),
+              if (order.deliveryDay != null)
+                _detailRow('Delivery day', order.deliveryDay!),
+              if (order.scheduledFor != null)
+                _detailRow('Scheduled date', _formatDate(order.scheduledFor!)),
               _detailRow('Created', _formatDateTime(order.createdAt)),
-              if (order.cancelReason?.isNotEmpty == true) _detailRow('Reason', order.cancelReason!),
+              if (order.cancelReason?.isNotEmpty == true)
+                _detailRow('Reason', order.cancelReason!),
             ]),
             const SizedBox(height: 16),
             if (_actions.isNotEmpty) ...[
@@ -178,7 +189,10 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
               _sectionCard(_actions),
               const SizedBox(height: 16),
             ],
-            Text('Delivery log', style: Theme.of(context).textTheme.labelMedium),
+            Text(
+              'Delivery log',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
             const SizedBox(height: 8),
             if (_loadingLogs)
               Center(child: CircularProgressIndicator(color: palette.primary))
@@ -196,19 +210,40 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     final order = widget.order;
     return [
       if (order.status == OrderStatus.pending && widget.onConfirm != null)
-        _actionRow(Icons.check_circle_outline, 'Confirm order', widget.onConfirm!),
+        _actionRow(
+          Icons.check_circle_outline,
+          'Confirm order',
+          widget.onConfirm!,
+        ),
       if (order.status == OrderStatus.pending && widget.onReject != null)
         _actionRow(Icons.cancel_outlined, 'Reject order', widget.onReject!),
       if ((order.status == OrderStatus.confirmed ||
               order.status == OrderStatus.inTransit) &&
           order.type != OrderType.unrecognized)
-        _actionRow(Icons.badge_outlined, 'Assign staff', _showStaffAssignmentSheet),
-      if (order.status == OrderStatus.confirmed && widget.onStartDelivery != null)
-        _actionRow(Icons.local_shipping_outlined, 'Start delivery', widget.onStartDelivery!),
+        _actionRow(
+          Icons.badge_outlined,
+          'Assign staff',
+          _showStaffAssignmentSheet,
+        ),
+      if (order.status == OrderStatus.confirmed &&
+          widget.onStartDelivery != null)
+        _actionRow(
+          Icons.local_shipping_outlined,
+          'Start delivery',
+          widget.onStartDelivery!,
+        ),
       if (order.status == OrderStatus.inTransit)
-        _actionRow(Icons.report_problem_outlined, 'Record delivery issue', _showDeliveryIssueSheet),
+        _actionRow(
+          Icons.report_problem_outlined,
+          'Record delivery issue',
+          _showDeliveryIssueSheet,
+        ),
       if (order.status == OrderStatus.inTransit)
-        _actionRow(Icons.check_circle, 'Complete delivery', _showCompletionSheet),
+        _actionRow(
+          Icons.check_circle,
+          'Complete delivery',
+          _showCompletionSheet,
+        ),
     ];
   }
 
@@ -276,7 +311,9 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
           children: [
             Icon(icon, size: 20, color: palette.primary),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium)),
+            Expanded(
+              child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+            ),
             Icon(Icons.chevron_right, color: palette.mutedForeground),
           ],
         ),
@@ -296,12 +333,32 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('$qty gallon${qty == 1 ? '' : 's'} delivered', style: Theme.of(context).textTheme.bodyMedium),
-          if (staffId != null) Text('Staff #$staffId', style: Theme.of(context).textTheme.bodySmall),
-          if (returned != null) Text('$returned returned container${returned == 1 ? '' : 's'}', style: Theme.of(context).textTheme.bodySmall),
-          if (paymentMethod == 'cash') Text('Cash collected', style: Theme.of(context).textTheme.bodySmall),
-          if (notes?.isNotEmpty == true) Text(notes!, style: Theme.of(context).textTheme.bodySmall),
-          if (deliveredAt != null) Text(_formatDateTime(deliveredAt), style: Theme.of(context).textTheme.labelSmall),
+          Text(
+            '$qty gallon${qty == 1 ? '' : 's'} delivered',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (staffId != null)
+            Text(
+              'Staff #$staffId',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          if (returned != null)
+            Text(
+              '$returned returned container${returned == 1 ? '' : 's'}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          if (paymentMethod == 'cash')
+            Text(
+              'Cash collected',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          if (notes?.isNotEmpty == true)
+            Text(notes!, style: Theme.of(context).textTheme.bodySmall),
+          if (deliveredAt != null)
+            Text(
+              _formatDateTime(deliveredAt),
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
         ],
       ),
     );
@@ -318,7 +375,8 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     }
   }
 
-  String _formatDate(DateTime dt) => '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  String _formatDate(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 
   String _formatDateTime(DateTime dt) {
     final minute = dt.minute.toString().padLeft(2, '0');

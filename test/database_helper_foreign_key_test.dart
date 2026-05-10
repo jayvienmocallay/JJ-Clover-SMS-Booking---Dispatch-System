@@ -64,7 +64,6 @@ void main() {
       'phone_number': '09171234567',
       'type': 'deliver',
       'quantity': 3,
-      'gallon_type': 'new',
       'address': 'Purok 1',
       'status': 'completed',
       'created_at': orderCreatedAt,
@@ -78,7 +77,6 @@ void main() {
       'customer_id': customerId,
       'staff_id': 7,
       'quantity_delivered': 3,
-      'gallon_type': 'new',
       'notes': 'Delivered in full',
       'delivered_at': DateTime(2026, 4, 26, 9).toIso8601String(),
     });
@@ -138,7 +136,6 @@ void main() {
         'phone_number': '09181234567',
         'type': 'deliver',
         'quantity': 2,
-        'gallon_type': 'new',
         'address': 'Purok 2',
         'status': 'in_transit',
         'created_at': DateTime(2026, 4, 26, 8).toIso8601String(),
@@ -170,7 +167,6 @@ void main() {
       expect(logs.single['order_id'], orderId);
       expect(logs.single['customer_id'], customerId);
       expect(logs.single['quantity_delivered'], 2);
-      expect(logs.single['gallon_type'], 'new');
       expect(logs.single['staff_id'], 12);
       expect(logs.single['notes'], 'Delivered in full');
       expect(logs.single['delivered_at'], deliveredAt.toIso8601String());
@@ -188,7 +184,6 @@ void main() {
         'phone_number': '09189998888',
         'type': 'deliver',
         'quantity': 1,
-        'gallon_type': 'new',
         'status': 'in_transit',
         'created_at': DateTime(2026, 4, 26, 8).toIso8601String(),
         'is_pre_book': 0,

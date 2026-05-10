@@ -230,6 +230,9 @@ object SmsBackgroundBridge : MethodChannel.MethodCallHandler {
         task.processTimeout?.let { mainHandler.removeCallbacks(it) }
         task.processTimeout = null
         task.complete(success)
+        if (success) {
+            MainActivity.notifySmsDataChanged()
+        }
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {

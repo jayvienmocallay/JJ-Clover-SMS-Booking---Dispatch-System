@@ -14,7 +14,7 @@ class OrderCreationException implements Exception {
 
 class OrderCreationService {
   OrderCreationService({OrderRepository? orderRepository})
-      : _orders = orderRepository ?? OrderRepository();
+    : _orders = orderRepository ?? OrderRepository();
 
   final OrderRepository _orders;
 
@@ -35,7 +35,8 @@ class OrderCreationService {
     final data = order.toMap();
     data['phone_number'] = normalizedPhone;
     data['source'] = source;
-    data['scheduled_for'] ??= order.scheduledFor?.toIso8601String() ??
+    data['scheduled_for'] ??=
+        order.scheduledFor?.toIso8601String() ??
         DateTime(
           order.createdAt.year,
           order.createdAt.month,
@@ -48,7 +49,6 @@ class OrderCreationService {
     required String phoneNumber,
     required OrderType type,
     required int quantity,
-    required GallonType gallonType,
     int? customerId,
     String? address,
     String? deliveryDay,
@@ -60,7 +60,6 @@ class OrderCreationService {
       phoneNumber: PhoneNumberUtils.normalize(phoneNumber),
       type: type,
       quantity: quantity,
-      gallonType: gallonType,
       address: _blankToNull(address),
       status: OrderStatus.pending,
       createdAt: now,

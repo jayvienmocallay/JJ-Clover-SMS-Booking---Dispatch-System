@@ -1169,7 +1169,6 @@ class OrderCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              '${order.quantity} gal · ${order.gallonType == GallonType.newGallon ? "New" : "Old"}',
                               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                 fontWeight: FontWeight.w500,
                                 color: AppColors.mutedForeground,
@@ -1414,7 +1413,6 @@ class OrderCard extends StatelessWidget {
             else
               ...logs.map((log) {
                 final qty = log['quantity_delivered'] as int? ?? 0;
-                final gType = log['gallon_type'] as String? ?? '';
                 final notes = log['notes'] as String? ?? '';
                 final deliveredAt = log['delivered_at'] as String? ?? '';
                 String timeStr = '';
@@ -2758,7 +2756,6 @@ class _AddOrderFormState extends State<_AddOrderForm> {
   final _phoneController = TextEditingController();
   String _type = 'deliver';
   int _quantity = 1;
-  String _gallonType = 'new';
 
   @override
   void dispose() {
@@ -2795,7 +2792,6 @@ class _AddOrderFormState extends State<_AddOrderForm> {
       'phone_number': phone,
       'type': _type,
       'quantity': _quantity,
-      'gallon_type': _gallonType,
       'status': 'pending',
       'created_at': DateTime.now().toIso8601String(),
       'is_pre_book': 0,
@@ -3013,15 +3009,12 @@ class _AddOrderFormState extends State<_AddOrderForm> {
 
           // Gallon type
           Text(
-            'Gallon Type',
             style: Theme.of(context).textTheme.labelMedium,
           ),
           const SizedBox(height: 6),
           Row(
             children: [
-              _buildGallonTypeOption('new', 'New', Icons.water_drop),
               const SizedBox(width: 12),
-              _buildGallonTypeOption('old', 'Old', Icons.local_gas_station),
             ],
           ),
           const SizedBox(height: 24),
@@ -3149,11 +3142,8 @@ class _AddOrderFormState extends State<_AddOrderForm> {
     );
   }
 
-  Widget _buildGallonTypeOption(String value, String label, IconData icon) {
-    final isSelected = _gallonType == value;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _gallonType = value),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),

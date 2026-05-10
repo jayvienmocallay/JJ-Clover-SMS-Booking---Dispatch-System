@@ -31,6 +31,10 @@ const MethodChannel _nativeSmsBackgroundChannel = MethodChannel(
   'com.jjclover.smartrelay/sms_background',
 );
 
+const MethodChannel _nativeSmsForegroundChannel = MethodChannel(
+  'com.jjclover.smartrelay/sms_foreground',
+);
+
 final _databaseRuntime = DatabaseRuntimeRepository();
 
 @pragma('vm:entry-point')
@@ -43,33 +47,16 @@ Future<void> smsNativeBackgroundMain() async {
       throw MissingPluginException('Unknown native SMS method: ${call.method}');
     }
 
-    final rawArgs = call.arguments;
-    if (rawArgs is! Map) {
-      throw ArgumentError('Native SMS payload must be a map.');
-    }
-
-    final args = Map<Object?, Object?>.from(rawArgs);
-    final sender = args['sender']?.toString() ?? '';
-    final message = args['message']?.toString() ?? '';
-    final rawTimestamp = args['timestamp'];
-    final timestamp = rawTimestamp is int
-        ? rawTimestamp
-        : int.tryParse(rawTimestamp?.toString() ?? '');
-    final rawSubscriptionId = args['subscriptionId'];
-    final subscriptionId = rawSubscriptionId is int
-        ? rawSubscriptionId
-        : int.tryParse(rawSubscriptionId?.toString() ?? '');
-    final sourceMessageId = args['sourceMessageId']?.toString();
-
+    final args = _coerceSmsPayload(call.arguments);
     try {
       await _ensureSmsRuntimeReady();
       await SmsBackgroundService.instance._processIncomingSmsPayload(
-        sender: sender,
-        message: message,
-        timestamp: timestamp,
-        subscriptionId: subscriptionId,
-        serviceCenterAddress: args['serviceCenterAddress']?.toString(),
-        sourceMessageId: sourceMessageId,
+        sender: args.sender,
+        message: args.message,
+        timestamp: args.timestamp,
+        subscriptionId: args.subscriptionId,
+        serviceCenterAddress: args.serviceCenterAddress,
+        sourceMessageId: args.sourceMessageId,
         smsSender: Telephony.backgroundInstance,
       );
     } catch (e, st) {
@@ -119,6 +106,7 @@ class SmsBackgroundService {
   late final RegistrationFlowHandler _registrationHandler;
 
   bool _isListening = false;
+  bool _foregroundChannelReady = false;
 
   SmsBackgroundService._internal() {
     _deliverHandler = DeliverCommandHandler(_preBookStore);
@@ -135,24 +123,68 @@ class SmsBackgroundService {
   void setMode(SystemMode mode) => _modeManager.setMode(mode);
 
   Future<void> startListening() async {
+    await _preBookStore.loadFromDb();
+    await _startForegroundChannel();
+
     if (_isListening) return;
 
-    await _preBookStore.loadFromDb();
-
-    _telephony.listenIncomingSms(
-      onNewMessage: (SmsMessage msg) {
-        unawaited(_guardForegroundSmsProcessing(_processIncomingSms(msg)));
-      },
-      onBackgroundMessage: smsBackgroundMessageHandler,
-    );
-
+    // This app is the default SMS app and receives SMS_DELIVER through
+    // DefaultSmsReceiver. Do not also register another_telephony.listenIncomingSms;
+    // that creates duplicate processors for one physical SMS.
     _isListening = true;
-    debugPrint('SMS Background Service started');
+    debugPrint('SMS native receiver bridge started');
   }
 
-  void stopListening() {
+  Future<void> _startForegroundChannel() async {
+    if (_foregroundChannelReady) return;
+    _nativeSmsForegroundChannel.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'processSms':
+          final args = _coerceSmsPayload(call.arguments);
+          await _guardForegroundSmsProcessing(
+            _processIncomingSmsPayload(
+              sender: args.sender,
+              message: args.message,
+              timestamp: args.timestamp,
+              subscriptionId: args.subscriptionId,
+              serviceCenterAddress: args.serviceCenterAddress,
+              sourceMessageId: args.sourceMessageId,
+              smsSender: _telephony,
+            ),
+          );
+          return true;
+        case 'smsDataChanged':
+          AppEventBus().notifyMessageReceived();
+          AppEventBus().notifyOrderReceived();
+          return true;
+        default:
+          throw MissingPluginException('Unknown foreground SMS method: ${call.method}');
+      }
+    });
+    _foregroundChannelReady = true;
+    try {
+      await _nativeSmsForegroundChannel.invokeMethod<void>(
+        'setForegroundReady',
+        true,
+      );
+    } catch (e) {
+      debugPrint('Unable to mark foreground SMS channel ready: $e');
+    }
+  }
+
+  Future<void> stopListening() async {
     _isListening = false;
-    debugPrint('SMS Background Service stopped');
+    if (_foregroundChannelReady) {
+      try {
+        await _nativeSmsForegroundChannel.invokeMethod<void>(
+          'setForegroundReady',
+          false,
+        );
+      } catch (e) {
+        debugPrint('Unable to mark foreground SMS channel stopped: $e');
+      }
+    }
+    debugPrint('SMS native receiver bridge stopped');
   }
 
   @visibleForTesting
@@ -222,7 +254,11 @@ class SmsBackgroundService {
           sourceMessageId: effectiveSourceMessageId,
         );
       } else {
-        debugPrint('Message still processing, skipped: $effectiveSourceMessageId');
+        debugPrint(
+          'Message still processing, skipped: $effectiveSourceMessageId',
+        );
+        AppEventBus().notifyMessageReceived();
+        AppEventBus().notifyOrderReceived();
       }
       return;
     }
@@ -323,7 +359,6 @@ class SmsBackgroundService {
             'Unrecognized',
             sourceMessageId: effectiveSourceMessageId,
             quantity: parsed.quantity ?? 0,
-            gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
           );
           await SmsHandlerUtils.sendReply(
             sender,
@@ -374,7 +409,9 @@ class SmsBackgroundService {
 
     final customerData = await _customers.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
-      debugPrint('First-contact registration prompt skipped for unregistered $normalizedSender');
+      debugPrint(
+        'First-contact registration prompt skipped for unregistered $normalizedSender',
+      );
       return;
     }
 
@@ -388,4 +425,43 @@ class SmsBackgroundService {
     await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
     debugPrint('First-contact automated reply sent to $normalizedSender');
   }
+}
+
+_SmsPayloadArgs _coerceSmsPayload(Object? rawArgs) {
+  if (rawArgs is! Map) {
+    throw ArgumentError('Native SMS payload must be a map.');
+  }
+  final args = Map<Object?, Object?>.from(rawArgs);
+  final rawTimestamp = args['timestamp'];
+  final rawSubscriptionId = args['subscriptionId'];
+  return _SmsPayloadArgs(
+    sourceMessageId: args['sourceMessageId']?.toString(),
+    sender: args['sender']?.toString() ?? '',
+    message: args['message']?.toString() ?? '',
+    timestamp: rawTimestamp is int
+        ? rawTimestamp
+        : int.tryParse(rawTimestamp?.toString() ?? ''),
+    subscriptionId: rawSubscriptionId is int
+        ? rawSubscriptionId
+        : int.tryParse(rawSubscriptionId?.toString() ?? ''),
+    serviceCenterAddress: args['serviceCenterAddress']?.toString(),
+  );
+}
+
+class _SmsPayloadArgs {
+  final String? sourceMessageId;
+  final String sender;
+  final String message;
+  final int? timestamp;
+  final int? subscriptionId;
+  final String? serviceCenterAddress;
+
+  const _SmsPayloadArgs({
+    required this.sourceMessageId,
+    required this.sender,
+    required this.message,
+    required this.timestamp,
+    required this.subscriptionId,
+    required this.serviceCenterAddress,
+  });
 }

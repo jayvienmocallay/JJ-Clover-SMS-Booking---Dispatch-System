@@ -1,5 +1,4 @@
 // Task 004 — SMS Parser: regex-based command extraction from incoming messages
-// Task 007 — Updated DELIVER regex to capture gallon type (NEW/OLD)
 // Task 015 — Added zero quantity validation
 // Task 020 — Added REGISTER/AGREE/STOP/BARANGAY/ADDRESS/MYDATA/DELETEDATA/
 //            CONFIRM DELETE/OPTOUT for RA 10173 self-registration & data rights
@@ -29,12 +28,11 @@ enum SmsCommand {
 /// Holds the parsed result of an incoming SMS message.
 ///
 /// After regex matching, this object contains the identified command type
-/// along with any extracted parameters (quantity, gallon type, address,
-/// registration name, barangay name).
+/// along with any extracted parameters (quantity, address, registration name,
+/// barangay name).
 class ParsedSms {
   final SmsCommand command;
   final int? quantity;
-  final String? gallonType;
   final String? address;
   final String? name;
   final String? barangayName;
@@ -43,7 +41,6 @@ class ParsedSms {
   ParsedSms({
     required this.command,
     this.quantity,
-    this.gallonType,
     this.address,
     this.name,
     this.barangayName,
@@ -59,9 +56,7 @@ class ParsedSms {
 ///
 /// Supported formats:
 /// - `DELIVER [qty]` — e.g., "DELIVER 5"
-/// - `DELIVER [qty] NEW|OLD` — e.g., "DELIVER 3 NEW"
 /// - `DELIVER [qty] [address]` — e.g., "DELIVER 2 Purok 4"
-/// - `DELIVER [qty] NEW|OLD [address]` — e.g., "DELIVER 3 NEW Purok 4"
 /// - `DROP [qty]` — e.g., "DROP 2"
 /// - `YES` — confirms a pre-booking offer
 /// - `CANCEL` - cancels the latest pending/confirmed order or pre-book offer
@@ -74,13 +69,12 @@ class ParsedSms {
 /// - `DELETEDATA` / `OPTOUT` — request deletion (RA 10173 right to erasure)
 /// - `CONFIRM DELETE` — confirms a pending deletion request
 class SmsParser {
-  /// Matches: DELIVER [qty] [optional: NEW|OLD] [optional: address]
+  /// Matches: DELIVER [qty] [optional: address]
   /// Group 1 = quantity (required digits, max 4 digits for safety)
-  /// Group 2 = gallon type (optional: NEW or OLD)
-  /// Group 3 = address (optional: remaining text after gallon type)
-  /// Uses [\s\S] instead of . to match newlines in multiline SMS
+  /// Group 2 = address (optional: remaining text)
+  /// Uses [\s\S] instead of . to match newlines in multiline SMS.
   static final RegExp _deliverRegex = RegExp(
-    r'^DELIVER\s+(\d{1,4})(?:\s+(NEW|OLD))?(?:\s+([\s\S]+))?$',
+    r'^DELIVER\s+(\d{1,4})(?:\s+([\s\S]+))?$',
     caseSensitive: false,
   );
 
@@ -152,16 +146,11 @@ class SmsParser {
   }
 
   static String? _cleanAddress(String? value) {
-    return value?.trim();
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   /// Parses an incoming SMS message into a [ParsedSms] command object.
-  ///
-  /// The message is trimmed and matched case-insensitively against regex
-  /// patterns in priority order:
-  /// DELIVER > DROP > YES > CANCEL > STATUS >
-  /// REGISTER > AGREE > STOP > BARANGAY > ADDRESS >
-  /// MYDATA > DELETEDATA > CONFIRM DELETE > OPTOUT > UNKNOWN.
   static ParsedSms parse(String message) {
     final trimmed = message.trim();
 
@@ -171,14 +160,11 @@ class SmsParser {
       if (qty == null) {
         return ParsedSms(command: SmsCommand.unknown, rawMessage: message);
       }
-      final gallonTypeRaw = deliverMatch.group(2);
-      final gallonType = gallonTypeRaw?.toLowerCase();
 
       return ParsedSms(
         command: SmsCommand.deliver,
         quantity: qty,
-        gallonType: gallonType,
-        address: _cleanAddress(deliverMatch.group(3)),
+        address: _cleanAddress(deliverMatch.group(2)),
         rawMessage: message,
       );
     }
@@ -271,13 +257,10 @@ class SmsParser {
     if (deliverMatch != null) {
       final qty = _parseValidQuantity(deliverMatch.group(1));
       if (qty == null) return null;
-      final gallonTypeRaw = deliverMatch.group(2);
-      final gallonType = gallonTypeRaw?.toLowerCase();
       return ParsedSms(
         command: SmsCommand.deliver,
         quantity: qty,
-        gallonType: gallonType,
-        address: _cleanAddress(deliverMatch.group(3)),
+        address: _cleanAddress(deliverMatch.group(2)),
         rawMessage: message,
       );
     }
