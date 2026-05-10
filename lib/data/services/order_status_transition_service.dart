@@ -34,7 +34,9 @@ class OrderStatusTransitionService {
             next == OrderStatus.cancelled ||
             next == OrderStatus.rejected;
       case OrderStatus.inTransit:
-        return next == OrderStatus.completed;
+        return next == OrderStatus.completed ||
+            next == OrderStatus.confirmed ||
+            next == OrderStatus.rejected;
       case OrderStatus.completed:
       case OrderStatus.cancelled:
       case OrderStatus.rejected:

@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../core/constants/app_constants.dart';
+
 import '../../data/models/order_model.dart';
-import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
+import '../../data/providers/order_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_order_form.dart';
 import '../widgets/complete_order_sheet.dart';
+import '../widgets/dispatch_grouping.dart';
 import '../widgets/order_card.dart';
 import '../widgets/order_detail_sheet.dart';
 import '../widgets/shared/app_page_header.dart';
-import '../widgets/shared/filter_chip_row.dart';
 import '../widgets/shared/empty_state.dart';
-import '../widgets/shared/bottom_sheet_handle.dart';
-import '../widgets/shared/primary_action_button.dart';
-import '../widgets/shared/customer_avatar.dart';
+import '../widgets/shared/filter_chip_row.dart';
 import 'delivery_logs_screen.dart';
 import 'order_history_screen.dart';
 
@@ -36,7 +33,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   List<Map<String, dynamic>> _filterOrders(List<Map<String, dynamic>> orders) {
     final type = _filterTypes[_filterIndex];
     if (type == 'all') return orders;
-    return orders.where((o) => o['type'] == type).toList();
+    return orders.where((order) => order['type'] == type).toList();
   }
 
   void _showAddOrderSheet() {
@@ -125,19 +122,108 @@ class _OrdersScreenState extends State<OrdersScreen> {
     if (changed == true) await orderProv.loadOrders();
   }
 
+  Map<String, dynamic> _enrichOrder(
+    Map<String, dynamic> order,
+    Map<int, Map<String, dynamic>> customerCache,
+  ) {
+    final customerId = order['customer_id'] as int?;
+    final customer = customerId == null ? null : customerCache[customerId];
+    return {
+      ...order,
+      if (customer?['name'] != null) 'customer_name': customer!['name'],
+      if (customer?['address'] != null) 'customer_address': customer!['address'],
+      if (customer?['barangay'] != null) 'barangay': customer!['barangay'],
+      if (customer?['delivery_zone'] != null) 'delivery_zone': customer!['delivery_zone'],
+    };
+  }
+
+  Widget _buildOrderCard(
+    Map<String, dynamic> orderMap,
+    Map<int, Map<String, dynamic>> customerCache,
+    OrderProvider orderProv,
+  ) {
+    final order = Order.fromMap(orderMap);
+    final customer = order.customerId != null ? customerCache[order.customerId] : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: OrderCard(
+        onTap: () => _showOrderDetails(order, customer, orderProv),
+        order: order,
+        customerName: customer?['name'] as String?,
+        phone: order.phoneNumber,
+        barangay: customer?['barangay'] as String?,
+        address: order.address ?? (customer?['address'] as String?),
+        onConfirm: order.type != OrderType.unrecognized &&
+                order.status == OrderStatus.pending
+            ? () => _confirmOrder(order, orderProv)
+            : null,
+        onReject: order.type != OrderType.unrecognized &&
+                order.status == OrderStatus.pending
+            ? () => _showRejectDialog(order.id!, orderProv)
+            : null,
+        onStartDelivery: order.type != OrderType.unrecognized &&
+                order.status == OrderStatus.confirmed
+            ? () => _startDelivery(order, orderProv)
+            : null,
+        onComplete: order.type != OrderType.unrecognized &&
+                order.status == OrderStatus.inTransit
+            ? () => _showCompleteOrderSheet(order, orderProv)
+            : null,
+      ),
+    );
+  }
+
+  List<Widget> _buildGroupedDispatchList(
+    List<Map<String, dynamic>> filtered,
+    Map<int, Map<String, dynamic>> customerCache,
+    OrderProvider orderProv,
+  ) {
+    final activeStatuses = {'pending', 'confirmed', 'in_transit'};
+    final activeOrders = filtered
+        .where((order) =>
+            order['type'] != 'unrecognized' &&
+            activeStatuses.contains(order['status'] as String? ?? ''))
+        .toList();
+    final otherOrders = filtered
+        .where((order) => !activeOrders.contains(order))
+        .toList();
+    final groups = buildDispatchGroups(activeOrders);
+
+    return [
+      ...groups.expand((group) => [
+            DispatchGroupHeader(title: group.title, subtitle: group.subtitle),
+            ...group.items.map(
+              (order) => _buildOrderCard(order, customerCache, orderProv),
+            ),
+          ]),
+      if (otherOrders.isNotEmpty) ...[
+        const DispatchGroupHeader(
+          title: 'Completed / Review',
+          subtitle: 'Orders no longer in active dispatch',
+        ),
+        ...otherOrders.map(
+          (order) => _buildOrderCard(order, customerCache, orderProv),
+        ),
+      ],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<OrderProvider, CustomerProvider>(
       builder: (context, orderProv, customerProv, _) {
-        final filtered = _filterOrders(orderProv.todayOrders);
         final customerCache = <int, Map<String, dynamic>>{};
-        for (final c in customerProv.customers) {
-          final id = c['id'] as int?;
-          if (id != null) customerCache[id] = c;
+        for (final customer in customerProv.customers) {
+          final id = customer['id'] as int?;
+          if (id != null) customerCache[id] = customer;
         }
 
+        final enrichedOrders = orderProv.todayOrders
+            .map((order) => _enrichOrder(order, customerCache))
+            .toList();
+        final filtered = _filterOrders(enrichedOrders);
         final inTransitCount = orderProv.todayOrders
-            .where((o) => o['status'] == 'in_transit')
+            .where((order) => order['status'] == 'in_transit')
             .length;
 
         return RefreshIndicator(
@@ -238,41 +324,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       ? 'No orders today.'
                       : 'No ${_filterLabels[_filterIndex].toLowerCase()} orders.',
                 )
+              else if (_filterTypes[_filterIndex] == 'unrecognized')
+                ...filtered.map(
+                  (order) => _buildOrderCard(order, customerCache, orderProv),
+                )
               else
-                ...filtered.map((orderMap) {
-                  final order = Order.fromMap(orderMap);
-                  final customer = order.customerId != null
-                      ? customerCache[order.customerId]
-                      : null;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: OrderCard(
-                      onTap: () => _showOrderDetails(order, customer, orderProv),
-                      order: order,
-                      customerName: customer?['name'] as String?,
-                      phone: order.phoneNumber,
-                      barangay: customer?['barangay'] as String?,
-                      address: order.address ?? (customer?['address'] as String?),
-                      onConfirm: order.type != OrderType.unrecognized &&
-                              order.status == OrderStatus.pending
-                          ? () => _confirmOrder(order, orderProv)
-                          : null,
-                      onReject: order.type != OrderType.unrecognized &&
-                              order.status == OrderStatus.pending
-                          ? () => _showRejectDialog(order.id!, orderProv)
-                          : null,
-                      onStartDelivery: order.type != OrderType.unrecognized &&
-                              order.status == OrderStatus.confirmed
-                          ? () => _startDelivery(order, orderProv)
-                          : null,
-                      onComplete: order.type != OrderType.unrecognized &&
-                              order.status == OrderStatus.inTransit
-                          ? () => _showCompleteOrderSheet(order, orderProv)
-                          : null,
-                    ),
-                  );
-                }),
+                ..._buildGroupedDispatchList(
+                  filtered,
+                  customerCache,
+                  orderProv,
+                ),
             ],
           ),
         );
@@ -382,394 +443,6 @@ class _SummaryChip extends StatelessWidget {
               color: color,
               fontWeight: FontWeight.w600,
             ),
-      ),
-    );
-  }
-}
-
-class _AddOrderForm extends StatefulWidget {
-  const _AddOrderForm();
-
-  @override
-  State<_AddOrderForm> createState() => _AddOrderFormState();
-}
-
-class _AddOrderFormState extends State<_AddOrderForm> {
-  String _customerMode = 'existing';
-  String _customerSearch = '';
-  int? _selectedCustomerId;
-
-  final _phoneController = TextEditingController();
-  String _type = 'deliver';
-  int _quantity = 1;
-  String _gallonType = 'new';
-
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_customerMode == 'existing' && _selectedCustomerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a customer')));
-      return;
-    }
-
-    String phone;
-    if (_customerMode == 'existing' && _selectedCustomerId != null) {
-      final customers = context.read<CustomerProvider>().customers;
-      final match = customers.where((c) => c['id'] == _selectedCustomerId);
-      phone = match.isNotEmpty
-          ? (match.first['contact_number'] as String? ?? '')
-          : '';
-    } else {
-      phone = _phoneController.text.trim();
-    }
-
-    if (_customerMode == 'new' && phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a phone number')));
-      return;
-    }
-
-    final now = DateTime.now();
-    final orderProv = context.read<OrderProvider>();
-    await orderProv.addOrder({
-      'customer_id': _selectedCustomerId,
-      'phone_number': phone,
-      'type': _type,
-      'quantity': _quantity,
-      'gallon_type': _gallonType,
-      'status': 'pending',
-      'created_at': now.toIso8601String(),
-      'scheduled_for': now.toIso8601String(),
-      'is_pre_book': 0,
-    });
-
-    if (mounted) Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final customers = context.read<CustomerProvider>().customers;
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-    final filteredCustomers = _customerSearch.isEmpty
-        ? customers
-        : customers.where((c) {
-            final name = (c['name'] as String? ?? '').toLowerCase();
-            final phone =
-                (c['contact_number'] as String? ?? '').toLowerCase();
-            return name.contains(_customerSearch.toLowerCase()) ||
-                phone.contains(_customerSearch.toLowerCase());
-          }).toList();
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const BottomSheetHandle(title: 'New Order'),
-          const SizedBox(height: 20),
-          Text('Customer', style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _buildModeOption('existing', 'Existing', Icons.people),
-              const SizedBox(width: 12),
-              _buildModeOption('new', 'New / Manual', Icons.person_add),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_customerMode == 'existing') ...[
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.of(context).background,
-                borderRadius: BorderRadius.circular(kButtonRadius),
-                border: Border.all(color: AppColors.of(context).border),
-              ),
-              child: TextField(
-                onChanged: (v) => setState(() => _customerSearch = v),
-                style: Theme.of(context).textTheme.bodyMedium,
-                decoration: InputDecoration(
-                  hintText: 'Search customer...',
-                  prefixIcon: Icon(Icons.search,
-                      size: 18, color: AppColors.of(context).mutedForeground),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 150),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: filteredCustomers.length,
-                itemBuilder: (_, i) {
-                  final c = filteredCustomers[i];
-                  final id = c['id'] as int;
-                  final name = c['name'] as String? ?? '';
-                  final isSelected = _selectedCustomerId == id;
-                  return GestureDetector(
-                    onTap: () => setState(() {
-                      _selectedCustomerId = id;
-                      _phoneController.text =
-                          c['contact_number'] as String? ?? '';
-                    }),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      margin: const EdgeInsets.only(bottom: 4),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.of(context).primaryLight
-                            : AppColors.of(context).background,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.of(context).primary
-                              : AppColors.of(context).border,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          CustomerAvatar(name: name, size: 32),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              '$name — ${c['contact_number']}',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: isSelected
-                                        ? AppColors.of(context).primary
-                                        : AppColors.of(context).foreground,
-                                  ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (isSelected)
-                            Icon(Icons.check_circle,
-                                size: 16, color: AppColors.of(context).primary),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          if (_customerMode == 'new') ...[
-            Text('Phone Number', style: Theme.of(context).textTheme.labelMedium),
-            const SizedBox(height: 6),
-            _buildTextField(_phoneController, 'e.g. 09171234567', TextInputType.phone),
-            const SizedBox(height: 16),
-          ],
-          Text('Order Type', style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _buildTypeOption('deliver', 'Delivery', Icons.local_shipping),
-              const SizedBox(width: 12),
-              _buildTypeOption('drop', 'Walk-in', Icons.water_drop),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text('Quantity (gallons)', style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () {
-                  if (_quantity > AppConstants.minQuantity) {
-                    setState(() => _quantity--);
-                  }
-                },
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).background,
-                    borderRadius: BorderRadius.circular(kButtonRadius),
-                    border: Border.all(color: AppColors.of(context).border),
-                  ),
-                  child: Icon(Icons.remove,
-                      size: 18, color: AppColors.of(context).mutedForeground),
-                ),
-              ),
-              Expanded(
-                child: Center(
-                  child: Text('$_quantity', style: Theme.of(context).textTheme.headlineLarge),
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  if (_quantity < AppConstants.maxQuantity) {
-                    setState(() => _quantity++);
-                  }
-                },
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).primaryLight,
-                    borderRadius: BorderRadius.circular(kButtonRadius),
-                    border: Border.all(color: AppColors.of(context).primary),
-                  ),
-                  child: Icon(Icons.add,
-                      size: 18, color: AppColors.of(context).primary),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text('Gallon Type', style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _buildGallonTypeOption('new', 'New', Icons.water_drop),
-              const SizedBox(width: 12),
-              _buildGallonTypeOption('old', 'Old', Icons.local_gas_station),
-            ],
-          ),
-          const SizedBox(height: 24),
-          PrimaryActionButton(label: 'Create Order', onTap: _submit),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModeOption(String value, String label, IconData icon) {
-    final isSelected = _customerMode == value;
-    final palette = AppColors.of(context);
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() {
-          _customerMode = value;
-          _selectedCustomerId = null;
-          _phoneController.clear();
-        }),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? palette.primaryLight : palette.background,
-            borderRadius: BorderRadius.circular(kButtonRadius),
-            border: Border.all(color: isSelected ? palette.primary : palette.border),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 14,
-                  color: isSelected ? palette.primary : palette.mutedForeground),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: isSelected ? palette.primary : palette.mutedForeground,
-                      ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField(TextEditingController ctrl, String hint, TextInputType type) {
-    final palette = AppColors.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: palette.background,
-        borderRadius: BorderRadius.circular(kButtonRadius),
-        border: Border.all(color: palette.border),
-      ),
-      child: TextField(
-        controller: ctrl,
-        keyboardType: type,
-        inputFormatters: type == TextInputType.phone
-            ? [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(11)]
-            : null,
-        style: Theme.of(context).textTheme.bodyMedium,
-        decoration: InputDecoration(
-          hintText: hint,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTypeOption(String value, String label, IconData icon) {
-    final isSelected = _type == value;
-    final palette = AppColors.of(context);
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _type = value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? palette.primaryLight : palette.background,
-            borderRadius: BorderRadius.circular(kButtonRadius),
-            border: Border.all(color: isSelected ? palette.primary : palette.border),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 16,
-                  color: isSelected ? palette.primary : palette.mutedForeground),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: isSelected ? palette.primary : palette.mutedForeground,
-                    ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGallonTypeOption(String value, String label, IconData icon) {
-    final isSelected = _gallonType == value;
-    final palette = AppColors.of(context);
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _gallonType = value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? palette.primaryLight : palette.background,
-            borderRadius: BorderRadius.circular(kButtonRadius),
-            border: Border.all(color: isSelected ? palette.primary : palette.border),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 16,
-                  color: isSelected ? palette.primary : palette.mutedForeground),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: isSelected ? palette.primary : palette.mutedForeground,
-                    ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

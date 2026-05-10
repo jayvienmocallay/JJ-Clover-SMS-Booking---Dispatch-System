@@ -98,6 +98,36 @@ class OrderProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> assignStaffToOrder(int orderId, int staffId) async {
+    _error = null;
+    try {
+      await _repository.assignStaffToOrder(orderId, staffId);
+      await loadOrders();
+    } catch (e) {
+      _error = e.toString();
+      _notifyIfActive();
+    }
+  }
+
+  Future<void> recordDeliveryIssue(
+    int orderId, {
+    required String note,
+    required bool keepForRedispatch,
+  }) async {
+    _error = null;
+    try {
+      await _repository.recordDeliveryIssue(
+        orderId,
+        note: note,
+        keepForRedispatch: keepForRedispatch,
+      );
+      await loadOrders();
+    } catch (e) {
+      _error = e.toString();
+      _notifyIfActive();
+    }
+  }
+
   Future<void> completeOrder(
     int orderId, {
     int? quantityDelivered,

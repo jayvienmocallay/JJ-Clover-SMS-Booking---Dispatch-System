@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../data/models/order_model.dart';
+import '../../data/providers/order_provider.dart';
 import '../../data/repositories/order_repository.dart';
 import '../theme/app_theme.dart';
 import 'complete_order_sheet.dart';
+import 'delivery_issue_sheet.dart';
 import 'shared/bottom_sheet_handle.dart';
+import 'staff_assignment_sheet.dart';
 
 class OrderDetailSheet extends StatefulWidget {
   final Order order;
@@ -72,6 +75,74 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     }
   }
 
+  Future<void> _showStaffAssignmentSheet() async {
+    final orderId = widget.order.id;
+    if (orderId == null) return;
+    final provider = context.read<OrderProvider>();
+    final staffId = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => StaffAssignmentSheet(initialStaffId: widget.order.staffId),
+    );
+    if (staffId == null) return;
+    await provider.assignStaffToOrder(orderId, staffId);
+    if (!mounted) return;
+    if (provider.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(provider.error!)),
+      );
+      return;
+    }
+    widget.onCompleted?.call();
+    Navigator.pop(context, true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Staff assigned ✓')),
+    );
+  }
+
+  Future<void> _showDeliveryIssueSheet() async {
+    final orderId = widget.order.id;
+    if (orderId == null) return;
+    final provider = context.read<OrderProvider>();
+    final result = await showModalBottomSheet<DeliveryIssueResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const DeliveryIssueSheet(),
+    );
+    if (result == null) return;
+    await provider.recordDeliveryIssue(
+      orderId,
+      note: result.note,
+      keepForRedispatch: result.keepForRedispatch,
+    );
+    if (!mounted) return;
+    if (provider.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(provider.error!)),
+      );
+      return;
+    }
+    widget.onCompleted?.call();
+    Navigator.pop(context, true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.keepForRedispatch
+              ? 'Delivery note saved and returned to dispatch ✓'
+              : 'Delivery note saved and order moved out of dispatch ✓',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = AppColors.of(context);
@@ -92,6 +163,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
               _detailRow('Status', order.status.displayLabel),
               _detailRow('Quantity', '${order.quantity} gallon${order.quantity == 1 ? '' : 's'}'),
               _detailRow('Gallon type', order.gallonType == GallonType.oldGallon ? 'Old' : 'New'),
+              if (order.staffId != null) _detailRow('Assigned staff', '#${order.staffId}'),
               if (widget.address?.isNotEmpty == true) _detailRow('Address', widget.address!),
               if (widget.barangay?.isNotEmpty == true) _detailRow('Barangay', widget.barangay!),
               if (order.deliveryDay != null) _detailRow('Delivery day', order.deliveryDay!),
@@ -127,8 +199,14 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
         _actionRow(Icons.check_circle_outline, 'Confirm order', widget.onConfirm!),
       if (order.status == OrderStatus.pending && widget.onReject != null)
         _actionRow(Icons.cancel_outlined, 'Reject order', widget.onReject!),
+      if ((order.status == OrderStatus.confirmed ||
+              order.status == OrderStatus.inTransit) &&
+          order.type != OrderType.unrecognized)
+        _actionRow(Icons.badge_outlined, 'Assign staff', _showStaffAssignmentSheet),
       if (order.status == OrderStatus.confirmed && widget.onStartDelivery != null)
         _actionRow(Icons.local_shipping_outlined, 'Start delivery', widget.onStartDelivery!),
+      if (order.status == OrderStatus.inTransit)
+        _actionRow(Icons.report_problem_outlined, 'Record delivery issue', _showDeliveryIssueSheet),
       if (order.status == OrderStatus.inTransit)
         _actionRow(Icons.check_circle, 'Complete delivery', _showCompletionSheet),
     ];
@@ -185,7 +263,10 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     return InkWell(
       onTap: () async {
         onTap();
-        if (mounted && label != 'Complete delivery') {
+        if (mounted &&
+            label != 'Complete delivery' &&
+            label != 'Assign staff' &&
+            label != 'Record delivery issue') {
           Navigator.pop(context, true);
         }
       },
@@ -208,6 +289,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     final returned = log['returned_containers'] as int?;
     final paymentMethod = log['payment_method'] as String?;
     final notes = log['notes'] as String?;
+    final staffId = log['staff_id'] as int?;
     final deliveredAt = DateTime.tryParse(log['delivered_at'] as String? ?? '');
     return Padding(
       padding: const EdgeInsets.all(14),
@@ -215,6 +297,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('$qty gallon${qty == 1 ? '' : 's'} delivered', style: Theme.of(context).textTheme.bodyMedium),
+          if (staffId != null) Text('Staff #$staffId', style: Theme.of(context).textTheme.bodySmall),
           if (returned != null) Text('$returned returned container${returned == 1 ? '' : 's'}', style: Theme.of(context).textTheme.bodySmall),
           if (paymentMethod == 'cash') Text('Cash collected', style: Theme.of(context).textTheme.bodySmall),
           if (notes?.isNotEmpty == true) Text(notes!, style: Theme.of(context).textTheme.bodySmall),
