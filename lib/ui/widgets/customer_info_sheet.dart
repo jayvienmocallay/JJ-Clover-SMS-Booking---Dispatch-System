@@ -1,7 +1,7 @@
 // Customer/Conversation info bottom sheet — shown when the ⓘ button is tapped
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:telephony/telephony.dart';
+import 'package:another_telephony/telephony.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/order_model.dart';
 import '../../data/repositories/customer_repository.dart';

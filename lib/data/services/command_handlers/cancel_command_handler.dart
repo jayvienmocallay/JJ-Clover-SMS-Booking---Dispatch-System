@@ -1,4 +1,4 @@
-import 'package:telephony/telephony.dart';
+import 'package:another_telephony/telephony.dart';
 
 import '../../../core/utils/phone_number_utils.dart';
 import '../../repositories/order_repository.dart';

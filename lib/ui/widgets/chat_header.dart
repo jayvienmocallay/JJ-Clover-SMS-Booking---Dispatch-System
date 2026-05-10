@@ -1,6 +1,6 @@
 // Chat header with contact info and action buttons
 import 'package:flutter/material.dart';
-import 'package:telephony/telephony.dart';
+import 'package:another_telephony/telephony.dart';
 import '../theme/app_theme.dart';
 import 'customer_info_sheet.dart';
 

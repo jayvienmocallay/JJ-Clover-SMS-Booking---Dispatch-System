@@ -3,7 +3,7 @@
 // Task 008 — Zone-specific validation integration, next-day scheduling
 import 'dart:async';
 import 'dart:ui';
-import 'package:telephony/telephony.dart';
+import 'package:another_telephony/telephony.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../../core/constants/app_constants.dart';
