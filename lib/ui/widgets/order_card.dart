@@ -13,6 +13,7 @@ class OrderCard extends StatelessWidget {
   final String? phone;
   final String? barangay;
   final String? address;
+  final VoidCallback? onTap;
   final VoidCallback? onConfirm;
   final VoidCallback? onReject;
   final VoidCallback? onStartDelivery;
@@ -25,6 +26,7 @@ class OrderCard extends StatelessWidget {
     this.phone,
     this.barangay,
     this.address,
+    this.onTap,
     this.onConfirm,
     this.onReject,
     this.onStartDelivery,
@@ -53,236 +55,240 @@ class OrderCard extends StatelessWidget {
         ? Icons.local_shipping
         : Icons.water_drop;
 
-    return Container(
-      padding: const EdgeInsets.all(kCardPadding),
-      decoration: BoxDecoration(
-        color: palette.card,
-        borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(
-          color: isInvalid
-              ? palette.statusMaintenance.withValues(alpha: 0.4)
-              : palette.border,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(kCardRadius),
+      child: Container(
+        padding: const EdgeInsets.all(kCardPadding),
+        decoration: BoxDecoration(
+          color: palette.card,
+          borderRadius: BorderRadius.circular(kCardRadius),
+          border: Border.all(
+            color: isInvalid
+                ? palette.statusMaintenance.withValues(alpha: 0.4)
+                : palette.border,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: typeBgColor,
-                  borderRadius: BorderRadius.circular(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: typeBgColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(typeIcon, size: 20, color: typeColor),
                 ),
-                child: Icon(typeIcon, size: 20, color: typeColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      customerName ?? order.phoneNumber,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: palette.foreground,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (phone != null)
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        phone!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: palette.mutedForeground,
+                        customerName ?? order.phoneNumber,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: palette.foreground,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    if (!isInvalid && (address != null || barangay != null))
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          [address, barangay].whereType<String>().join(' · '),
+                      if (phone != null)
+                        Text(
+                          phone!,
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: palette.mutedForeground,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    const SizedBox(height: 8),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
+                      if (!isInvalid && (address != null || barangay != null))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            [address, barangay].whereType<String>().join(' · '),
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: palette.mutedForeground,
                             ),
-                            decoration: BoxDecoration(
-                              color: palette.muted,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${order.quantity} gal · ${order.gallonType == GallonType.newGallon ? "New" : "Old"}',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w500,
-                                color: palette.mutedForeground,
-                              ),
-                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          if (order.isPreBook) ...[
-                            const SizedBox(width: 8),
+                        ),
+                      const SizedBox(height: 8),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: palette.primaryLight,
+                                color: palette.muted,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.schedule,
-                                    size: 10,
-                                    color: palette.primary,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                      color: palette.primary,
-                                    ),
-                                  ),
-                                ],
+                              child: Text(
+                                '${order.quantity} gal · ${order.gallonType == GallonType.newGallon ? "New" : "Old"}',
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: palette.mutedForeground,
+                                ),
                               ),
                             ),
+                            if (order.isPreBook) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: palette.primaryLight,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.schedule,
+                                      size: 10,
+                                      color: palette.primary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
+                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        fontWeight: FontWeight.w500,
+                                        color: palette.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 12),
+                            Text(
+                              _formatTime(order.createdAt),
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
                           ],
-                          const SizedBox(width: 12),
-                          Text(
-                            _formatTime(order.createdAt),
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              _buildStatusBadge(palette),
-            ],
-          ),
-
-          if ((order.status == OrderStatus.cancelled ||
-                  order.status == OrderStatus.rejected ||
-                  order.type == OrderType.unrecognized) &&
-              order.cancelReason != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: palette.statusMaintenanceLight,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'Reason: ${order.cancelReason}',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: palette.statusMaintenance,
-                  ),
-                ),
-              ),
-            ),
-
-          if (order.status == OrderStatus.completed && order.id != null)
-            _ActionSection(
-              child: InkWell(
-                onTap: () => _showDeliveryLogs(context, order.id!),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.receipt_long,
-                        size: 14,
-                        color: palette.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'View Delivery Log',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color: palette.primary,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                _buildStatusBadge(palette),
+              ],
             ),
 
-          if (order.status == OrderStatus.pending &&
-              (onConfirm != null || onReject != null))
-            _ActionSection(
-              child: Row(
-                children: [
-                  if (onConfirm != null)
-                    Expanded(
-                      child: _ActionButton(
-                        label: 'Confirm',
-                        icon: Icons.check,
-                        color: palette.statusOperating,
-                        onTap: onConfirm!,
-                      ),
+            if ((order.status == OrderStatus.cancelled ||
+                    order.status == OrderStatus.rejected ||
+                    order.type == OrderType.unrecognized) &&
+                order.cancelReason != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: palette.statusMaintenanceLight,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'Reason: ${order.cancelReason}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: palette.statusMaintenance,
                     ),
-                  if (onConfirm != null && onReject != null)
-                    const SizedBox(width: 8),
-                  if (onReject != null)
-                    Expanded(
-                      child: _ActionButton(
-                        label: 'Reject',
-                        icon: Icons.close,
-                        color: palette.statusMaintenance,
-                        onTap: onReject!,
-                      ),
+                  ),
+                ),
+              ),
+
+            if (order.status == OrderStatus.completed && order.id != null)
+              _ActionSection(
+                child: InkWell(
+                  onTap: () => _showDeliveryLogs(context, order.id!),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.receipt_long,
+                          size: 14,
+                          color: palette.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'View Delivery Log',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                            color: palette.primary,
+                          ),
+                        ),
+                      ],
                     ),
-                ],
+                  ),
+                ),
               ),
-            ),
 
-          if (order.status == OrderStatus.confirmed && onStartDelivery != null)
-            _ActionSection(
-              child: _ActionButton(
-                label: 'Start Delivery',
-                icon: Icons.local_shipping,
-                color: palette.statusBusy,
-                onTap: onStartDelivery!,
+            if (order.status == OrderStatus.pending &&
+                (onConfirm != null || onReject != null))
+              _ActionSection(
+                child: Row(
+                  children: [
+                    if (onConfirm != null)
+                      Expanded(
+                        child: _ActionButton(
+                          label: 'Confirm',
+                          icon: Icons.check,
+                          color: palette.statusOperating,
+                          onTap: onConfirm!,
+                        ),
+                      ),
+                    if (onConfirm != null && onReject != null)
+                      const SizedBox(width: 8),
+                    if (onReject != null)
+                      Expanded(
+                        child: _ActionButton(
+                          label: 'Reject',
+                          icon: Icons.close,
+                          color: palette.statusMaintenance,
+                          onTap: onReject!,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
 
-          if (order.status == OrderStatus.inTransit && onComplete != null)
-            _ActionSection(
-              child: _ActionButton(
-                label: 'Mark Delivered',
-                icon: Icons.check_circle,
-                color: palette.statusOperating,
-                onTap: onComplete!,
+            if (order.status == OrderStatus.confirmed && onStartDelivery != null)
+              _ActionSection(
+                child: _ActionButton(
+                  label: 'Start Delivery',
+                  icon: Icons.local_shipping,
+                  color: palette.statusBusy,
+                  onTap: onStartDelivery!,
+                ),
               ),
-            ),
-        ],
+
+            if (order.status == OrderStatus.inTransit && onComplete != null)
+              _ActionSection(
+                child: _ActionButton(
+                  label: 'Complete Delivery',
+                  icon: Icons.check_circle,
+                  color: palette.statusOperating,
+                  onTap: onComplete!,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

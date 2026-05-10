@@ -17,6 +17,22 @@ class OrderRepository {
     return DatabaseHelper.instance.getTodayOrders();
   }
 
+  Future<List<Map<String, dynamic>>> getOrderHistory({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? status,
+    String? type,
+    String? search,
+  }) {
+    return DatabaseHelper.instance.getOrderHistory(
+      startDate: startDate,
+      endDate: endDate,
+      status: status,
+      type: type,
+      search: search,
+    );
+  }
+
   Future<int> insertOrder(Map<String, dynamic> orderData) {
     return DatabaseHelper.instance.insertOrder(orderData);
   }
@@ -32,6 +48,24 @@ class OrderRepository {
       status,
       reason: reason,
       notes: notes,
+    );
+  }
+
+  Future<int> completeOrder(
+    int id, {
+    int? quantityDelivered,
+    int? returnedContainers,
+    bool cashCollected = false,
+    String? notes,
+    int? staffId,
+  }) {
+    return DatabaseHelper.instance.completeOrder(
+      id,
+      quantityDelivered: quantityDelivered,
+      returnedContainers: returnedContainers,
+      cashCollected: cashCollected,
+      notes: notes,
+      staffId: staffId,
     );
   }
 

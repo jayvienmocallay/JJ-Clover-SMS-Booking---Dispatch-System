@@ -10,6 +10,7 @@ import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'core/constants/app_constants.dart';
 import 'core/security/database_encryption_key_repository.dart';
 import 'core/utils/phone_number_utils.dart';
+import 'data/services/order_status_transition_service.dart';
 
 class CustomerPhoneAlreadyExistsException implements Exception {
   final String contactNumber;
@@ -1004,6 +1005,53 @@ class DatabaseHelper {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getOrderHistory({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? status,
+    String? type,
+    String? search,
+  }) async {
+    final db = await instance.database;
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (startDate != null) {
+      clauses.add('datetime(o.created_at) >= datetime(?)');
+      args.add(startDate.toIso8601String());
+    }
+    if (endDate != null) {
+      clauses.add('datetime(o.created_at) < datetime(?)');
+      args.add(endDate.toIso8601String());
+    }
+    if (status != null && status.isNotEmpty && status != 'all') {
+      clauses.add('o.status = ?');
+      args.add(status);
+    }
+    if (type != null && type.isNotEmpty && type != 'all') {
+      clauses.add('o.type = ?');
+      args.add(type);
+    }
+    final trimmedSearch = search?.trim();
+    if (trimmedSearch != null && trimmedSearch.isNotEmpty) {
+      final normalized = PhoneNumberUtils.normalize(trimmedSearch);
+      clauses.add('(o.phone_number LIKE ? OR o.id = ? OR c.name LIKE ? OR c.contact_number LIKE ?)');
+      args.add('%$trimmedSearch%');
+      args.add(int.tryParse(trimmedSearch) ?? -1);
+      args.add('%$trimmedSearch%');
+      args.add('%${normalized.isEmpty ? trimmedSearch : normalized}%');
+    }
+    final where = clauses.isEmpty ? '' : 'WHERE ${clauses.join(' AND ')}';
+    return await db.rawQuery('''
+      SELECT o.*, c.name AS customer_name, c.address AS customer_address,
+             b.name AS barangay, b.delivery_zone AS delivery_zone
+      FROM orders o
+      LEFT JOIN customers c ON c.id = o.customer_id
+      LEFT JOIN barangays b ON b.id = c.barangay_id
+      $where
+      ORDER BY datetime(o.created_at) DESC
+    ''', args);
+  }
+
   Future<int> updateOrderStatus(
     int id,
     String status, {
@@ -1011,77 +1059,68 @@ class DatabaseHelper {
     String? notes,
     DateTime? deliveredAt,
   }) async {
+    if (status == 'completed') {
+      return completeOrder(id, notes: notes, deliveredAt: deliveredAt);
+    }
     final db = await instance.database;
+    final currentRows = await db.query(
+      'orders',
+      columns: ['status'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (currentRows.isEmpty) return 0;
+    final currentStatus = currentRows.single['status'] as String? ?? 'pending';
+    if (!OrderStatusTransitionService.canTransitionDb(currentStatus, status)) {
+      throw StateError('Invalid order status transition: $currentStatus -> $status');
+    }
     final data = <String, dynamic>{'status': status};
-    if (reason != null && reason.isNotEmpty) {
-      data['cancel_reason'] = reason;
-    }
-    if (status != 'completed') {
-      return await db.update('orders', data, where: 'id = ?', whereArgs: [id]);
-    }
+    if (reason != null && reason.isNotEmpty) data['cancel_reason'] = reason;
+    return await db.update('orders', data, where: 'id = ?', whereArgs: [id]);
+  }
 
+  Future<int> completeOrder(
+    int id, {
+    int? quantityDelivered,
+    int? returnedContainers,
+    bool cashCollected = false,
+    String? notes,
+    int? staffId,
+    DateTime? deliveredAt,
+  }) async {
+    final db = await instance.database;
     return await db.transaction<int>((txn) async {
-      final orders = await txn.query(
-        'orders',
-        where: 'id = ?',
-        whereArgs: [id],
-        limit: 1,
-      );
-      if (orders.isEmpty) {
-        return 0;
-      }
-
+      final orders = await txn.query('orders', where: 'id = ?', whereArgs: [id], limit: 1);
+      if (orders.isEmpty) return 0;
       final order = orders.single;
+      final currentStatus = order['status'] as String? ?? 'pending';
+      if (!OrderStatusTransitionService.canTransitionDb(currentStatus, 'completed')) {
+        throw StateError('Invalid order status transition: $currentStatus -> completed');
+      }
+      final updated = currentStatus == 'completed'
+          ? 1
+          : await txn.update('orders', {'status': 'completed'}, where: 'id = ?', whereArgs: [id]);
+      if (updated == 0) return 0;
       final customerId = order['customer_id'] as int?;
-
-      final updated = await txn.update(
-        'orders',
-        data,
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-      if (updated == 0) {
-        return 0;
-      }
-
-      // Delivery logs require a customer_id (NOT NULL constraint).
-      // Walk-in orders from unregistered customers have no customer_id —
-      // skip log creation for those so completion still succeeds.
-      if (customerId != null) {
-        final existingLogs = await txn.query(
-          'delivery_logs',
-          columns: ['id'],
-          where: 'order_id = ?',
-          whereArgs: [id],
-          limit: 1,
-        );
-        if (existingLogs.isEmpty) {
-          final logData = <String, dynamic>{
-            'order_id': id,
-            'customer_id': customerId,
-            'quantity_delivered': order['quantity'] as int? ?? 0,
-            'delivered_at': (deliveredAt ?? DateTime.now()).toIso8601String(),
-          };
-
-          final staffId = order['staff_id'] as int?;
-          if (staffId != null) {
-            logData['staff_id'] = staffId;
-          }
-
-          final gallonType = _nonEmptyString(order['gallon_type'] as String?);
-          if (gallonType != null) {
-            logData['gallon_type'] = gallonType;
-          }
-
-          final deliveryNotes = _nonEmptyString(notes);
-          if (deliveryNotes != null) {
-            logData['notes'] = deliveryNotes;
-          }
-
-          await txn.insert('delivery_logs', logData);
-        }
-      }
-
+      if (customerId == null) return updated;
+      final existingLogs = await txn.query('delivery_logs', columns: ['id'], where: 'order_id = ?', whereArgs: [id], limit: 1);
+      if (existingLogs.isNotEmpty) return updated;
+      final logData = <String, dynamic>{
+        'order_id': id,
+        'customer_id': customerId,
+        'quantity_delivered': quantityDelivered ?? order['quantity'] as int? ?? 0,
+        'delivered_at': (deliveredAt ?? DateTime.now()).toIso8601String(),
+      };
+      final resolvedStaffId = staffId ?? order['staff_id'] as int?;
+      if (resolvedStaffId != null) logData['staff_id'] = resolvedStaffId;
+      final gallonType = _nonEmptyString(order['gallon_type'] as String?);
+      if (gallonType != null) logData['gallon_type'] = gallonType;
+      final deliveryNotes = _nonEmptyString(notes);
+      if (deliveryNotes != null) logData['notes'] = deliveryNotes;
+      if (returnedContainers != null) logData['returned_containers'] = returnedContainers;
+      if (cashCollected) logData['payment_method'] = 'cash';
+      await txn.insert('delivery_logs', logData);
       return updated;
     });
   }

@@ -98,6 +98,31 @@ class OrderProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> completeOrder(
+    int orderId, {
+    int? quantityDelivered,
+    int? returnedContainers,
+    bool cashCollected = false,
+    String? notes,
+    int? staffId,
+  }) async {
+    _error = null;
+    try {
+      await _repository.completeOrder(
+        orderId,
+        quantityDelivered: quantityDelivered,
+        returnedContainers: returnedContainers,
+        cashCollected: cashCollected,
+        notes: notes,
+        staffId: staffId,
+      );
+      await loadOrders();
+    } catch (e) {
+      _error = e.toString();
+      _notifyIfActive();
+    }
+  }
+
   /// Inserts a new order and refreshes the list
   Future<void> addOrder(Map<String, dynamic> orderData) async {
     _error = null;

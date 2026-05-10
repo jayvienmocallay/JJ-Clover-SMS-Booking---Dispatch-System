@@ -7,7 +7,9 @@ import '../../data/models/order_model.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/complete_order_sheet.dart';
 import '../widgets/order_card.dart';
+import '../widgets/order_detail_sheet.dart';
 import '../widgets/shared/app_page_header.dart';
 import '../widgets/shared/filter_chip_row.dart';
 import '../widgets/shared/empty_state.dart';
@@ -15,6 +17,7 @@ import '../widgets/shared/bottom_sheet_handle.dart';
 import '../widgets/shared/primary_action_button.dart';
 import '../widgets/shared/customer_avatar.dart';
 import 'delivery_logs_screen.dart';
+import 'order_history_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
@@ -29,8 +32,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   static const _filterTypes = ['all', 'deliver', 'drop', 'unrecognized'];
   static const _filterLabels = ['All', 'Deliveries', 'Walk-ins', 'Invalid'];
 
-  List<Map<String, dynamic>> _filterOrders(
-      List<Map<String, dynamic>> orders) {
+  List<Map<String, dynamic>> _filterOrders(List<Map<String, dynamic>> orders) {
     final type = _filterTypes[_filterIndex];
     if (type == 'all') return orders;
     return orders.where((o) => o['type'] == type).toList();
@@ -52,6 +54,74 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmOrder(Order order, OrderProvider orderProv) async {
+    await orderProv.updateStatus(order.id!, 'confirmed');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Order confirmed ✓')),
+    );
+  }
+
+  Future<void> _startDelivery(Order order, OrderProvider orderProv) async {
+    await orderProv.updateStatus(order.id!, 'in_transit');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Delivery started ✓')),
+    );
+  }
+
+  Future<void> _showCompleteOrderSheet(
+    Order order,
+    OrderProvider orderProv,
+  ) async {
+    final completed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => CompleteOrderSheet(order: order),
+    );
+    if (completed == true) await orderProv.loadOrders();
+  }
+
+  Future<void> _showOrderDetails(
+    Order order,
+    Map<String, dynamic>? customer,
+    OrderProvider orderProv,
+  ) async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => OrderDetailSheet(
+        order: order,
+        customerName: customer?['name'] as String?,
+        phone: order.phoneNumber,
+        barangay: customer?['barangay'] as String?,
+        address: order.address ?? (customer?['address'] as String?),
+        onConfirm: order.type != OrderType.unrecognized &&
+                order.status == OrderStatus.pending
+            ? () => _confirmOrder(order, orderProv)
+            : null,
+        onReject: order.type != OrderType.unrecognized &&
+                order.status == OrderStatus.pending
+            ? () => _showRejectDialog(order.id!, orderProv)
+            : null,
+        onStartDelivery: order.type != OrderType.unrecognized &&
+                order.status == OrderStatus.confirmed
+            ? () => _startDelivery(order, orderProv)
+            : null,
+        onCompleted: () => orderProv.loadOrders(),
+      ),
+    );
+    if (changed == true) await orderProv.loadOrders();
   }
 
   @override
@@ -78,28 +148,27 @@ class _OrdersScreenState extends State<OrdersScreen> {
             padding: const EdgeInsets.all(kPagePadding),
             children: [
               AppPageHeader(
-                title: 'Orders',
-                subtitle: "Manage today's delivery and walk-in orders.",
+                title: 'Today\'s Orders',
+                subtitle: "Manage today's dispatch and walk-in queue.",
                 action: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    GestureDetector(
+                    _HeaderIconButton(
+                      icon: Icons.history,
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const DeliveryLogsScreen()),
-                      ),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: AppColors.of(context).muted,
-                          borderRadius: BorderRadius.circular(kButtonRadius),
+                          builder: (_) => const OrderHistoryScreen(),
                         ),
-                        child: Icon(
-                          Icons.receipt_long,
-                          size: 20,
-                          color: AppColors.of(context).mutedForeground,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _HeaderIconButton(
+                      icon: Icons.receipt_long,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DeliveryLogsScreen(),
                         ),
                       ),
                     ),
@@ -116,8 +185,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.add,
-                                size: 16, color: Colors.white),
+                            const Icon(Icons.add, size: 16, color: Colors.white),
                             const SizedBox(width: 4),
                             Text(
                               'Add',
@@ -134,8 +202,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               const SizedBox(height: kSectionGap),
-
-              // Read-only summary chips
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -158,14 +224,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-
               FilterChipRow(
                 labels: _filterLabels,
                 selectedIndex: _filterIndex,
                 onSelected: (i) => setState(() => _filterIndex = i),
               ),
               const SizedBox(height: 16),
-
               if (filtered.isEmpty)
                 EmptyState(
                   icon: Icons.local_shipping,
@@ -183,58 +247,27 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: OrderCard(
+                      onTap: () => _showOrderDetails(order, customer, orderProv),
                       order: order,
                       customerName: customer?['name'] as String?,
                       phone: order.phoneNumber,
                       barangay: customer?['barangay'] as String?,
-                      address: order.address ??
-                          (customer?['address'] as String?),
+                      address: order.address ?? (customer?['address'] as String?),
                       onConfirm: order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.pending
-                          ? () async {
-                              final prov = orderProv;
-                              await prov.updateStatus(
-                                  order.id!, 'confirmed');
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Order confirmed ✓')),
-                                );
-                              }
-                            }
+                          ? () => _confirmOrder(order, orderProv)
                           : null,
                       onReject: order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.pending
                           ? () => _showRejectDialog(order.id!, orderProv)
                           : null,
-                      onStartDelivery:
-                          order.type != OrderType.unrecognized &&
-                                  order.status == OrderStatus.confirmed
-                              ? () async {
-                                  final prov = orderProv;
-                                  await prov.updateStatus(
-                                      order.id!, 'in_transit');
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(const SnackBar(
-                                            content:
-                                                Text('Delivery started ✓')));
-                                  }
-                                }
-                              : null,
+                      onStartDelivery: order.type != OrderType.unrecognized &&
+                              order.status == OrderStatus.confirmed
+                          ? () => _startDelivery(order, orderProv)
+                          : null,
                       onComplete: order.type != OrderType.unrecognized &&
                               order.status == OrderStatus.inTransit
-                          ? () async {
-                              final prov = orderProv;
-                              await prov.updateStatus(
-                                  order.id!, 'completed');
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Order completed ✓')),
-                                );
-                              }
-                            }
+                          ? () => _showCompleteOrderSheet(order, orderProv)
                           : null,
                     ),
                   );
@@ -252,10 +285,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.of(ctx).card,
-        title: Text(
-          'Reject Order',
-          style: Theme.of(ctx).textTheme.headlineSmall,
-        ),
+        title: Text('Reject Order', style: Theme.of(ctx).textTheme.headlineSmall),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,18 +323,38 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              final prov = orderProv;
-              await prov.updateStatus(orderId, 'rejected',
-                  reason: reason?.trim());
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Order rejected ✓')),
-                );
-              }
+              await orderProv.updateStatus(orderId, 'rejected', reason: reason?.trim());
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Order rejected ✓')),
+              );
             },
             child: const Text('Reject'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _HeaderIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.of(context).muted,
+          borderRadius: BorderRadius.circular(kButtonRadius),
+        ),
+        child: Icon(icon, size: 20, color: AppColors.of(context).mutedForeground),
       ),
     );
   }
@@ -423,9 +473,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
         children: [
           const BottomSheetHandle(title: 'New Order'),
           const SizedBox(height: 20),
-
-          Text('Customer',
-              style: Theme.of(context).textTheme.labelMedium),
+          Text('Customer', style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -435,7 +483,6 @@ class _AddOrderFormState extends State<_AddOrderForm> {
             ],
           ),
           const SizedBox(height: 16),
-
           if (_customerMode == 'existing') ...[
             Container(
               decoration: BoxDecoration(
@@ -473,8 +520,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                           c['contact_number'] as String? ?? '';
                     }),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
                         color: isSelected
@@ -494,10 +540,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                           Expanded(
                             child: Text(
                               '$name — ${c['contact_number']}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                     color: isSelected
                                         ? AppColors.of(context).primary
                                         : AppColors.of(context).foreground,
@@ -517,18 +560,13 @@ class _AddOrderFormState extends State<_AddOrderForm> {
             ),
             const SizedBox(height: 16),
           ],
-
           if (_customerMode == 'new') ...[
-            Text('Phone Number',
-                style: Theme.of(context).textTheme.labelMedium),
+            Text('Phone Number', style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 6),
-            _buildTextField(
-                _phoneController, 'e.g. 09171234567', TextInputType.phone),
+            _buildTextField(_phoneController, 'e.g. 09171234567', TextInputType.phone),
             const SizedBox(height: 16),
           ],
-
-          Text('Order Type',
-              style: Theme.of(context).textTheme.labelMedium),
+          Text('Order Type', style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -538,9 +576,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
             ],
           ),
           const SizedBox(height: 16),
-
-          Text('Quantity (gallons)',
-              style: Theme.of(context).textTheme.labelMedium),
+          Text('Quantity (gallons)', style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -564,10 +600,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
               ),
               Expanded(
                 child: Center(
-                  child: Text(
-                    '$_quantity',
-                    style: Theme.of(context).textTheme.headlineLarge,
-                  ),
+                  child: Text('$_quantity', style: Theme.of(context).textTheme.headlineLarge),
                 ),
               ),
               GestureDetector(
@@ -591,9 +624,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
             ],
           ),
           const SizedBox(height: 16),
-
-          Text('Gallon Type',
-              style: Theme.of(context).textTheme.labelMedium),
+          Text('Gallon Type', style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -603,7 +634,6 @@ class _AddOrderFormState extends State<_AddOrderForm> {
             ],
           ),
           const SizedBox(height: 24),
-
           PrimaryActionButton(label: 'Create Order', onTap: _submit),
         ],
       ),
@@ -626,15 +656,12 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           decoration: BoxDecoration(
             color: isSelected ? palette.primaryLight : palette.background,
             borderRadius: BorderRadius.circular(kButtonRadius),
-            border: Border.all(
-              color: isSelected ? palette.primary : palette.border,
-            ),
+            border: Border.all(color: isSelected ? palette.primary : palette.border),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon,
-                  size: 14,
+              Icon(icon, size: 14,
                   color: isSelected ? palette.primary : palette.mutedForeground),
               const SizedBox(width: 6),
               Flexible(
@@ -642,9 +669,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
                   label,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w500,
-                        color: isSelected
-                            ? palette.primary
-                            : palette.mutedForeground,
+                        color: isSelected ? palette.primary : palette.mutedForeground,
                       ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -656,8 +681,7 @@ class _AddOrderFormState extends State<_AddOrderForm> {
     );
   }
 
-  Widget _buildTextField(
-      TextEditingController ctrl, String hint, TextInputType type) {
+  Widget _buildTextField(TextEditingController ctrl, String hint, TextInputType type) {
     final palette = AppColors.of(context);
     return Container(
       decoration: BoxDecoration(
@@ -669,17 +693,13 @@ class _AddOrderFormState extends State<_AddOrderForm> {
         controller: ctrl,
         keyboardType: type,
         inputFormatters: type == TextInputType.phone
-            ? [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(11),
-              ]
+            ? [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(11)]
             : null,
         style: Theme.of(context).textTheme.bodyMedium,
         decoration: InputDecoration(
           hintText: hint,
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         ),
       ),
     );
@@ -697,23 +717,19 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           decoration: BoxDecoration(
             color: isSelected ? palette.primaryLight : palette.background,
             borderRadius: BorderRadius.circular(kButtonRadius),
-            border: Border.all(
-                color: isSelected ? palette.primary : palette.border),
+            border: Border.all(color: isSelected ? palette.primary : palette.border),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon,
-                  size: 16,
+              Icon(icon, size: 16,
                   color: isSelected ? palette.primary : palette.mutedForeground),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w500,
-                      color: isSelected
-                          ? palette.primary
-                          : palette.mutedForeground,
+                      color: isSelected ? palette.primary : palette.mutedForeground,
                     ),
               ),
             ],
@@ -735,23 +751,19 @@ class _AddOrderFormState extends State<_AddOrderForm> {
           decoration: BoxDecoration(
             color: isSelected ? palette.primaryLight : palette.background,
             borderRadius: BorderRadius.circular(kButtonRadius),
-            border: Border.all(
-                color: isSelected ? palette.primary : palette.border),
+            border: Border.all(color: isSelected ? palette.primary : palette.border),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon,
-                  size: 16,
+              Icon(icon, size: 16,
                   color: isSelected ? palette.primary : palette.mutedForeground),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w500,
-                      color: isSelected
-                          ? palette.primary
-                          : palette.mutedForeground,
+                      color: isSelected ? palette.primary : palette.mutedForeground,
                     ),
               ),
             ],
