@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/alarm_service.dart';
+import '../../data/services/app_event_bus.dart';
 import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/walk_in_alert.dart';
@@ -27,30 +28,24 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
-  // Current tab index (0=Home, 1=Orders, 2=Messages, 3=Customers, 4=Settings)
   int _currentIndex = 0;
-
-  // Controls visibility of the walk-in alert overlay (for manual test)
   bool _showWalkInAlert = false;
-
-  // Track initial loading state
   bool _isInitialLoading = true;
 
-  // Task 011 — Periodic refresh timer for auto-updating when background
-  // service inserts new orders via SMS
+  StreamSubscription? _messageSubscription;
+  StreamSubscription? _orderSubscription;
+
   late final _refreshTimer = !kIsWeb
       ? Stream.periodic(
-          // ignore: prefer_const_constructors - AppConstants is accessed at runtime
           Duration(seconds: AppConstants.autoRefreshSeconds),
-        )
-          .listen((_) => _autoRefresh())
+        ).listen((_) => _autoRefresh())
       : null;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Task 011 — Initial data load for providers (skip on web)
+
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadInitialData();
@@ -58,7 +53,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     } else {
       _isInitialLoading = false;
     }
-    // Task 012 — Listen to AlarmService for DROP command alerts
+
+    _messageSubscription = AppEventBus().onMessageReceived.listen((_) {
+      _autoRefresh();
+    });
+
+    _orderSubscription = AppEventBus().onOrderReceived.listen((_) {
+      _autoRefresh();
+    });
+
     AlarmService.instance.addListener(_onAlarmChanged);
     unawaited(AlarmService.instance.startUiSync());
   }
@@ -73,7 +76,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
   }
 
-  /// Task 012 — Reacts to alarm state changes from the background service
   void _onAlarmChanged() {
     if (mounted) {
       setState(() {
@@ -82,7 +84,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
   }
 
-  /// Task 011 — Auto-refresh order and customer data
   void _autoRefresh() {
     if (!mounted || kIsWeb) return;
     context.read<OrderProvider>().loadOrders();
@@ -93,25 +94,25 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && !kIsWeb) {
-      unawaited(AlarmService.instance.syncPendingAlert());
+      _autoRefresh();
     }
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _messageSubscription?.cancel();
+    _orderSubscription?.cancel();
     AlarmService.instance.removeListener(_onAlarmChanged);
     AlarmService.instance.stopUiSync();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  /// Navigates to a specific tab by index
   void _navigateToTab(int index) {
     setState(() => _currentIndex = index);
   }
 
-  /// Navigation items for bottom nav bar
   static const List<_NavItem> _navItems = [
     _NavItem(icon: Icons.dashboard, label: 'Home'),
     _NavItem(icon: Icons.list_alt, label: 'Orders'),
@@ -120,7 +121,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _NavItem(icon: Icons.settings, label: 'Settings'),
   ];
 
-  /// Builds the current screen based on tab index
   Widget _buildScreen() {
     switch (_currentIndex) {
       case 0:
@@ -133,7 +133,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         return const CustomersScreen();
       case 4:
         return SettingsScreen(
-          // Task 012 — Test alert triggers AlarmService like a real DROP
           onTestAlert: () =>
               AlarmService.instance.trigger(phone: 'TEST MODE', qty: 5),
         );
@@ -192,12 +191,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
     return Scaffold(
       backgroundColor: AppColors.of(context).background,
-      // Stack allows the walk-in alert to overlay on top of the active screen
       body: Stack(
         children: [
           SafeArea(child: _buildScreen()),
-          // Walk-in alert overlay — shown on top of everything
-          // Triggered by DROP commands or the Test Alert button in Settings
           if (_showWalkInAlert)
             WalkInAlert(
               onAcknowledge: () {
@@ -207,41 +203,38 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             ),
         ],
       ),
-      // Bottom navigation bar — uses Flutter's built-in widget for
-      // reliable safe area handling and no overflow issues.
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.of(context).border)),
         ),
         child: Theme(
-        data: Theme.of(context).copyWith(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: AppColors.of(context).card,
-          selectedItemColor: AppColors.of(context).primary,
-          unselectedItemColor: AppColors.of(context).mutedForeground,
-          selectedFontSize: 11,
-          unselectedFontSize: 11,
-          iconSize: 22,
-          items: _navItems
-              .map((item) => BottomNavigationBarItem(
-                    icon: Icon(item.icon),
-                    label: item.label,
-                  ))
-              .toList(),
-        ),
+          data: Theme.of(context).copyWith(
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (i) => setState(() => _currentIndex = i),
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: AppColors.of(context).card,
+            selectedItemColor: AppColors.of(context).primary,
+            unselectedItemColor: AppColors.of(context).mutedForeground,
+            selectedFontSize: 11,
+            unselectedFontSize: 11,
+            iconSize: 22,
+            items: _navItems
+                .map((item) => BottomNavigationBarItem(
+                      icon: Icon(item.icon),
+                      label: item.label,
+                    ))
+                .toList(),
+          ),
         ),
       ),
     );
   }
 }
 
-/// Simple data class for navigation items
 class _NavItem {
   final IconData icon;
   final String label;
