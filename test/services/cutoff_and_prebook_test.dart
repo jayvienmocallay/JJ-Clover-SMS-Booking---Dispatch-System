@@ -122,10 +122,13 @@ void main() {
     });
 
     test('Zone A: after Saturday cutoff → next is Monday', () {
-      final schedules = [
-        'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
-      ].map((d) => Schedule(customerId: 1, deliveryDay: d, status: 'active'))
-          .toList();
+      final schedules =
+          ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+              .map(
+                (d) =>
+                    Schedule(customerId: 1, deliveryDay: d, status: 'active'),
+              )
+              .toList();
       expect(findNextAvailableDay(schedules, 'Saturday'), 'Monday');
     });
   });
@@ -186,7 +189,6 @@ void main() {
         'phone_number': '09171000011',
         'type': 'deliver',
         'quantity': 3,
-        'gallon_type': null,
         'address': null,
         'status': 'pending',
         'created_at': '2026-03-08T06:30:00.000',
@@ -196,23 +198,6 @@ void main() {
       };
       final order = Order.fromMap(map);
       expect(order.isPreBook, true);
-    });
-
-    test('pre-book order preserves gallon type', () {
-      final order = Order(
-        customerId: 11,
-        phoneNumber: '09171000011',
-        type: OrderType.deliver,
-        quantity: 3,
-        gallonType: GallonType.newGallon,
-        status: OrderStatus.pending,
-        createdAt: DateTime.now(),
-        deliveryDay: 'Tuesday',
-        isPreBook: true,
-      );
-      expect(order.gallonType, GallonType.newGallon);
-      final map = order.toMap();
-      expect(map['gallon_type'], 'new');
     });
   });
 

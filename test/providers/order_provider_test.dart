@@ -51,7 +51,6 @@ void main() {
         'phone_number': '09182223333',
         'type': 'deliver',
         'quantity': 4,
-        'gallon_type': 'old',
         'address': 'Purok 4',
         'status': 'in_transit',
         'created_at': DateTime.now().toIso8601String(),
@@ -82,7 +81,6 @@ void main() {
       expect(logs.single['order_id'], orderId);
       expect(logs.single['customer_id'], customerId);
       expect(logs.single['quantity_delivered'], 4);
-      expect(logs.single['gallon_type'], 'old');
       expect(logs.single['staff_id'], 3);
       expect(logs.single['notes'], 'Provider completion');
 

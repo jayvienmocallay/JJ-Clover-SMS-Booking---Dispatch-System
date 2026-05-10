@@ -41,6 +41,7 @@ class RegistrationFlowHandler {
           sender,
           SmsRegistrationCopy.noDataOnFile,
           smsSender: smsSender,
+          sourceMessageId: sourceMessageId,
         );
         return true;
       }
@@ -59,6 +60,7 @@ class RegistrationFlowHandler {
           address: c.address,
         ),
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return true;
     }
@@ -71,6 +73,7 @@ class RegistrationFlowHandler {
           sender,
           SmsRegistrationCopy.noDataOnFile,
           smsSender: smsSender,
+          sourceMessageId: sourceMessageId,
         );
         return true;
       }
@@ -83,6 +86,7 @@ class RegistrationFlowHandler {
         sender,
         SmsRegistrationCopy.deleteWarning,
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return true;
     }
@@ -94,6 +98,7 @@ class RegistrationFlowHandler {
           sender,
           SmsRegistrationCopy.confirmDeleteWithoutRequest,
           smsSender: smsSender,
+          sourceMessageId: sourceMessageId,
         );
         return true;
       }
@@ -111,6 +116,7 @@ class RegistrationFlowHandler {
         sender,
         SmsRegistrationCopy.deleteComplete,
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return true;
     }
@@ -125,6 +131,7 @@ class RegistrationFlowHandler {
             ? SmsRegistrationCopy.deleteCancelled
             : SmsRegistrationCopy.registrationCancelled,
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return true;
     }
@@ -137,6 +144,7 @@ class RegistrationFlowHandler {
         sender,
         SmsRegistrationCopy.deleteCancelled,
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return true;
     }
@@ -148,6 +156,7 @@ class RegistrationFlowHandler {
           sender,
           SmsRegistrationCopy.alreadyRegistered,
           smsSender: smsSender,
+          sourceMessageId: sourceMessageId,
         );
         return true;
       }
@@ -157,6 +166,7 @@ class RegistrationFlowHandler {
           sender,
           SmsRegistrationCopy.registerHelp,
           smsSender: smsSender,
+          sourceMessageId: sourceMessageId,
         );
         return true;
       }
@@ -170,6 +180,7 @@ class RegistrationFlowHandler {
         sender,
         SmsRegistrationCopy.registrationConsent(name: name),
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return true;
     }
@@ -196,6 +207,7 @@ class RegistrationFlowHandler {
         sender,
         SmsRegistrationCopy.noPendingRegistration,
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return true;
     }
@@ -208,12 +220,12 @@ class RegistrationFlowHandler {
         'Unregistered',
         sourceMessageId: sourceMessageId,
         quantity: parsed.quantity ?? 0,
-        gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
       );
       await SmsHandlerUtils.sendReply(
         sender,
         SmsRegistrationCopy.unknownNumberPrompt,
         smsSender: smsSender,
+        sourceMessageId: sourceMessageId,
       );
       return true;
     }
@@ -224,12 +236,12 @@ class RegistrationFlowHandler {
   bool _requiresRegisteredCustomer(SmsCommand command) {
     switch (command) {
       case SmsCommand.deliver:
-      case SmsCommand.drop:
       case SmsCommand.yes:
       case SmsCommand.cancel:
       case SmsCommand.status:
       case SmsCommand.unknown:
         return true;
+      case SmsCommand.drop:
       case SmsCommand.register:
       case SmsCommand.agree:
       case SmsCommand.stop:
@@ -277,6 +289,7 @@ class RegistrationFlowHandler {
             sender,
             SmsRegistrationCopy.askBarangay(list),
             smsSender: smsSender,
+            sourceMessageId: sourceMessageId,
           );
           return true;
         }
@@ -284,6 +297,7 @@ class RegistrationFlowHandler {
           sender,
           SmsRegistrationCopy.consentRequired,
           smsSender: smsSender,
+          sourceMessageId: sourceMessageId,
         );
         return true;
 
@@ -295,6 +309,7 @@ class RegistrationFlowHandler {
               sender,
               SmsRegistrationCopy.invalidBarangay,
               smsSender: smsSender,
+              sourceMessageId: sourceMessageId,
             );
             return true;
           }
@@ -304,6 +319,7 @@ class RegistrationFlowHandler {
               sender,
               SmsRegistrationCopy.invalidBarangay,
               smsSender: smsSender,
+              sourceMessageId: sourceMessageId,
             );
             return true;
           }
@@ -320,6 +336,7 @@ class RegistrationFlowHandler {
             sender,
             SmsRegistrationCopy.askAddress,
             smsSender: smsSender,
+            sourceMessageId: sourceMessageId,
           );
           return true;
         }
@@ -327,6 +344,7 @@ class RegistrationFlowHandler {
           sender,
           SmsRegistrationCopy.barangayPromptReminder,
           smsSender: smsSender,
+          sourceMessageId: sourceMessageId,
         );
         return true;
 
@@ -338,6 +356,7 @@ class RegistrationFlowHandler {
               sender,
               SmsRegistrationCopy.addressPromptReminder,
               smsSender: smsSender,
+              sourceMessageId: sourceMessageId,
             );
             return true;
           }
@@ -347,6 +366,7 @@ class RegistrationFlowHandler {
               sender,
               SmsRegistrationCopy.registerHelp,
               smsSender: smsSender,
+              sourceMessageId: sourceMessageId,
             );
             return true;
           }
@@ -368,6 +388,7 @@ class RegistrationFlowHandler {
               sender,
               SmsRegistrationCopy.alreadyRegistered,
               smsSender: smsSender,
+              sourceMessageId: sourceMessageId,
             );
             return true;
           }
@@ -381,6 +402,7 @@ class RegistrationFlowHandler {
               barangay: barangay?['name'] as String? ?? '',
             ),
             smsSender: smsSender,
+            sourceMessageId: sourceMessageId,
           );
           return true;
         }
@@ -388,6 +410,7 @@ class RegistrationFlowHandler {
           sender,
           SmsRegistrationCopy.addressPromptReminder,
           smsSender: smsSender,
+          sourceMessageId: sourceMessageId,
         );
         return true;
     }

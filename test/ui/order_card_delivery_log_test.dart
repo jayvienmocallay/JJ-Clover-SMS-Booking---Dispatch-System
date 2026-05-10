@@ -57,7 +57,6 @@ void main() {
         'phone_number': '09181112222',
         'type': 'deliver',
         'quantity': 2,
-        'gallon_type': 'new',
         'address': 'Purok 3',
         'status': 'in_transit',
         'created_at': DateTime(2026, 4, 26, 8).toIso8601String(),
@@ -104,7 +103,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Delivery Log'), findsOneWidget);
-    expect(find.text('2 gallons delivered (new)'), findsOneWidget);
+    expect(find.text('2 gallons delivered'), findsOneWidget);
     expect(find.text('Gate handoff'), findsOneWidget);
     expect(find.text('9:30 AM'), findsOneWidget);
   });

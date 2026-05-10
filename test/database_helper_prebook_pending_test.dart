@@ -39,7 +39,6 @@ void main() {
         'customerId': 12,
         'phoneNumber': phone,
         'quantity': 4,
-        'gallonType': 'new',
         'address': address,
         'deliveryDay': 'Wednesday',
         'timestamp': 1770000000000,
@@ -56,7 +55,6 @@ void main() {
     final pending = await helper.getPreBookPending();
     expect(pending[phone]?['customerId'], 12);
     expect(pending[phone]?['quantity'], 4);
-    expect(pending[phone]?['gallonType'], 'new');
     expect(pending[phone]?['address'], address);
     expect(pending[phone]?['deliveryDay'], 'Wednesday');
     expect(pending[phone]?['timestamp'], 1770000000000);
@@ -75,7 +73,6 @@ void main() {
       final pending = await helper.getPreBookPending();
       expect(pending[phone]?['customerId'], 7);
       expect(pending[phone]?['quantity'], 3);
-      expect(pending[phone]?['gallonType'], 'old');
       expect(pending[phone]?['address'], address);
       expect(pending[phone]?['deliveryDay'], 'Monday');
       expect(pending[phone]?['timestamp'], 1770000000001);

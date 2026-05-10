@@ -48,7 +48,6 @@ class YesCommandHandler {
       phoneNumber: context.phoneNumber,
       type: OrderType.deliver,
       quantity: context.quantity,
-      gallonType: SmsHandlerUtils.mapGallonType(context.gallonType),
       address: context.address,
       status: OrderStatus.pending,
       createdAt: DateTime.now(),

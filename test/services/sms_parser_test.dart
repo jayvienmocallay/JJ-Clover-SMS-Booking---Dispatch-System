@@ -9,23 +9,6 @@ void main() {
       final result = SmsParser.parse('DELIVER 5');
       expect(result.command, SmsCommand.deliver);
       expect(result.quantity, 5);
-      expect(result.gallonType, isNull);
-      expect(result.address, isNull);
-    });
-
-    test('parses DELIVER with gallon type NEW', () {
-      final result = SmsParser.parse('DELIVER 3 NEW');
-      expect(result.command, SmsCommand.deliver);
-      expect(result.quantity, 3);
-      expect(result.gallonType, 'new');
-      expect(result.address, isNull);
-    });
-
-    test('parses DELIVER with gallon type OLD', () {
-      final result = SmsParser.parse('DELIVER 2 OLD');
-      expect(result.command, SmsCommand.deliver);
-      expect(result.quantity, 2);
-      expect(result.gallonType, 'old');
       expect(result.address, isNull);
     });
 
@@ -33,16 +16,7 @@ void main() {
       final result = SmsParser.parse('DELIVER 4 Purok 3 near chapel');
       expect(result.command, SmsCommand.deliver);
       expect(result.quantity, 4);
-      expect(result.gallonType, isNull);
       expect(result.address, 'Purok 3 near chapel');
-    });
-
-    test('parses DELIVER with gallon type AND address', () {
-      final result = SmsParser.parse('DELIVER 3 NEW Purok 4');
-      expect(result.command, SmsCommand.deliver);
-      expect(result.quantity, 3);
-      expect(result.gallonType, 'new');
-      expect(result.address, 'Purok 4');
     });
 
     // Task 009 — Real-world variations
@@ -53,10 +27,9 @@ void main() {
     });
 
     test('handles mixed case deliver', () {
-      final result = SmsParser.parse('Deliver 3 New');
+      final result = SmsParser.parse('Deliver 3 Purok 4');
       expect(result.command, SmsCommand.deliver);
       expect(result.quantity, 3);
-      expect(result.gallonType, 'new');
     });
 
     test('handles extra whitespace', () {

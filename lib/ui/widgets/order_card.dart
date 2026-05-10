@@ -101,9 +101,8 @@ class OrderCard extends StatelessWidget {
                       if (phone != null)
                         Text(
                           phone!,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: palette.mutedForeground,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: palette.mutedForeground),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -112,9 +111,8 @@ class OrderCard extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
                             [address, barangay].whereType<String>().join(' · '),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: palette.mutedForeground,
-                            ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: palette.mutedForeground),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -135,11 +133,12 @@ class OrderCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                '${order.quantity} gal · ${order.gallonType == GallonType.newGallon ? "New" : "Old"}',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  color: palette.mutedForeground,
-                                ),
+                                '${order.quantity} gal',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                      color: palette.mutedForeground,
+                                    ),
                               ),
                             ),
                             if (order.isPreBook) ...[
@@ -164,10 +163,13 @@ class OrderCard extends StatelessWidget {
                                     const SizedBox(width: 4),
                                     Text(
                                       'Pre-booked${order.deliveryDay != null ? " (${order.deliveryDay})" : ""}',
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                        fontWeight: FontWeight.w500,
-                                        color: palette.primary,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w500,
+                                            color: palette.primary,
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -196,7 +198,10 @@ class OrderCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: palette.statusMaintenanceLight,
                     borderRadius: BorderRadius.circular(6),
@@ -216,7 +221,10 @@ class OrderCard extends StatelessWidget {
                   onTap: () => _showDeliveryLogs(context, order.id!),
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 8,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -228,10 +236,11 @@ class OrderCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         Text(
                           'View Delivery Log',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: palette.primary,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w500,
+                                color: palette.primary,
+                              ),
                         ),
                       ],
                     ),
@@ -268,7 +277,8 @@ class OrderCard extends StatelessWidget {
                 ),
               ),
 
-            if (order.status == OrderStatus.confirmed && onStartDelivery != null)
+            if (order.status == OrderStatus.confirmed &&
+                onStartDelivery != null)
               _ActionSection(
                 child: _ActionButton(
                   label: 'Start Delivery',
@@ -328,9 +338,9 @@ class OrderCard extends StatelessWidget {
 
   Future<void> _showDeliveryLogs(BuildContext context, int orderId) async {
     if (kIsWeb) return;
-    final logs = await context
-        .read<OrderRepository>()
-        .getDeliveryLogsForOrder(orderId);
+    final logs = await context.read<OrderRepository>().getDeliveryLogsForOrder(
+      orderId,
+    );
     if (!context.mounted) return;
     final palette = AppColors.of(context);
     showModalBottomSheet(
@@ -376,7 +386,6 @@ class OrderCard extends StatelessWidget {
             else
               ...logs.map((log) {
                 final qty = log['quantity_delivered'] as int? ?? 0;
-                final gType = log['gallon_type'] as String? ?? '';
                 final notes = log['notes'] as String? ?? '';
                 final deliveredAt = log['delivered_at'] as String? ?? '';
                 String timeStr = '';
@@ -404,10 +413,9 @@ class OrderCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '$qty gallon${qty > 1 ? "s" : ""} delivered${gType.isNotEmpty ? " ($gType)" : ""}',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500,
-                              ),
+                              '$qty gallon${qty > 1 ? "s" : ""} delivered',
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w500),
                             ),
                             if (notes.isNotEmpty)
                               Text(
@@ -488,9 +496,9 @@ class _ActionButton extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Colors.white,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: Colors.white),
               ),
             ],
           ),

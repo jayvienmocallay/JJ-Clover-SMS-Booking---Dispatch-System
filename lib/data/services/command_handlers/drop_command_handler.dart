@@ -34,7 +34,6 @@ class DropCommandHandler {
         'rejected',
         sourceMessageId: sourceMessageId,
         quantity: parsed.quantity ?? 0,
-        gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
       );
       await SmsHandlerUtils.sendReply(
         sender,

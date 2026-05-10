@@ -61,13 +61,21 @@ class DefaultSmsReceiver : BroadcastReceiver() {
 
         val subscriptionId = extractSubscriptionId(intent)
         return messages
-            .groupBy { it.originatingAddress.orEmpty() }
-            .mapNotNull { (sender, parts) ->
-                val body = parts.joinToString(separator = "") { it.messageBody.orEmpty() }
+            .groupBy { message ->
+                listOf(
+                    message.originatingAddress.orEmpty(),
+                    message.timestampMillis,
+                    message.indexOnIcc,
+                )
+            }
+            .mapNotNull { (_, parts) ->
+                val sortedParts = parts.sortedBy { it.indexOnIcc }
+                val first = sortedParts.first()
+                val sender = first.originatingAddress.orEmpty()
+                val body = sortedParts.joinToString(separator = "") { it.messageBody.orEmpty() }
                 if (sender.isBlank() || body.isBlank()) {
                     null
                 } else {
-                    val first = parts.first()
                     SmsPayload.create(
                         sender = sender,
                         message = body,

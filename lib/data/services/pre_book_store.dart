@@ -35,10 +35,11 @@ class PreBookStore {
             customerId: v['customerId'] as int,
             phoneNumber: v['phoneNumber'] as String,
             quantity: v['quantity'] as int,
-            gallonType: v['gallonType'] as String?,
             address: v['address'] as String?,
             deliveryDay: v['deliveryDay'] as String,
-            scheduledFor: DateTime.tryParse(v['scheduledFor'] as String? ?? '') ?? createdAt,
+            scheduledFor:
+                DateTime.tryParse(v['scheduledFor'] as String? ?? '') ??
+                createdAt,
             createdAt: createdAt,
           );
         }
@@ -58,7 +59,6 @@ class PreBookStore {
           'customerId': c.customerId,
           'phoneNumber': c.phoneNumber,
           'quantity': c.quantity,
-          'gallonType': c.gallonType,
           'address': c.address,
           'deliveryDay': c.deliveryDay,
           'scheduledFor': c.scheduledFor.toIso8601String(),

@@ -184,7 +184,6 @@ class DatabaseHelper {
         phone_number TEXT NOT NULL,
         type TEXT NOT NULL,
         quantity INTEGER NOT NULL,
-        gallon_type TEXT,
         address TEXT,
         status TEXT NOT NULL,
         cancel_reason TEXT,
@@ -235,7 +234,6 @@ class DatabaseHelper {
         customer_id INTEGER NOT NULL,
         staff_id INTEGER,
         quantity_delivered INTEGER NOT NULL,
-        gallon_type TEXT,
         notes TEXT,
         returned_containers INTEGER,
         payment_method TEXT,
@@ -287,7 +285,6 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE customers ADD COLUMN address TEXT');
 
       // Add gallon classification column: 'new' (household) or 'old' (store)
-      await db.execute('ALTER TABLE orders ADD COLUMN gallon_type TEXT');
 
       // Add staff assignment column for delivery accountability
       await db.execute('ALTER TABLE orders ADD COLUMN staff_id INTEGER');
@@ -303,8 +300,7 @@ class DatabaseHelper {
           customer_id INTEGER NOT NULL,
           staff_id INTEGER,
           quantity_delivered INTEGER NOT NULL,
-          gallon_type TEXT,
-          notes TEXT,
+            notes TEXT,
           delivered_at TEXT NOT NULL,
           FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE,
           FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
@@ -496,7 +492,7 @@ class DatabaseHelper {
     await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
 
     await db.execute(
-      'CREATE UNIQUE INDEX IF NOT EXISTS idx_sms_source_message '
+      'CREATE INDEX IF NOT EXISTS idx_sms_source_message '
       'ON sms_messages(source_message_id) '
       'WHERE source_message_id IS NOT NULL',
     );
@@ -674,14 +670,42 @@ class DatabaseHelper {
       {'name': 'San Jose', 'delivery_zone': 'Zone A'},
       {'name': 'Poblacion', 'delivery_zone': 'Zone B'},
       {'name': 'Santa Rosa', 'delivery_zone': 'Zone B'},
-      {'name': 'Santo Niño', 'delivery_zone': 'Zone C', 'delivery_day': 'Tuesday'},
+      {
+        'name': 'Santo Niño',
+        'delivery_zone': 'Zone C',
+        'delivery_day': 'Tuesday',
+      },
       {'name': 'Semong', 'delivery_zone': 'Zone C', 'delivery_day': 'Tuesday'},
-      {'name': 'Gabuyan', 'delivery_zone': 'Zone C', 'delivery_day': 'Thursday'},
-      {'name': 'Bunawan', 'delivery_zone': 'Zone C', 'delivery_day': 'Thursday'},
-      {'name': 'Katipunan', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
-      {'name': 'Dagohoy', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
-      {'name': 'Tiburcia', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
-      {'name': 'Clementa', 'delivery_zone': 'Zone C', 'delivery_day': 'Saturday'},
+      {
+        'name': 'Gabuyan',
+        'delivery_zone': 'Zone C',
+        'delivery_day': 'Thursday',
+      },
+      {
+        'name': 'Bunawan',
+        'delivery_zone': 'Zone C',
+        'delivery_day': 'Thursday',
+      },
+      {
+        'name': 'Katipunan',
+        'delivery_zone': 'Zone C',
+        'delivery_day': 'Saturday',
+      },
+      {
+        'name': 'Dagohoy',
+        'delivery_zone': 'Zone C',
+        'delivery_day': 'Saturday',
+      },
+      {
+        'name': 'Tiburcia',
+        'delivery_zone': 'Zone C',
+        'delivery_day': 'Saturday',
+      },
+      {
+        'name': 'Clementa',
+        'delivery_zone': 'Zone C',
+        'delivery_day': 'Saturday',
+      },
     ];
 
     for (final barangay in defaultBarangays) {
@@ -782,10 +806,7 @@ class DatabaseHelper {
   /// Update a barangay's zone and delivery day.
   /// Also re-creates schedules for all customers in this barangay
   /// so their delivery days match the new zone configuration.
-  Future<int> updateBarangay(
-    int id,
-    Map<String, dynamic> data,
-  ) async {
+  Future<int> updateBarangay(int id, Map<String, dynamic> data) async {
     final db = await instance.database;
     final updated = await db.update(
       'barangays',
@@ -1047,7 +1068,9 @@ class DatabaseHelper {
     final trimmedSearch = search?.trim();
     if (trimmedSearch != null && trimmedSearch.isNotEmpty) {
       final normalized = PhoneNumberUtils.normalize(trimmedSearch);
-      clauses.add('(o.phone_number LIKE ? OR o.id = ? OR c.name LIKE ? OR c.contact_number LIKE ?)');
+      clauses.add(
+        '(o.phone_number LIKE ? OR o.id = ? OR c.name LIKE ? OR c.contact_number LIKE ?)',
+      );
       args.add('%$trimmedSearch%');
       args.add(int.tryParse(trimmedSearch) ?? -1);
       args.add('%$trimmedSearch%');
@@ -1086,7 +1109,9 @@ class DatabaseHelper {
     if (currentRows.isEmpty) return 0;
     final currentStatus = currentRows.single['status'] as String? ?? 'pending';
     if (!OrderStatusTransitionService.canTransitionDb(currentStatus, status)) {
-      throw StateError('Invalid order status transition: $currentStatus -> $status');
+      throw StateError(
+        'Invalid order status transition: $currentStatus -> $status',
+      );
     }
     final data = <String, dynamic>{'status': status};
     if (reason != null && reason.isNotEmpty) data['cancel_reason'] = reason;
@@ -1104,34 +1129,56 @@ class DatabaseHelper {
   }) async {
     final db = await instance.database;
     return await db.transaction<int>((txn) async {
-      final orders = await txn.query('orders', where: 'id = ?', whereArgs: [id], limit: 1);
+      final orders = await txn.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
       if (orders.isEmpty) return 0;
       final order = orders.single;
       final currentStatus = order['status'] as String? ?? 'pending';
-      if (!OrderStatusTransitionService.canTransitionDb(currentStatus, 'completed')) {
-        throw StateError('Invalid order status transition: $currentStatus -> completed');
+      if (!OrderStatusTransitionService.canTransitionDb(
+        currentStatus,
+        'completed',
+      )) {
+        throw StateError(
+          'Invalid order status transition: $currentStatus -> completed',
+        );
       }
       final updated = currentStatus == 'completed'
           ? 1
-          : await txn.update('orders', {'status': 'completed'}, where: 'id = ?', whereArgs: [id]);
+          : await txn.update(
+              'orders',
+              {'status': 'completed'},
+              where: 'id = ?',
+              whereArgs: [id],
+            );
       if (updated == 0) return 0;
       final customerId = order['customer_id'] as int?;
       if (customerId == null) return updated;
-      final existingLogs = await txn.query('delivery_logs', columns: ['id'], where: 'order_id = ?', whereArgs: [id], limit: 1);
+      final existingLogs = await txn.query(
+        'delivery_logs',
+        columns: ['id'],
+        where: 'order_id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
       if (existingLogs.isNotEmpty) return updated;
       final logData = <String, dynamic>{
         'order_id': id,
         'customer_id': customerId,
-        'quantity_delivered': quantityDelivered ?? order['quantity'] as int? ?? 0,
+        'quantity_delivered':
+            quantityDelivered ?? order['quantity'] as int? ?? 0,
         'delivered_at': (deliveredAt ?? DateTime.now()).toIso8601String(),
       };
       final resolvedStaffId = staffId ?? order['staff_id'] as int?;
       if (resolvedStaffId != null) logData['staff_id'] = resolvedStaffId;
-      final gallonType = _nonEmptyString(order['gallon_type'] as String?);
-      if (gallonType != null) logData['gallon_type'] = gallonType;
       final deliveryNotes = _nonEmptyString(notes);
       if (deliveryNotes != null) logData['notes'] = deliveryNotes;
-      if (returnedContainers != null) logData['returned_containers'] = returnedContainers;
+      if (returnedContainers != null) {
+        logData['returned_containers'] = returnedContainers;
+      }
       if (cashCollected) logData['payment_method'] = 'cash';
       await txn.insert('delivery_logs', logData);
       return updated;
@@ -1220,7 +1267,9 @@ class DatabaseHelper {
     final nowIso = now.toIso8601String();
     final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
 
-    return await db.transaction<({bool claimed, bool isDuplicate})>((txn) async {
+    return await db.transaction<({bool claimed, bool isDuplicate})>((
+      txn,
+    ) async {
       final existing = await txn.query(
         'incoming_sms_receipts',
         where: 'message_id = ?',
@@ -1350,11 +1399,7 @@ class DatabaseHelper {
     if (phoneNumber != null) {
       normalizedData['phone_number'] = PhoneNumberUtils.normalize(phoneNumber);
     }
-    return await db.insert(
-      'sms_messages',
-      normalizedData,
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    return await db.insert('sms_messages', normalizedData);
   }
 
   /// Get all SMS messages for a phone number
@@ -1704,25 +1749,22 @@ class DatabaseHelper {
       whereArgs: [normalized],
       limit: 1,
     );
-    final createdAt =
-        existing.isNotEmpty ? (existing.first['created_at'] as String) : nowIso;
+    final createdAt = existing.isNotEmpty
+        ? (existing.first['created_at'] as String)
+        : nowIso;
 
-    await db.insert(
-      'pending_sms_actions',
-      {
-        'phone_number': normalized,
-        'action': action,
-        'step': step,
-        'name': name,
-        'barangay_id': barangayId,
-        'address': address,
-        'consent_version': consentVersion,
-        'consent_given_at': consentGivenAt,
-        'created_at': createdAt,
-        'updated_at': nowIso,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('pending_sms_actions', {
+      'phone_number': normalized,
+      'action': action,
+      'step': step,
+      'name': name,
+      'barangay_id': barangayId,
+      'address': address,
+      'consent_version': consentVersion,
+      'consent_given_at': consentGivenAt,
+      'created_at': createdAt,
+      'updated_at': nowIso,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Removes the pending action for [phoneNumber] (no-op if none).
@@ -1795,11 +1837,7 @@ class DatabaseHelper {
         // personal identifiers remain (RA 10173 erasure of personal data).
         await txn.update(
           'orders',
-          {
-            'customer_id': null,
-            'phone_number': '',
-            'address': null,
-          },
+          {'customer_id': null, 'phone_number': '', 'address': null},
           where: 'customer_id = ? OR phone_number = ?',
           whereArgs: [id, normalized],
         );
@@ -1810,10 +1848,7 @@ class DatabaseHelper {
         // phone (walk-in DROP records etc.) so erasure is complete.
         await txn.update(
           'orders',
-          {
-            'phone_number': '',
-            'address': null,
-          },
+          {'phone_number': '', 'address': null},
           where: 'phone_number = ?',
           whereArgs: [normalized],
         );

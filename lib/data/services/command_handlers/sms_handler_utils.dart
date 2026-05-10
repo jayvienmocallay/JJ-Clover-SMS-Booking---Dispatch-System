@@ -64,7 +64,6 @@ class SmsHandlerUtils {
     String status, {
     String? sourceMessageId,
     int quantity = 0,
-    GallonType? gallonType,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
     final customerData = await _customers.getCustomerByPhone(normalizedSender);
@@ -89,7 +88,6 @@ class SmsHandlerUtils {
       phoneNumber: normalizedSender,
       type: OrderType.unrecognized,
       quantity: quantity,
-      gallonType: gallonType,
       cancelReason: message,
       status: orderStatus,
       createdAt: DateTime.now(),
@@ -104,17 +102,5 @@ class SmsHandlerUtils {
       sender: sender,
     );
     debugPrint('Saved unrecognized message from $normalizedSender: $status');
-  }
-
-  /// Maps the parser's lowercase gallon-type string to the model enum.
-  static GallonType? mapGallonType(String? gallonTypeStr) {
-    switch (gallonTypeStr) {
-      case 'new':
-        return GallonType.newGallon;
-      case 'old':
-        return GallonType.oldGallon;
-      default:
-        return null;
-    }
   }
 }

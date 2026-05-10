@@ -222,7 +222,9 @@ class SmsBackgroundService {
           sourceMessageId: effectiveSourceMessageId,
         );
       } else {
-        debugPrint('Message still processing, skipped: $effectiveSourceMessageId');
+        debugPrint(
+          'Message still processing, skipped: $effectiveSourceMessageId',
+        );
       }
       return;
     }
@@ -323,7 +325,6 @@ class SmsBackgroundService {
             'Unrecognized',
             sourceMessageId: effectiveSourceMessageId,
             quantity: parsed.quantity ?? 0,
-            gallonType: SmsHandlerUtils.mapGallonType(parsed.gallonType),
           );
           await SmsHandlerUtils.sendReply(
             sender,
@@ -374,7 +375,9 @@ class SmsBackgroundService {
 
     final customerData = await _customers.getCustomerByPhone(normalizedSender);
     if (customerData == null) {
-      debugPrint('First-contact registration prompt skipped for unregistered $normalizedSender');
+      debugPrint(
+        'First-contact registration prompt skipped for unregistered $normalizedSender',
+      );
       return;
     }
 
