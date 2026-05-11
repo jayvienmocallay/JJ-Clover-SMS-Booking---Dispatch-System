@@ -1,3 +1,9 @@
+import 'dart:async';
+import 'dart:collection';
+
+import 'dart:async';
+import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
 import 'package:another_telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
@@ -6,6 +12,7 @@ import '../../repositories/customer_repository.dart';
 import '../../repositories/order_repository.dart';
 import '../../repositories/sms_message_repository.dart';
 import '../app_event_bus.dart';
+import '../native_sms_sender.dart';
 import '../push_notification_service.dart';
 
 /// Static utilities shared across all SMS command handlers.
@@ -14,35 +21,77 @@ class SmsHandlerUtils {
   static final _messages = SmsMessageRepository();
   static final _orders = OrderRepository();
 
-  /// Sends an SMS reply immediately and records the send result.
+  static const Duration _sendDelay = Duration(seconds: 2);
+  static final Queue<_QueuedReply> _replyQueue = Queue<_QueuedReply>();
+  static bool _isSending = false;
+
+  /// Queues an SMS reply for sending and records the final send status.
   static Future<void> sendReply(
     String phoneNumber,
     String message, {
     Telephony? smsSender,
     String? sourceMessageId,
   }) async {
-    final normalizedPhone = PhoneNumberUtils.normalize(phoneNumber);
+    final completer = Completer<void>();
     final outgoingSourceMessageId = _outgoingSourceMessageId(
       sourceMessageId,
       message,
     );
 
+    _replyQueue.add(
+      _QueuedReply(
+        phoneNumber: phoneNumber,
+        message: message,
+        smsSender: smsSender,
+        sourceMessageId: outgoingSourceMessageId,
+        completer: completer,
+      ),
+    );
+
+    unawaited(_drainQueue());
+    return completer.future;
+  }
+
+  static Future<void> _drainQueue() async {
+    if (_isSending) return;
+    _isSending = true;
+
+    while (_replyQueue.isNotEmpty) {
+      final item = _replyQueue.removeFirst();
+      await _sendAndRecord(item);
+      item.completer.complete();
+
+      if (_replyQueue.isNotEmpty) {
+        await Future<void>.delayed(_sendDelay);
+      }
+    }
+
+    _isSending = false;
+  }
+
+  static Future<void> _sendAndRecord(_QueuedReply item) async {
+    final normalizedPhone = PhoneNumberUtils.normalize(item.phoneNumber);
+
     try {
-      await _doSend(phoneNumber, message, smsSender: smsSender);
+      await _doSend(
+        item.phoneNumber,
+        item.message,
+        smsSender: item.smsSender,
+      );
       await _insertOutgoingMessage(
         phoneNumber: normalizedPhone,
-        message: message,
+        message: item.message,
         status: 'sent',
-        sourceMessageId: outgoingSourceMessageId,
+        sourceMessageId: item.sourceMessageId,
       );
     } catch (e, st) {
-      debugPrint('SMS reply send failed for $phoneNumber: $e');
+      debugPrint('SMS reply send failed: ' + e.toString());
       debugPrintStack(stackTrace: st);
       await _insertOutgoingMessage(
         phoneNumber: normalizedPhone,
-        message: message,
+        message: item.message,
         status: 'failed',
-        sourceMessageId: outgoingSourceMessageId,
+        sourceMessageId: item.sourceMessageId,
       );
     } finally {
       AppEventBus().notifyMessageReceived();
@@ -83,9 +132,8 @@ class SmsHandlerUtils {
     String message, {
     Telephony? smsSender,
   }) async {
-    final telephony = smsSender ?? Telephony.instance;
-    await telephony.sendSms(to: phoneNumber, message: message);
-    debugPrint('Reply sent to $phoneNumber: $message');
+    await NativeSmsSender.sendSms(to: phoneNumber, message: message);
+    debugPrint('Reply sent to ' + phoneNumber);
   }
 
   /// Saves a message that couldn't be processed as a regular order so it
@@ -135,4 +183,20 @@ class SmsHandlerUtils {
     );
     debugPrint('Saved unrecognized message from $normalizedSender: $status');
   }
+}
+
+class _QueuedReply {
+  final String phoneNumber;
+  final String message;
+  final Telephony? smsSender;
+  final String? sourceMessageId;
+  final Completer<void> completer;
+
+  _QueuedReply({
+    required this.phoneNumber,
+    required this.message,
+    required this.smsSender,
+    required this.sourceMessageId,
+    required this.completer,
+  });
 }

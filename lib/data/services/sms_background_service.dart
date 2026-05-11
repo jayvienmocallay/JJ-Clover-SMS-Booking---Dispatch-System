@@ -285,11 +285,15 @@ class SmsBackgroundService {
 
       await _modeManager.loadPersistedMode();
 
-      await _sendFirstContactRepliesIfNeeded(
+      final handledByFirstContact = await _handleFirstContactIfNeeded(
         sender: sender,
         smsSender: smsSender,
         sourceMessageId: effectiveSourceMessageId,
       );
+      if (handledByFirstContact) {
+        await _receipts.complete(effectiveSourceMessageId);
+        return;
+      }
 
       final parsed = SmsParser.parse(message);
 
@@ -397,7 +401,7 @@ class SmsBackgroundService {
     );
   }
 
-  Future<void> _sendFirstContactRepliesIfNeeded({
+  Future<bool> _handleFirstContactIfNeeded({
     required String sender,
     Telephony? smsSender,
     String? sourceMessageId,
@@ -405,25 +409,25 @@ class SmsBackgroundService {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
     final alreadyNotified = await DatabaseHelper.instance
         .isFirstContactNotified(normalizedSender);
-    if (alreadyNotified) return;
+    if (alreadyNotified) return false;
 
     final customerData = await _customers.getCustomerByPhone(normalizedSender);
-    if (customerData == null) {
-      debugPrint(
-        'First-contact registration prompt skipped for unregistered $normalizedSender',
-      );
-      return;
-    }
+    final firstContactMessage = customerData == null
+        ? SmsRegistrationCopy.firstContactWelcome +
+              '\n\n' +
+              SmsRegistrationCopy.firstContactPrivacyNotice
+        : SmsRegistrationCopy.firstContactWelcome;
 
     await SmsHandlerUtils.sendReply(
       sender,
-      SmsRegistrationCopy.firstContactWelcome,
+      firstContactMessage,
       smsSender: smsSender,
       sourceMessageId: sourceMessageId,
     );
 
     await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
-    debugPrint('First-contact automated reply sent to $normalizedSender');
+    debugPrint('First-contact automated reply sent to ' + normalizedSender);
+    return true;
   }
 }
 

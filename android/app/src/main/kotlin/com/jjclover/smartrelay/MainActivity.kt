@@ -27,6 +27,8 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        NativeSmsSender.register(flutterEngine.dartExecutor.binaryMessenger, this)
+
         foregroundSmsChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             foregroundSmsChannelName,
