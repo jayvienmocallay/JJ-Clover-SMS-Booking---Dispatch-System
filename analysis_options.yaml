@@ -7,13 +7,6 @@
 
 include: package:flutter_lints/flutter.yaml
 
-analyzer:
-  errors:
-    # Temporary while the SMS merge is being stabilized. The touched SMS files
-    # intentionally keep some string composition to avoid connector patch issues.
-    prefer_interpolation_to_compose_strings: ignore
-    duplicate_import: ignore
-
 linter:
   rules:
     # avoid_print: false

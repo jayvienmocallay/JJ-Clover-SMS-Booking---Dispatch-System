@@ -1,9 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'dart:async';
-import 'dart:collection';
-
 import 'package:flutter/foundation.dart';
 import 'package:another_telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
@@ -56,17 +53,25 @@ class SmsHandlerUtils {
     if (_isSending) return;
     _isSending = true;
 
-    while (_replyQueue.isNotEmpty) {
-      final item = _replyQueue.removeFirst();
-      await _sendAndRecord(item);
-      item.completer.complete();
+    try {
+      while (_replyQueue.isNotEmpty) {
+        final item = _replyQueue.removeFirst();
+        try {
+          await _sendAndRecord(item);
+          item.completer.complete();
+        } catch (e, st) {
+          debugPrint('SMS reply queue failed: $e');
+          debugPrintStack(stackTrace: st);
+          item.completer.completeError(e, st);
+        }
 
-      if (_replyQueue.isNotEmpty) {
-        await Future<void>.delayed(_sendDelay);
+        if (_replyQueue.isNotEmpty) {
+          await Future<void>.delayed(_sendDelay);
+        }
       }
+    } finally {
+      _isSending = false;
     }
-
-    _isSending = false;
   }
 
   static Future<void> _sendAndRecord(_QueuedReply item) async {
@@ -85,7 +90,7 @@ class SmsHandlerUtils {
         sourceMessageId: item.sourceMessageId,
       );
     } catch (e, st) {
-      debugPrint('SMS reply send failed: ' + e.toString());
+      debugPrint('SMS reply send failed: $e');
       debugPrintStack(stackTrace: st);
       await _insertOutgoingMessage(
         phoneNumber: normalizedPhone,
@@ -133,7 +138,7 @@ class SmsHandlerUtils {
     Telephony? smsSender,
   }) async {
     await NativeSmsSender.sendSms(to: phoneNumber, message: message);
-    debugPrint('Reply sent to ' + phoneNumber);
+    debugPrint('Reply sent to $phoneNumber');
   }
 
   /// Saves a message that couldn't be processed as a regular order so it

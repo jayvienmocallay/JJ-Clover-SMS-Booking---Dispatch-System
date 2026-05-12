@@ -152,6 +152,7 @@ object SmsBackgroundBridge : MethodChannel.MethodCallHandler {
         flutterLoader.ensureInitializationComplete(context, null)
 
         val engine = FlutterEngine(context)
+        NativeSmsSender.register(engine.dartExecutor.binaryMessenger, context)
         val channel = MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL_NAME)
         channel.setMethodCallHandler(this)
 

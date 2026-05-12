@@ -413,9 +413,7 @@ class SmsBackgroundService {
 
     final customerData = await _customers.getCustomerByPhone(normalizedSender);
     final firstContactMessage = customerData == null
-        ? SmsRegistrationCopy.firstContactWelcome +
-              '\n\n' +
-              SmsRegistrationCopy.firstContactPrivacyNotice
+        ? '${SmsRegistrationCopy.firstContactWelcome}\n\n${SmsRegistrationCopy.firstContactPrivacyNotice}'
         : SmsRegistrationCopy.firstContactWelcome;
 
     await SmsHandlerUtils.sendReply(
@@ -426,7 +424,7 @@ class SmsBackgroundService {
     );
 
     await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
-    debugPrint('First-contact automated reply sent to ' + normalizedSender);
+    debugPrint('First-contact automated reply sent to $normalizedSender');
     return true;
   }
 }

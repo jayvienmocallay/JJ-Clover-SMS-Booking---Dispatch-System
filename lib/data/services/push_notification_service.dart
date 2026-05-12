@@ -181,6 +181,7 @@ class PushNotificationService {
     String? notificationType,
   }) async {
     try {
+      if (!_isInitialized) await PushNotificationService.instance.initialize();
       // Generate a notification ID per sender to consolidate their notifications
       final notificationId = _getNotificationIdForSender(sender);
 
