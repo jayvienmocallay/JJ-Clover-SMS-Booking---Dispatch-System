@@ -1,13 +1,15 @@
 // Modern chat interface: SMS conversations with bubble-based layout
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:another_telephony/telephony.dart';
+
 import '../../core/utils/phone_number_utils.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
+import '../../data/services/native_sms_sender.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_order_form.dart';
 import '../widgets/chat_bubble.dart';
@@ -45,7 +47,10 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _smsRepo = context.read<SmsMessageRepository>();
     _loadMessages(isInitial: true);
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadMessages(isInitial: false));
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _loadMessages(isInitial: false),
+    );
     _messageSub = AppEventBus().onMessageReceived.listen((_) {
       _loadMessages(isInitial: false, isNewMessage: true);
     });
@@ -65,14 +70,20 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _loadMessages({bool isInitial = false, bool isNewMessage = false}) async {
+  Future<void> _loadMessages({
+    bool isInitial = false,
+    bool isNewMessage = false,
+  }) async {
     try {
       final messages = await _smsRepo.getSmsMessagesForPhone(widget.phoneNumber);
-      final sorted = messages.toList()..sort((a, b) {
-        final timeA = DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime(2000);
-        final timeB = DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime(2000);
-        return timeA.compareTo(timeB);
-      });
+      final sorted = messages.toList()
+        ..sort((a, b) {
+          final timeA =
+              DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime(2000);
+          final timeB =
+              DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime(2000);
+          return timeA.compareTo(timeB);
+        });
       if (mounted) {
         final newMessageCount = sorted.length;
         setState(() {
@@ -128,28 +139,102 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.clear();
     setState(() => _isComposing = false);
 
+    final messageId = await _smsRepo.insertSmsMessage({
+      'phone_number': PhoneNumberUtils.normalize(widget.phoneNumber),
+      'message': message,
+      'direction': 'outgoing',
+      'status': 'sending',
+      'sent_at': DateTime.now().toIso8601String(),
+    });
+    await _loadMessages(isNewMessage: true);
+    await _sendExistingMessage(messageId, message, showSuccess: true);
+  }
+
+  Future<void> _sendExistingMessage(
+    int messageId,
+    String message, {
+    bool showSuccess = false,
+  }) async {
     try {
-      await Telephony.instance.sendSms(to: widget.phoneNumber, message: message);
-      await _smsRepo.insertSmsMessage({
-        'phone_number': PhoneNumberUtils.normalize(widget.phoneNumber),
-        'message': message,
-        'direction': 'outgoing',
-        'status': 'sent',
-        'sent_at': DateTime.now().toIso8601String(),
-      });
+      await _smsRepo.updateSmsMessageStatus(messageId, 'sending');
       await _loadMessages(isNewMessage: true);
-      if (mounted) {
+      await NativeSmsSender.sendSms(to: widget.phoneNumber, message: message);
+      await _smsRepo.updateSmsMessageStatus(messageId, 'sent');
+      await _loadMessages(isNewMessage: true);
+      if (mounted && showSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Message sent'), duration: Duration(seconds: 1)),
+          const SnackBar(
+            content: Text('Message sent'),
+            duration: Duration(seconds: 1),
+          ),
         );
       }
     } catch (e) {
-      _messageController.text = message;
+      await _smsRepo.updateSmsMessageStatus(messageId, 'failed');
+      await _loadMessages(isNewMessage: true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
+          SnackBar(content: Text('Failed to send SMS: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _retryMessage(Map<String, dynamic> message) async {
+    final id = message['id'] as int?;
+    final body = message['message'] as String? ?? '';
+    if (id == null || body.trim().isEmpty) return;
+    await _sendExistingMessage(id, body, showSuccess: true);
+  }
+
+  Future<void> _deleteMessage(Map<String, dynamic> message) async {
+    final id = message['id'] as int?;
+    if (id == null) return;
+    await _smsRepo.deleteSmsMessage(id);
+    await _loadMessages();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Message deleted from local history')),
+      );
+    }
+  }
+
+  Future<bool> _confirmDeleteMessage(Map<String, dynamic> message) async {
+    final preview = (message['message'] as String? ?? '').trim();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.of(context).card,
+        title: Text(
+          'Delete this message?',
+          style: TextStyle(color: AppColors.of(context).foreground),
+        ),
+        content: Text(
+          'This removes the message from this app only. It does not delete the SMS from the phone inbox or the customer device.\n\n${preview.length > 120 ? '${preview.substring(0, 120)}...' : preview}',
+          style: TextStyle(color: AppColors.of(context).mutedForeground),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusMaintenance,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _confirmAndDeleteMessage(Map<String, dynamic> message) async {
+    if (await _confirmDeleteMessage(message)) {
+      await _deleteMessage(message);
     }
   }
 
@@ -205,34 +290,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: _messages.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.forum_outlined,
-                          size: 56,
-                          color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No messages yet',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.7),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Start a conversation',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
+                ? _EmptyConversation()
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -254,15 +312,21 @@ class _ChatScreenState extends State<ChatScreen> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Column(
-                          crossAxisAlignment: isIncoming ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+                          crossAxisAlignment: isIncoming
+                              ? CrossAxisAlignment.start
+                              : CrossAxisAlignment.end,
                           children: [
                             GestureDetector(
                               onTap: () => _toggleTimestamp(sentAt),
+                              onLongPress: () => _confirmAndDeleteMessage(item),
                               child: ChatBubble(
                                 message: message,
                                 isIncoming: isIncoming,
                                 timestamp: sentAt,
                                 status: status,
+                                onRetry: !isIncoming && status.toLowerCase() == 'failed'
+                                    ? () => _retryMessage(item)
+                                    : null,
                               ),
                             ),
                             AnimatedSize(
@@ -275,7 +339,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                         _formatTime(sentAt),
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: AppColors.of(context).mutedForeground.withValues(alpha: 0.6),
+                                          color: AppColors.of(context)
+                                              .mutedForeground
+                                              .withValues(alpha: 0.6),
                                         ),
                                       ),
                                     )
@@ -304,7 +370,10 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Divider(color: AppColors.of(context).border.withValues(alpha: 0.4), thickness: 1),
+            child: Divider(
+              color: AppColors.of(context).border.withValues(alpha: 0.4),
+              thickness: 1,
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -325,7 +394,10 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           Expanded(
-            child: Divider(color: AppColors.of(context).border.withValues(alpha: 0.4), thickness: 1),
+            child: Divider(
+              color: AppColors.of(context).border.withValues(alpha: 0.4),
+              thickness: 1,
+            ),
           ),
         ],
       ),
@@ -357,5 +429,39 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       return '';
     }
+  }
+}
+
+class _EmptyConversation extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.forum_outlined,
+            size: 56,
+            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No messages yet',
+            style: TextStyle(
+              fontSize: 16,
+              color: AppColors.of(context).mutedForeground.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Start a conversation',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.of(context).mutedForeground.withValues(alpha: 0.5),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

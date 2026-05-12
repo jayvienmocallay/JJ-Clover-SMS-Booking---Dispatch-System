@@ -1,4 +1,4 @@
-import 'package:another_telephony/telephony.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../data/models/order_model.dart';
@@ -273,7 +273,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                 _iconBtn(context, Icons.phone, palette.statusOperating, onTap: () async {
                   final phone = widget.phone ?? order.phoneNumber;
                   try {
-                    await Telephony.instance.dialPhoneNumber(phone);
+                    final launched = await launchUrl(Uri(scheme: 'tel', path: phone), mode: LaunchMode.externalApplication); if (!launched) { throw Exception('Could not open dialer'); }
                   } catch (_) {}
                 }),
                 const SizedBox(width: 8),

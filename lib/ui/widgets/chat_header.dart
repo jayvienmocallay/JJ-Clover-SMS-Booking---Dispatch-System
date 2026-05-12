@@ -1,6 +1,6 @@
 // Chat header with contact info and action buttons
 import 'package:flutter/material.dart';
-import 'package:another_telephony/telephony.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'customer_info_sheet.dart';
 
@@ -19,11 +19,13 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
-  Future<void> _makePhoneCall() async {
+  Future<void> _openDialer() async {
+    final uri = Uri(scheme: 'tel', path: phoneNumber);
     try {
-      await Telephony.instance.dialPhoneNumber(phoneNumber);
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) debugPrint('Could not open dialer for $phoneNumber');
     } catch (e) {
-      debugPrint('Could not make phone call: $e');
+      debugPrint('Could not open dialer: $e');
     }
   }
 
@@ -77,7 +79,7 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
       actions: [
         IconButton(
           icon: Icon(Icons.call_outlined, color: AppColors.of(context).primary),
-          onPressed: _makePhoneCall,
+          onPressed: _openDialer,
           tooltip: 'Call customer',
         ),
         IconButton(

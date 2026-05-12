@@ -7,6 +7,7 @@ class ChatBubble extends StatelessWidget {
   final bool isIncoming;
   final String timestamp;
   final String status;
+  final VoidCallback? onRetry;
 
   const ChatBubble({
     super.key,
@@ -14,12 +15,14 @@ class ChatBubble extends StatelessWidget {
     required this.isIncoming,
     required this.timestamp,
     required this.status,
+    this.onRetry,
   });
 
   @override
   Widget build(BuildContext context) {
     final bubbleColor = isIncoming ? AppColors.of(context).muted : AppColors.of(context).primary;
     final textColor = isIncoming ? AppColors.of(context).foreground : Colors.white;
+    final normalizedStatus = status.toLowerCase();
 
     return Align(
       alignment: isIncoming ? Alignment.centerLeft : Alignment.centerRight,
@@ -50,6 +53,11 @@ class ChatBubble extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: _buildKeywordBadge(message),
+              ),
+            if (!isIncoming && normalizedStatus.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: _buildStatus(context, normalizedStatus),
               ),
           ],
         ),
@@ -84,5 +92,79 @@ class ChatBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildStatus(BuildContext context, String normalizedStatus) {
+    final style = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      color: Colors.white.withValues(alpha: 0.85),
+    );
+
+    switch (normalizedStatus) {
+      case 'sending':
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.4,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Colors.white.withValues(alpha: 0.85),
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text('Sending', style: style),
+          ],
+        );
+      case 'failed':
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 13,
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+            const SizedBox(width: 4),
+            Text('Failed', style: style),
+            if (onRetry != null) ...[
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: onRetry,
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Text(
+                    'Retry',
+                    style: style.copyWith(
+                      decoration: TextDecoration.underline,
+                      decorationColor: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        );
+      case 'sent':
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.done,
+              size: 13,
+              color: Colors.white.withValues(alpha: 0.85),
+            ),
+            const SizedBox(width: 4),
+            Text('Sent', style: style),
+          ],
+        );
+      default:
+        return Text(normalizedStatus, style: style);
+    }
   }
 }
