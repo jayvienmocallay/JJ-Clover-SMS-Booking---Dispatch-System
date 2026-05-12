@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:another_telephony/telephony.dart';
 import '../../core/utils/phone_number_utils.dart';
+import '../../data/providers/customer_provider.dart';
+import '../../data/providers/order_provider.dart';
 import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_order_form.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/chat_header.dart';
 import '../widgets/message_input.dart';
@@ -100,6 +103,24 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _openAddOrderForm(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.of(context).card,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: context.read<OrderProvider>()),
+          ChangeNotifierProvider.value(value: context.read<CustomerProvider>()),
+        ],
+        child: AddOrderForm(prefilledPhone: widget.phoneNumber),
+      ),
+    );
+  }
+
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
@@ -178,6 +199,7 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: ChatHeader(
         contactName: widget.contactName ?? 'Unknown',
         phoneNumber: widget.phoneNumber,
+        onCreateOrder: () => _openAddOrderForm(context),
       ),
       body: Column(
         children: [

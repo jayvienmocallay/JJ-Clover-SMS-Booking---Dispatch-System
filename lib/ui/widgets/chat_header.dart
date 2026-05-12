@@ -7,11 +7,13 @@ import 'customer_info_sheet.dart';
 class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
   final String contactName;
   final String phoneNumber;
+  final VoidCallback? onCreateOrder;
 
   const ChatHeader({
     super.key,
     required this.contactName,
     required this.phoneNumber,
+    this.onCreateOrder,
   });
 
   @override
@@ -36,6 +38,7 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
       builder: (_) => CustomerInfoSheet(
         phoneNumber: phoneNumber,
         contactName: contactName,
+        onCreateOrder: onCreateOrder,
       ),
     );
   }

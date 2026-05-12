@@ -1,6 +1,3 @@
-// Task 010 — Settings screen: cutoff time, walk-in alert test, data privacy
-// Task 011 — Added barangay list management and editable cutoff time picker
-// Cutoff time, walk-in alert test, barangay management, data privacy settings
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
@@ -13,8 +10,11 @@ import '../../data/services/supabase_sync_service.dart';
 import '../theme/app_theme.dart';
 import 'package:jj_clover_sms/main.dart' show setThemeMode, themeNotifier;
 
+// ─────────────────────────────────────────────
+// Main Settings Screen (inline + nav for Data/About)
+// ─────────────────────────────────────────────
+
 class SettingsScreen extends StatefulWidget {
-  /// Callback to trigger the walk-in alert overlay for testing
   final VoidCallback? onTestAlert;
 
   const SettingsScreen({super.key, this.onTestAlert});
@@ -26,10 +26,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _barangayController = TextEditingController();
   List<Map<String, dynamic>> _barangays = [];
-  String _selectedZone = 'Zone A';
-  String? _selectedDay; // Required when _selectedZone == 'Zone C'
+  final Set<String> _selectedDays = {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'};
 
-  // Editable cutoff time - loaded from persisted settings
   int _cutoffHour = AppConstants.orderCutOffHour;
   int _cutoffMinute = AppConstants.orderCutOffMinute;
   bool _isLoading = true;
@@ -49,7 +47,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
-
     try {
       final barangays = await _barangayRepo.getBarangays();
       final hour = await _settingsRepo.getCutoffHour();
@@ -74,18 +71,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  static const _allWeekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  static const _dayAbbr = {
+    'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed',
+    'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat',
+  };
+
+  // Convert selected days set → zone + delivery_day for DB storage
+  static ({String zone, String? deliveryDay}) _daysToZone(Set<String> days) {
+    final sorted = _allWeekdays.where(days.contains).toList();
+    if (sorted.length == 6) return (zone: 'Zone A', deliveryDay: null);
+    if (sorted.length == 3 && days.containsAll(['Monday', 'Wednesday', 'Friday']) && sorted.length == 3) {
+      return (zone: 'Zone B', deliveryDay: null);
+    }
+    return (zone: 'Zone C', deliveryDay: sorted.join(','));
+  }
+
+  // Convert zone + delivery_day from DB → selected days set
+  static Set<String> _zoneToDays(String zone, String? deliveryDay) {
+    if (zone == 'Zone A') return Set.of(_allWeekdays);
+    if (zone == 'Zone B') return {'Monday', 'Wednesday', 'Friday'};
+    if (deliveryDay != null) {
+      return deliveryDay.split(',').map((d) => d.trim()).toSet();
+    }
+    return {};
+  }
+
+  String _formatDaysLabel(Set<String> days) {
+    if (days.length == 6) return 'Every day';
+    final sorted = _allWeekdays.where(days.contains).map((d) => _dayAbbr[d] ?? d);
+    return sorted.join(', ');
+  }
+
   Future<void> _addBarangay() async {
     final name = _barangayController.text.trim();
     if (name.isEmpty) return;
-
-    if (_selectedZone == 'Zone C' && _selectedDay == null) {
+    if (_selectedDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a delivery day for Zone C')),
+        const SnackBar(content: Text('Please select at least one delivery day')),
       );
       return;
     }
-
-    // Check for duplicates
     final exists = _barangays.any(
       (b) => (b['name'] as String).toLowerCase() == name.toLowerCase(),
     );
@@ -95,21 +121,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       return;
     }
-
-    final barangayData = {
+    final zoneData = _daysToZone(_selectedDays);
+    await _barangayRepo.insertBarangay({
       'name': name,
-      'delivery_zone': _selectedZone,
-      if (_selectedZone == 'Zone C' && _selectedDay != null)
-        'delivery_day': _selectedDay,
-    };
-
-    await _barangayRepo.insertBarangay(barangayData);
+      'delivery_zone': zoneData.zone,
+      if (zoneData.deliveryDay != null) 'delivery_day': zoneData.deliveryDay,
+    });
     _barangayController.clear();
-    setState(() => _selectedDay = null);
+    setState(() => _selectedDays
+      ..clear()
+      ..addAll(_allWeekdays));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$name added successfully')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name added successfully')));
     }
     await _loadData();
   }
@@ -118,9 +141,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _barangayRepo.deleteBarangay(id);
     await _loadData();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Barangay removed ✓')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barangay removed ✓')));
     }
   }
 
@@ -129,44 +150,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       initialTime: TimeOfDay(hour: _cutoffHour, minute: _cutoffMinute),
       helpText: 'SET ORDER CUT-OFF TIME',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: AppColors.of(context).primary,
-              onPrimary: Colors.white,
-              surface: AppColors.of(context).card,
-              onSurface: AppColors.of(context).foreground,
-            ),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.light(
+            primary: AppColors.of(context).primary,
+            onPrimary: Colors.white,
+            surface: AppColors.of(context).card,
+            onSurface: AppColors.of(context).foreground,
           ),
-          child: child!,
-        );
-      },
+        ),
+        child: child!,
+      ),
     );
-
     if (picked != null) {
       await _settingsRepo.setCutoffTime(picked.hour, picked.minute);
       setState(() {
         _cutoffHour = picked.hour;
         _cutoffMinute = picked.minute;
       });
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Cut-off time updated to ${_formatCutoffTime()}',
-            ),
-          ),
+          SnackBar(content: Text('Cut-off time updated to ${_formatCutoffTime()}')),
         );
       }
     }
   }
 
   String _formatCutoffTime() {
-    final hour = _cutoffHour > 12
-        ? _cutoffHour - 12
-        : (_cutoffHour == 0 ? 12 : _cutoffHour);
+    final hour = _cutoffHour > 12 ? _cutoffHour - 12 : (_cutoffHour == 0 ? 12 : _cutoffHour);
     final amPm = _cutoffHour >= 12 ? 'PM' : 'AM';
     return '$hour:${_cutoffMinute.toString().padLeft(2, '0')} $amPm';
   }
@@ -180,36 +191,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: AppColors.of(context).primary),
-      );
+      return Center(child: CircularProgressIndicator(color: AppColors.of(context).primary));
     }
 
+    final palette = AppColors.of(context);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // --- Header ---
+        // Header
         Row(
           children: [
             Expanded(
               child: Text(
                 'Settings',
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                  fontSize: 26,
-                ),
+                style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 26),
               ),
             ),
             ValueListenableBuilder<ThemeMode>(
               valueListenable: themeNotifier,
               builder: (context, mode, _) => IconButton(
                 onPressed: () async {
-                  final nextMode =
-                      mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+                  final nextMode = mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
                   await setThemeMode(nextMode);
                 },
                 icon: Icon(
                   mode == ThemeMode.light ? Icons.light_mode : Icons.dark_mode,
-                  color: AppColors.of(context).mutedForeground,
+                  color: palette.mutedForeground,
                 ),
                 tooltip: mode == ThemeMode.light ? 'Switch to dark' : 'Switch to light',
               ),
@@ -219,15 +226,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 4),
         Text(
           "Configure your station's dispatch rules.",
-          style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground),
+          style: TextStyle(fontSize: 14, color: palette.mutedForeground),
         ),
         const SizedBox(height: 24),
 
-        // --- Cut-off Time (editable) ---
-        _buildSettingCard(
+        // Order Cut-off Time
+        _settingCard(
+          context,
           icon: Icons.schedule,
-          iconBgColor: AppColors.of(context).primaryLight,
-          iconColor: AppColors.of(context).primary,
+          iconBgColor: palette.primaryLight,
+          iconColor: palette.primary,
           title: 'Order Cut-off Time',
           description: "Orders received before this time are added to today's "
               "dispatch. Orders after will be queued for the next trip.",
@@ -236,23 +244,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.of(context).muted,
+                color: palette.muted,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.of(context).border),
+                border: Border.all(color: palette.border),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     _formatCutoffTime(),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.of(context).foreground,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: palette.foreground),
                   ),
                   const SizedBox(width: 8),
-                  Icon(Icons.edit, size: 14, color: AppColors.of(context).primary),
+                  Icon(Icons.edit, size: 14, color: palette.primary),
                 ],
               ),
             ),
@@ -260,11 +264,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 16),
 
-        // --- Walk-in Alert Test ---
-        _buildSettingCard(
+        // Walk-in Alert
+        _settingCard(
+          context,
           icon: Icons.notifications_active,
-          iconBgColor: AppColors.of(context).statusAwayLight,
-          iconColor: AppColors.of(context).statusAway,
+          iconBgColor: palette.statusAwayLight,
+          iconColor: palette.statusAway,
           title: 'Walk-in Alert',
           description: 'When a customer sends a DROP command, a loud alert '
               'will appear on screen until staff acknowledges it.',
@@ -273,69 +278,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.of(context).statusAway,
+                color: palette.statusAway,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
                 'Test Alert',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
               ),
             ),
           ),
         ),
         const SizedBox(height: 16),
 
-        // --- Barangay List Management ---
+        // Barangay List
         _buildBarangaySection(),
         const SizedBox(height: 16),
 
-        // --- Cloud Sync ---
-        _buildSyncSection(),
-        const SizedBox(height: 16),
-
-        // --- Data Privacy ---
-        _buildSettingCard(
-          icon: Icons.shield,
-          iconBgColor: AppColors.of(context).statusOperatingLight,
-          iconColor: AppColors.of(context).statusOperating,
-          title: 'Data Privacy',
-          description: 'Customer data is stored locally with encryption. '
-              'When Cloud Sync is enabled, data is backed up to Supabase. '
-              'Deletion requests (RA 10173) propagate to cloud.',
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.of(context).statusOperatingLight,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.shield, size: 12, color: AppColors.of(context).statusOperating),
-                const SizedBox(width: 4),
-                Text(
-                  'Encrypted & RA 10173',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.of(context).statusOperating,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // --- Delivery Manifest ---
-        _buildSettingCard(
+        // Delivery Manifest
+        _settingCard(
+          context,
           icon: Icons.assignment,
-          iconBgColor: AppColors.of(context).statusOperatingLight,
-          iconColor: AppColors.of(context).statusOperating,
+          iconBgColor: palette.statusOperatingLight,
+          iconColor: palette.statusOperating,
           title: 'Delivery Manifest',
           description: 'View confirmed orders ready for delivery grouped by day.',
           trailing: GestureDetector(
@@ -343,21 +307,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.of(context).statusOperating,
+                color: palette.statusOperating,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
                 'View Manifest',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
               ),
             ),
           ),
         ),
         const SizedBox(height: 16),
+
+        // Data & Cloud Sync → nav tile
+        _SettingsNavItem(
+          icon: Icons.cloud_sync_outlined,
+          iconColor: palette.primary,
+          title: 'Data & Cloud Sync',
+          subtitle: 'Backup data, sync settings',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const _DataSyncPage()),
+          ),
+        ),
+
+        // About → nav tile
+        _SettingsNavItem(
+          icon: Icons.info_outline,
+          iconColor: palette.primary,
+          title: 'About',
+          subtitle: 'App version and system info',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const _AboutPage()),
+          ),
+        ),
       ],
     );
   }
@@ -379,50 +363,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// Builds the Barangay List management section
   Widget _buildBarangaySection() {
+    final palette = AppColors.of(context);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.of(context).card,
+        color: palette.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.of(context).border),
+        border: Border.all(color: palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.of(context).primaryLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.location_city,
-                    size: 20, color: AppColors.of(context).primary),
+                width: 40, height: 40,
+                decoration: BoxDecoration(color: palette.primaryLight, borderRadius: BorderRadius.circular(12)),
+                child: Icon(Icons.location_city, size: 20, color: palette.primary),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Barangay List',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.of(context).foreground,
-                      ),
-                    ),
+                    Text('Barangay List', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: palette.foreground)),
                     const SizedBox(height: 4),
                     Text(
                       'Manage the barangays available for customer registration and delivery scheduling.',
-                      style: TextStyle(
-                          fontSize: 13, color: AppColors.of(context).mutedForeground),
+                      style: TextStyle(fontSize: 13, color: palette.mutedForeground),
                     ),
                   ],
                 ),
@@ -430,55 +400,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-
-          // Add barangay input
           Row(
             children: [
               Expanded(
                 flex: 2,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: AppColors.of(context).background,
+                    color: palette.background,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.of(context).border),
+                    border: Border.all(color: palette.border),
                   ),
                   child: TextField(
                     controller: _barangayController,
-                    style: TextStyle(
-                        fontSize: 14, color: AppColors.of(context).foreground),
+                    style: TextStyle(fontSize: 14, color: palette.foreground),
                     onSubmitted: (_) => _addBarangay(),
                     decoration: InputDecoration(
                       hintText: 'e.g., Barangay San Miguel',
-                      hintStyle: TextStyle(color: AppColors.of(context).mutedForeground),
+                      hintStyle: TextStyle(color: palette.mutedForeground),
                       border: InputBorder.none,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Zone selector dropdown
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).background,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.of(context).border),
-                  ),
-                  child: DropdownButton<String>(
-                    value: _selectedZone,
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                    style: TextStyle(fontSize: 13, color: AppColors.of(context).foreground),
-                    dropdownColor: AppColors.of(context).card,
-                    items: ['Zone A', 'Zone B', 'Zone C']
-                        .map((z) => DropdownMenuItem(value: z, child: Text(z)))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) setState(() { _selectedZone = v; _selectedDay = null; });
-                    },
                   ),
                 ),
               ),
@@ -486,88 +427,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
               GestureDetector(
                 onTap: _addBarangay,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).primary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Add',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(color: palette.primary, borderRadius: BorderRadius.circular(12)),
+                  child: const Text('Add', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
                 ),
               ),
             ],
           ),
-          if (_selectedZone == 'Zone C') ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.calendar_today,
-                    size: 14, color: AppColors.of(context).mutedForeground),
-                const SizedBox(width: 8),
-                Text(
-                  'Delivery day:',
-                  style: TextStyle(
-                      fontSize: 13, color: AppColors.of(context).mutedForeground),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.of(context).background,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _selectedDay == null
-                            ? AppColors.of(context).statusMaintenance
-                            : AppColors.of(context).border,
-                      ),
-                    ),
-                    child: DropdownButton<String>(
-                      value: _selectedDay,
-                      isExpanded: true,
-                      underline: const SizedBox(),
-                      dropdownColor: AppColors.of(context).card,
-                      hint: Text(
-                        'Select day...',
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.of(context).mutedForeground),
-                      ),
-                      style: TextStyle(
-                          fontSize: 13, color: AppColors.of(context).foreground),
-                      items: [
-                        'Monday', 'Tuesday', 'Wednesday',
-                        'Thursday', 'Friday', 'Saturday',
-                      ]
-                          .map((d) =>
-                              DropdownMenuItem(value: d, child: Text(d)))
-                          .toList(),
-                      onChanged: (d) =>
-                          setState(() => _selectedDay = d),
+          const SizedBox(height: 10),
+          // Day selection chips
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: _allWeekdays.map((day) {
+              final selected = _selectedDays.contains(day);
+              return GestureDetector(
+                onTap: () => setState(() {
+                  if (selected) {
+                    _selectedDays.remove(day);
+                  } else {
+                    _selectedDays.add(day);
+                  }
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: selected ? palette.primary : palette.background,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: selected ? palette.primary : palette.border),
+                  ),
+                  child: Text(
+                    _dayAbbr[day] ?? day,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : palette.mutedForeground,
                     ),
                   ),
                 ),
-              ],
-            ),
-          ],
+              );
+            }).toList(),
+          ),
           const SizedBox(height: 12),
-
-          // Barangay chips with remove buttons
           if (_barangays.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'No barangays added yet.',
-                style:
-                    TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
-              ),
+              child: Text('No barangays added yet.', style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
             )
           else
             Wrap(
@@ -575,49 +481,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
               runSpacing: 8,
               children: _barangays.map((b) {
                 final name = b['name'] as String;
-                final zone = b['delivery_zone'] as String? ?? '';
+                final zone = b['delivery_zone'] as String? ?? 'Zone A';
                 final deliveryDay = b['delivery_day'] as String?;
                 final id = b['id'] as int;
-
-                // Build display label
-                String label = '$name ($zone';
-                if (zone == 'Zone C' && deliveryDay != null) {
-                  label += ' · $deliveryDay';
-                }
-                label += ')';
-
+                final days = _zoneToDays(zone, deliveryDay);
+                final label = '$name (${_formatDaysLabel(days)})';
                 return GestureDetector(
                   onTap: () => _showEditBarangaySheet(b),
                   child: Container(
-                    padding: const EdgeInsets.only(
-                        left: 12, top: 6, bottom: 6, right: 4),
+                    padding: const EdgeInsets.only(left: 12, top: 6, bottom: 6, right: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.of(context).background,
+                      color: palette.background,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.of(context).border),
+                      border: Border.all(color: palette.border),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.edit, size: 12, color: AppColors.of(context).mutedForeground),
+                        Icon(Icons.edit, size: 12, color: palette.mutedForeground),
                         const SizedBox(width: 4),
-                        Text(
-                          label,
-                          style: TextStyle(
-                              fontSize: 12, color: AppColors.of(context).foreground),
-                        ),
+                        Text(label, style: TextStyle(fontSize: 12, color: palette.foreground)),
                         const SizedBox(width: 4),
                         GestureDetector(
                           onTap: () => _removeBarangay(id),
                           child: Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              color: AppColors.of(context).muted,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.close,
-                                size: 12, color: AppColors.of(context).mutedForeground),
+                            width: 20, height: 20,
+                            decoration: BoxDecoration(color: palette.muted, shape: BoxShape.circle),
+                            child: Icon(Icons.close, size: 12, color: palette.mutedForeground),
                           ),
                         ),
                       ],
@@ -631,16 +521,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// Shows a bottom sheet to edit a barangay's zone and delivery day
   void _showEditBarangaySheet(Map<String, dynamic> barangay) {
     final id = barangay['id'] as int;
     final name = barangay['name'] as String;
-    String editZone = barangay['delivery_zone'] as String? ?? 'Zone A';
-    String? editDay = barangay['delivery_day'] as String?;
+    final zone = barangay['delivery_zone'] as String? ?? 'Zone A';
+    final deliveryDay = barangay['delivery_day'] as String?;
+    final editDays = _zoneToDays(zone, deliveryDay);
+    final palette = AppColors.of(context);
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.of(context).card,
+      backgroundColor: palette.card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -648,250 +539,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
-            // Determine which days apply for the selected zone
-            List<String> scheduleDays;
-            if (editZone == 'Zone A') {
-              scheduleDays = ZoneScheduleMap.zoneADays;
-            } else if (editZone == 'Zone B') {
-              scheduleDays = ZoneScheduleMap.zoneBDays;
-            } else if (editZone == 'Zone C' && editDay != null) {
-              scheduleDays = [editDay!];
-            } else {
-              scheduleDays = [];
-            }
-
             return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom,
-              ),
+              padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Handle
                   Center(
                     child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.of(context).border,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+                      width: 40, height: 4,
+                      decoration: BoxDecoration(color: palette.border, borderRadius: BorderRadius.circular(2)),
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Title
-                  Text(
-                    'Edit $name',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.of(context).foreground,
-                    ),
-                  ),
+                  Text('Edit $name', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: palette.foreground)),
+                  const SizedBox(height: 4),
+                  Text('Select which days this barangay receives deliveries.', style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
                   const SizedBox(height: 16),
-
-                  // Zone selector
-                  Text(
-                    'Delivery Zone',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.of(context).mutedForeground,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.of(context).background,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.of(context).border),
-                    ),
-                    child: DropdownButton<String>(
-                      value: editZone,
-                      isExpanded: true,
-                      underline: const SizedBox(),
-                      dropdownColor: AppColors.of(context).card,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.of(context).foreground,
-                      ),
-                      items: ['Zone A', 'Zone B', 'Zone C']
-                          .map((z) =>
-                              DropdownMenuItem(value: z, child: Text(z)))
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          setSheetState(() {
-                            editZone = v;
-                            if (v != 'Zone C') editDay = null;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Day selector (for Zone C)
-                  if (editZone == 'Zone C') ...[
-                    Text(
-                      'Delivery Day',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.of(context).mutedForeground,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.of(context).background,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: editDay == null
-                              ? AppColors.of(context).statusMaintenance
-                              : AppColors.of(context).border,
-                        ),
-                      ),
-                      child: DropdownButton<String>(
-                        value: editDay,
-                        isExpanded: true,
-                        underline: const SizedBox(),
-                        dropdownColor: AppColors.of(context).card,
-                        hint: Text(
-                          'Select day...',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.of(context).mutedForeground,
+                  // Day chips
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _allWeekdays.map((day) {
+                      final selected = editDays.contains(day);
+                      return GestureDetector(
+                        onTap: () => setSheetState(() {
+                          if (selected) { editDays.remove(day); } else { editDays.add(day); }
+                        }),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: selected ? palette.primary : palette.background,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: selected ? palette.primary : palette.border),
                           ),
-                        ),
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.of(context).foreground,
-                        ),
-                        items: [
-                          'Monday', 'Tuesday', 'Wednesday',
-                          'Thursday', 'Friday', 'Saturday',
-                        ]
-                            .map((d) =>
-                                DropdownMenuItem(value: d, child: Text(d)))
-                            .toList(),
-                        onChanged: (d) =>
-                            setSheetState(() => editDay = d),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  // Schedule preview
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.of(context).background,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.of(context).border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Delivery Schedule',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.of(context).mutedForeground,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: scheduleDays.map((day) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.of(context).primaryLight,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                day,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.of(context).primary,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        if (scheduleDays.isEmpty)
-                          Text(
-                            'Select a delivery day above',
+                          child: Text(
+                            _dayAbbr[day] ?? day,
                             style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.of(context).mutedForeground,
-                              fontStyle: FontStyle.italic,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: selected ? Colors.white : palette.mutedForeground,
                             ),
                           ),
-                      ],
-                    ),
+                        ),
+                      );
+                    }).toList(),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Save button
+                  if (editDays.isEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text('Select at least one day', style: TextStyle(fontSize: 12, color: palette.statusMaintenance, fontStyle: FontStyle.italic)),
+                  ],
+                  const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: GestureDetector(
-                      onTap: () async {
-                        if (editZone == 'Zone C' && editDay == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Please select a delivery day for Zone C'),
-                            ),
-                          );
-                          return;
-                        }
-
+                      onTap: editDays.isEmpty ? null : () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        final zoneData = _daysToZone(editDays);
                         await _barangayRepo.updateBarangay(id, {
                           'name': name,
-                          'delivery_zone': editZone,
-                          'delivery_day': editZone == 'Zone C' ? editDay : null,
+                          'delivery_zone': zoneData.zone,
+                          'delivery_day': zoneData.deliveryDay,
                         });
-
                         if (ctx.mounted) Navigator.pop(ctx);
                         await _loadData();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('$name updated')),
-                          );
-                        }
+                        if (!mounted) return;
+                        messenger.showSnackBar(SnackBar(content: Text('$name updated')));
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
-                          color: AppColors.of(context).primary,
+                          color: editDays.isEmpty ? palette.muted : palette.primary,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Save Changes',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: editDays.isEmpty ? palette.mutedForeground : Colors.white),
                         ),
                       ),
                     ),
@@ -904,44 +629,154 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
   }
+}
 
-  Widget _buildSyncSection() {
+// ─────────────────────────────────────────────
+// Nav item widget (used for Data & Cloud + About)
+// ─────────────────────────────────────────────
+
+class _SettingsNavItem extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _SettingsNavItem({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: palette.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: palette.border),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 22, color: iconColor),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: palette.foreground)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: palette.mutedForeground, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Data & Cloud Sync sub-page
+// ─────────────────────────────────────────────
+
+class _DataSyncPage extends StatelessWidget {
+  const _DataSyncPage();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Data & Cloud Sync'),
+        backgroundColor: palette.card,
+        foregroundColor: palette.foreground,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: palette.border),
+        ),
+      ),
+      backgroundColor: palette.background,
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildSyncSection(context),
+          const SizedBox(height: 16),
+          _settingCard(
+            context,
+            icon: Icons.shield,
+            iconBgColor: palette.statusOperatingLight,
+            iconColor: palette.statusOperating,
+            title: 'Data Privacy',
+            description: 'Customer data is stored locally with encryption. '
+                'When Cloud Sync is enabled, data is backed up to Supabase. '
+                'Deletion requests (RA 10173) propagate to cloud.',
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(color: palette.statusOperatingLight, borderRadius: BorderRadius.circular(20)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.shield, size: 12, color: palette.statusOperating),
+                  const SizedBox(width: 4),
+                  Text('Encrypted & RA 10173', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: palette.statusOperating)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncSection(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: SupabaseSyncService.instance,
       child: Consumer<SupabaseSyncService>(
         builder: (context, syncService, _) {
+          final palette = AppColors.of(context);
           String statusText;
           Color statusColor;
           IconData statusIcon;
           switch (syncService.status) {
             case SyncStatus.idle:
-              statusText = 'Idle';
-              statusColor = AppColors.of(context).mutedForeground;
-              statusIcon = Icons.cloud_off;
+              statusText = 'Idle'; statusColor = palette.mutedForeground; statusIcon = Icons.cloud_off;
               break;
             case SyncStatus.syncing:
-              statusText = 'Syncing...';
-              statusColor = AppColors.of(context).primary;
-              statusIcon = Icons.cloud_sync;
+              statusText = 'Syncing...'; statusColor = palette.primary; statusIcon = Icons.cloud_sync;
               break;
             case SyncStatus.success:
-              statusText = 'Synced';
-              statusColor = AppColors.of(context).statusOperating;
-              statusIcon = Icons.cloud_done;
+              statusText = 'Synced'; statusColor = palette.statusOperating; statusIcon = Icons.cloud_done;
               break;
             case SyncStatus.error:
-              statusText = 'Error';
-              statusColor = AppColors.of(context).statusMaintenance;
-              statusIcon = Icons.cloud_off;
+              statusText = 'Error'; statusColor = palette.statusMaintenance; statusIcon = Icons.cloud_off;
               break;
           }
 
           String lastSyncLabel = 'Never';
           if (syncService.lastSyncedAt != null) {
             final dt = syncService.lastSyncedAt!;
-            final hour = dt.hour > 12
-                ? dt.hour - 12
-                : (dt.hour == 0 ? 12 : dt.hour);
+            final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
             final amPm = dt.hour >= 12 ? 'PM' : 'AM';
             final min = dt.minute.toString().padLeft(2, '0');
             lastSyncLabel = '${dt.month}/${dt.day} $hour:$min $amPm';
@@ -950,9 +785,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.of(context).card,
+              color: palette.card,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.of(context).border),
+              border: Border.all(color: palette.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -961,134 +796,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.of(context).primaryLight,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(Icons.cloud_sync,
-                          size: 20, color: AppColors.of(context).primary),
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(color: palette.primaryLight, borderRadius: BorderRadius.circular(12)),
+                      child: Icon(Icons.cloud_sync, size: 20, color: palette.primary),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Cloud Sync',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.of(context).foreground,
-                            ),
-                          ),
+                          Text('Cloud Sync', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: palette.foreground)),
                           const SizedBox(height: 4),
-                          Text(
-                            'Back up your data to Supabase cloud. '
-                            'Data syncs automatically when connected.',
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.of(context).mutedForeground),
-                          ),
+                          Text('Back up your data to Supabase cloud. Data syncs automatically when connected.', style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
                         ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-
-                // Auto Sync toggle
-                _buildSyncToggle(
-                  icon: Icons.sync,
-                  label: 'Auto Sync',
-                  value: syncService.autoSyncEnabled,
-                  onChanged: (v) => syncService.setAutoSync(v),
-                ),
+                _syncToggle(context, Icons.sync, 'Auto Sync', syncService.autoSyncEnabled, syncService.setAutoSync),
                 const SizedBox(height: 8),
-
-                // WiFi Only toggle
-                _buildSyncToggle(
-                  icon: Icons.wifi,
-                  label: 'Sync over Wi-Fi only',
-                  value: syncService.wifiOnly,
-                  onChanged: (v) => syncService.setWifiOnly(v),
-                ),
+                _syncToggle(context, Icons.wifi, 'Sync over Wi-Fi only', syncService.wifiOnly, syncService.setWifiOnly),
                 const SizedBox(height: 12),
-
-                // Status row
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.of(context).background,
+                    color: palette.background,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.of(context).border),
+                    border: Border.all(color: palette.border),
                   ),
                   child: Row(
                     children: [
                       syncService.status == SyncStatus.syncing
-                          ? SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.of(context).primary,
-                              ),
-                            )
+                          ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: palette.primary))
                           : Icon(statusIcon, size: 16, color: statusColor),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              statusText,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: statusColor,
-                              ),
-                            ),
-                            if (syncService.lastError != null &&
-                                syncService.status == SyncStatus.error)
-                              Text(
-                                syncService.lastError!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.of(context).statusMaintenance,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                            Text(statusText, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: statusColor)),
+                            if (syncService.lastError != null && syncService.status == SyncStatus.error)
+                              Text(syncService.lastError!, style: TextStyle(fontSize: 11, color: palette.statusMaintenance), maxLines: 2, overflow: TextOverflow.ellipsis),
                           ],
                         ),
                       ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(
-                            'Last sync',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: AppColors.of(context).mutedForeground,
-                            ),
-                          ),
-                          Text(
-                            lastSyncLabel,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.of(context).foreground,
-                            ),
-                          ),
+                          Text('Last sync', style: TextStyle(fontSize: 10, color: palette.mutedForeground)),
+                          Text(lastSyncLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: palette.foreground)),
                         ],
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
-
-                // Manual sync button
                 GestureDetector(
                   onTap: syncService.status == SyncStatus.syncing
                       ? null
@@ -1096,13 +859,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           await syncService.syncAll();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  syncService.status == SyncStatus.success
-                                      ? 'Data synced to cloud ✓'
-                                      : 'Sync failed: ${syncService.lastError ?? "Unknown error"}',
-                                ),
-                              ),
+                              SnackBar(content: Text(
+                                syncService.status == SyncStatus.success
+                                    ? 'Data synced to cloud ✓'
+                                    : 'Sync failed: ${syncService.lastError ?? "Unknown error"}',
+                              )),
                             );
                           }
                         },
@@ -1110,31 +871,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      color: syncService.status == SyncStatus.syncing
-                          ? AppColors.of(context).muted
-                          : AppColors.of(context).primary,
+                      color: syncService.status == SyncStatus.syncing ? palette.muted : palette.primary,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          syncService.status == SyncStatus.syncing
-                              ? Icons.hourglass_top
-                              : Icons.cloud_upload,
-                          size: 16,
-                          color: Colors.white,
-                        ),
+                        Icon(syncService.status == SyncStatus.syncing ? Icons.hourglass_top : Icons.cloud_upload, size: 16, color: Colors.white),
                         const SizedBox(width: 8),
                         Text(
-                          syncService.status == SyncStatus.syncing
-                              ? 'Syncing...'
-                              : 'Sync Now',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
+                          syncService.status == SyncStatus.syncing ? 'Syncing...' : 'Sync Now',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
                         ),
                       ],
                     ),
@@ -1148,102 +895,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSyncToggle({
-    required IconData icon,
-    required String label,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
+  Widget _syncToggle(BuildContext context, IconData icon, String label, bool value, ValueChanged<bool> onChanged) {
+    final palette = AppColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.of(context).background,
+        color: palette.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.of(context).border),
+        border: Border.all(color: palette.border),
       ),
       child: Row(
         children: [
-          Icon(icon,
-              size: 18,
-              color: value ? AppColors.of(context).primary : AppColors.of(context).mutedForeground),
+          Icon(icon, size: 18, color: value ? palette.primary : palette.mutedForeground),
           const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppColors.of(context).foreground,
-              ),
-            ),
-          ),
-          Switch(
-            value: value,
-            activeThumbColor: AppColors.of(context).primary,
-            onChanged: onChanged,
-          ),
+          Expanded(child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: palette.foreground))),
+          Switch(value: value, activeThumbColor: palette.primary, onChanged: onChanged),
         ],
       ),
     );
   }
+}
 
-  /// Builds a consistent settings card
-  Widget _buildSettingCard({
-    required IconData icon,
-    required Color iconBgColor,
-    required Color iconColor,
-    required String title,
-    required String description,
-    Widget? trailing,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.of(context).border),
+// ─────────────────────────────────────────────
+// About sub-page
+// ─────────────────────────────────────────────
+
+class _AboutPage extends StatelessWidget {
+  const _AboutPage();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('About'),
+        backgroundColor: palette.card,
+        foregroundColor: palette.foreground,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: palette.border),
+        ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: palette.background,
+      body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          // Setting icon
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: iconBgColor,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, size: 20, color: iconColor),
+          _settingCard(
+            context,
+            icon: Icons.water_drop,
+            iconBgColor: palette.primaryLight,
+            iconColor: palette.primary,
+            title: 'JJ Clover',
+            description: 'SMS Booking & Dispatch System\nVersion 1.0.0',
           ),
-          const SizedBox(width: 16),
-          // Title, description, and trailing widget
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.of(context).foreground,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.of(context).mutedForeground,
-                  ),
-                ),
-                if (trailing != null) ...[
-                  const SizedBox(height: 12),
-                  trailing,
-                ],
-              ],
-            ),
+          const SizedBox(height: 12),
+          _settingCard(
+            context,
+            icon: Icons.phone_android,
+            iconBgColor: palette.muted,
+            iconColor: palette.mutedForeground,
+            title: 'System Info',
+            description: 'Built with Flutter. Powered by Supabase for cloud sync and SQLite for local storage.',
           ),
         ],
       ),
@@ -1251,7 +964,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-/// Delivery Manifest - shows confirmed orders ready for delivery grouped by day
+// ─────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────
+
+Widget _settingCard(
+  BuildContext context, {
+  required IconData icon,
+  required Color iconBgColor,
+  required Color iconColor,
+  required String title,
+  required String description,
+  Widget? trailing,
+}) {
+  final palette = AppColors.of(context);
+  return Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: palette.card,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: palette.border),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(color: iconBgColor, borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, size: 20, color: iconColor),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: palette.foreground)),
+              const SizedBox(height: 4),
+              Text(description, style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
+              if (trailing != null) ...[const SizedBox(height: 12), trailing],
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────
+// Delivery Manifest sheet
+// ─────────────────────────────────────────────
+
 class _DeliveryManifestSheet extends StatelessWidget {
   const _DeliveryManifestSheet();
 
@@ -1266,9 +1028,7 @@ class _DeliveryManifestSheet extends StatelessWidget {
         }
 
         final confirmed = orderProv.todayOrders
-            .where(
-              (o) => o['status'] == 'confirmed' || o['status'] == 'in_transit',
-            )
+            .where((o) => o['status'] == 'confirmed' || o['status'] == 'in_transit')
             .toList();
 
         final Map<String, List<Map<String, dynamic>>> byDay = {};
@@ -1279,10 +1039,7 @@ class _DeliveryManifestSheet extends StatelessWidget {
         }
 
         final totalOrders = confirmed.length;
-        final totalGallons = confirmed.fold<int>(
-          0,
-          (sum, o) => sum + ((o['quantity'] as int?) ?? 0),
-        );
+        final totalGallons = confirmed.fold<int>(0, (sum, o) => sum + ((o['quantity'] as int?) ?? 0));
 
         return DraggableScrollableSheet(
           initialChildSize: 0.7,
@@ -1298,12 +1055,8 @@ class _DeliveryManifestSheet extends StatelessWidget {
               children: [
                 const SizedBox(height: 12),
                 Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: AppColors.of(context).border, borderRadius: BorderRadius.circular(2)),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -1311,14 +1064,7 @@ class _DeliveryManifestSheet extends StatelessWidget {
                     children: [
                       Icon(Icons.assignment, color: AppColors.of(context).primary),
                       const SizedBox(width: 12),
-                      Text(
-                        'Delivery Manifest',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.of(context).foreground,
-                        ),
-                      ),
+                      Text('Delivery Manifest', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.of(context).foreground)),
                     ],
                   ),
                 ),
@@ -1326,17 +1072,9 @@ class _DeliveryManifestSheet extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
-                      _SummaryChip(
-                        label: '$totalOrders',
-                        sub: 'orders',
-                        color: AppColors.of(context).primary,
-                      ),
+                      _SummaryChip(label: '$totalOrders', sub: 'orders', color: AppColors.of(context).primary),
                       const SizedBox(width: 8),
-                      _SummaryChip(
-                        label: '$totalGallons',
-                        sub: 'gallons',
-                        color: AppColors.of(context).statusOperating,
-                      ),
+                      _SummaryChip(label: '$totalGallons', sub: 'gallons', color: AppColors.of(context).statusOperating),
                     ],
                   ),
                 ),
@@ -1347,19 +1085,9 @@ class _DeliveryManifestSheet extends StatelessWidget {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                Icons.assignment_outlined,
-                                size: 48,
-                                color: AppColors.of(context).mutedForeground,
-                              ),
+                              Icon(Icons.assignment_outlined, size: 48, color: AppColors.of(context).mutedForeground),
                               const SizedBox(height: 12),
-                              Text(
-                                'No confirmed orders yet.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: AppColors.of(context).mutedForeground,
-                                ),
-                              ),
+                              Text('No confirmed orders yet.', style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground)),
                             ],
                           ),
                         )
@@ -1367,59 +1095,30 @@ class _DeliveryManifestSheet extends StatelessWidget {
                           controller: scrollController,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           children: [
-                            ...byDay.entries.map(
-                              (entry) => Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.of(context).primary,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      entry.key,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ...entry.value.asMap().entries.map(
-                                    (e) {
-                                      final o = e.value;
-                                      final cid = o['customer_id'] as int?;
-                                      final customerName = cid != null
-                                          ? (customerCache[cid]?['name'] as String?)
-                                          : null;
-                                      return _ManifestItem(
-                                        index: e.key + 1,
-                                        order: o,
-                                        customerName: customerName,
-                                        onStart: o['status'] == 'confirmed'
-                                            ? () => orderProv.updateStatus(
-                                                o['id'] as int,
-                                                'in_transit',
-                                              )
-                                            : null,
-                                        onComplete: o['status'] == 'in_transit'
-                                            ? () => orderProv.updateStatus(
-                                                o['id'] as int,
-                                                'completed',
-                                              )
-                                            : null,
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-                              ),
-                            ),
+                            ...byDay.entries.map((entry) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(color: AppColors.of(context).primary, borderRadius: BorderRadius.circular(8)),
+                                  child: Text(entry.key, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                                ),
+                                const SizedBox(height: 8),
+                                ...entry.value.asMap().entries.map((e) {
+                                  final o = e.value;
+                                  final cid = o['customer_id'] as int?;
+                                  final customerName = cid != null ? (customerCache[cid]?['name'] as String?) : null;
+                                  return _ManifestItem(
+                                    index: e.key + 1,
+                                    order: o,
+                                    customerName: customerName,
+                                    onStart: o['status'] == 'confirmed' ? () => orderProv.updateStatus(o['id'] as int, 'in_transit') : null,
+                                    onComplete: o['status'] == 'in_transit' ? () => orderProv.updateStatus(o['id'] as int, 'completed') : null,
+                                  );
+                                }),
+                                const SizedBox(height: 16),
+                              ],
+                            )),
                           ],
                         ),
                 ),
@@ -1437,11 +1136,7 @@ class _SummaryChip extends StatelessWidget {
   final String sub;
   final Color color;
 
-  const _SummaryChip({
-    required this.label,
-    required this.sub,
-    required this.color,
-  });
+  const _SummaryChip({required this.label, required this.sub, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -1455,14 +1150,7 @@ class _SummaryChip extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
+            Text(label, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: color)),
             Text(sub, style: TextStyle(fontSize: 11, color: color)),
           ],
         ),
@@ -1488,6 +1176,7 @@ class _ManifestItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
     final status = order['status'] as String? ?? '';
     final phone = order['phone_number'] as String? ?? '';
     final qty = order['quantity'] as int? ?? 0;
@@ -1496,76 +1185,35 @@ class _ManifestItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.of(context).background,
+        color: palette.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: status == 'in_transit'
-              ? AppColors.of(context).statusBusy
-              : AppColors.of(context).border,
-        ),
+        border: Border.all(color: status == 'in_transit' ? palette.statusBusy : palette.border),
       ),
       child: Row(
         children: [
           Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: AppColors.of(context).muted,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                '$index',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+            width: 28, height: 28,
+            decoration: BoxDecoration(color: palette.muted, shape: BoxShape.circle),
+            child: Center(child: Text('$index', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  customerName ?? phone,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                if (customerName != null)
-                  Text(
-                    phone,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.of(context).mutedForeground,
-                    ),
-                  ),
-                Text(
-                  '$qty gallon(s)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.of(context).mutedForeground,
-                  ),
-                ),
+                Text(customerName ?? phone, style: const TextStyle(fontWeight: FontWeight.w600)),
+                if (customerName != null) Text(phone, style: TextStyle(fontSize: 11, color: palette.mutedForeground)),
+                Text('$qty gallon(s)', style: TextStyle(fontSize: 12, color: palette.mutedForeground)),
               ],
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: status == 'in_transit'
-                  ? AppColors.of(context).statusBusy
-                  : AppColors.of(context).statusOperating,
+              color: status == 'in_transit' ? palette.statusBusy : palette.statusOperating,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              status == 'in_transit' ? 'Delivering' : 'Ready',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
+            child: Text(status == 'in_transit' ? 'Delivering' : 'Ready', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
           ),
           if (onStart != null || onComplete != null) ...[
             const SizedBox(width: 8),
@@ -1574,15 +1222,8 @@ class _ManifestItem extends StatelessWidget {
                 onTap: onStart,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).statusBusy,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.play_arrow,
-                    size: 16,
-                    color: Colors.white,
-                  ),
+                  decoration: BoxDecoration(color: palette.statusBusy, shape: BoxShape.circle),
+                  child: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
                 ),
               ),
             if (onComplete != null)
@@ -1590,10 +1231,7 @@ class _ManifestItem extends StatelessWidget {
                 onTap: onComplete,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).statusOperating,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: BoxDecoration(color: palette.statusOperating, shape: BoxShape.circle),
                   child: const Icon(Icons.check, size: 16, color: Colors.white),
                 ),
               ),

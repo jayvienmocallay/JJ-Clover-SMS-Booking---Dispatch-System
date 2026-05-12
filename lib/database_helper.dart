@@ -764,7 +764,7 @@ class DatabaseHelper {
       // barangays (not in the hardcoded map) also get schedules.
       List<String> deliveryDays;
       if (zone == 'Zone C' && barangayDeliveryDay != null) {
-        deliveryDays = [barangayDeliveryDay];
+        deliveryDays = barangayDeliveryDay.split(',').map((d) => d.trim()).toList();
       } else {
         deliveryDays = ZoneScheduleMap.getDaysForZone(
           zone,

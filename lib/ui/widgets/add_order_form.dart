@@ -15,7 +15,9 @@ import 'shared/customer_avatar.dart';
 import 'shared/primary_action_button.dart';
 
 class AddOrderForm extends StatefulWidget {
-  const AddOrderForm({super.key});
+  final String? prefilledPhone;
+
+  const AddOrderForm({super.key, this.prefilledPhone});
 
   @override
   State<AddOrderForm> createState() => _AddOrderFormState();
@@ -45,6 +47,24 @@ class _AddOrderFormState extends State<AddOrderForm> {
   void initState() {
     super.initState();
     _loadBarangays();
+    if (widget.prefilledPhone != null) {
+      _customerSearch = widget.prefilledPhone!;
+      // Auto-select customer matching this phone after first frame
+      WidgetsBinding.instance.addPostFrameCallback((_) => _autoSelectCustomer());
+    }
+  }
+
+  void _autoSelectCustomer() {
+    if (!mounted || widget.prefilledPhone == null) return;
+    final customers = context.read<CustomerProvider>().customers;
+    final phone = widget.prefilledPhone!;
+    for (final c in customers) {
+      final cPhone = (c['contact_number'] as String? ?? '');
+      if (cPhone == phone || cPhone.endsWith(phone) || phone.endsWith(cPhone)) {
+        setState(() => _selectedCustomerId = c['id'] as int?);
+        break;
+      }
+    }
   }
 
   @override

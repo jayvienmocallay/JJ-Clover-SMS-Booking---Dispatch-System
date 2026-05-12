@@ -8,10 +8,8 @@ import '../../data/repositories/barangay_repository.dart';
 import '../../data/services/system_mode_manager.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared/app_page_header.dart';
-import '../widgets/shared/metric_card.dart';
 import '../widgets/shared/status_badge.dart';
 import '../widgets/shared/empty_state.dart';
-import '../widgets/status_toggles.dart';
 
 class DashboardScreen extends StatefulWidget {
   final void Function(int tabIndex)? onNavigateToTab;
@@ -46,7 +44,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       List<String> days;
       if (zone == 'Zone C' && dbDeliveryDay != null) {
-        days = [dbDeliveryDay];
+        days = dbDeliveryDay.split(',').map((d) => d.trim()).toList();
       } else {
         days = ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
       }
@@ -92,19 +90,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: kSectionGap),
 
                   _buildStatusBanner(context, modeManager),
-                  const SizedBox(height: 16),
-
-                  Text(
-                    'STATION STATUS',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const StatusToggles(),
                   const SizedBox(height: kSectionGap),
 
-                  _buildMetricsGrid(context, orderProv, customerProv),
+                  _buildTodayOverview(context, orderProv),
                   const SizedBox(height: kSectionGap),
 
                   _buildTodayZones(context),
@@ -135,105 +123,285 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color accentColor;
     Color bgColor;
     String label;
+    String subtitle;
     IconData icon;
 
     switch (mode) {
       case SystemMode.operating:
         accentColor = palette.statusOperating;
         bgColor = palette.statusOperatingLight;
-        label = 'Operating';
-        icon = Icons.check_circle;
+        label = 'Station is Operating';
+        subtitle = 'Open & accepting orders';
+        icon = Icons.verified_user;
         break;
       case SystemMode.staffAway:
         accentColor = palette.statusAway;
         bgColor = palette.statusAwayLight;
         label = 'Staff Away';
+        subtitle = 'Staff currently unavailable';
         icon = Icons.access_time;
         break;
       case SystemMode.full:
         accentColor = palette.statusBusy;
         bgColor = palette.statusBusyLight;
         label = 'Full / Busy';
-        icon = Icons.block;
+        subtitle = 'No more orders for today';
+        icon = Icons.do_not_disturb;
         break;
       case SystemMode.maintenance:
         accentColor = palette.statusMaintenance;
         bgColor = palette.statusMaintenanceLight;
-        label = 'Maintenance';
+        label = 'Maintenance Mode';
+        subtitle = 'System under maintenance';
         icon = Icons.build;
         break;
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: kCardPadding, vertical: 12),
-      decoration: BoxDecoration(
-        color: bgColor,
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(kCardRadius),
+      child: InkWell(
+        onTap: () => _showModeSwitcher(context, modeManager),
         borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: accentColor.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: accentColor),
-          const SizedBox(width: 10),
-          Text(
-            'Station is currently: $label',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: accentColor,
-            ),
+        splashColor: accentColor.withValues(alpha: 0.12),
+        highlightColor: accentColor.withValues(alpha: 0.06),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: kCardPadding, vertical: 16),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(kCardRadius),
+            border: Border.all(color: accentColor.withValues(alpha: 0.6), width: 1.5),
           ),
-        ],
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 26, color: accentColor),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: accentColor,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: accentColor.withValues(alpha: 0.85),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tap to change mode',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: accentColor.withValues(alpha: 0.6),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: accentColor.withValues(alpha: 0.8), size: 22),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildMetricsGrid(BuildContext context, OrderProvider orderProv,
-      CustomerProvider customerProv) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final cellWidth = (screenWidth - 32 - 12) / 2;
-    const minHeight = 100.0;
-    final cellHeight =
-        cellWidth / 1.4 < minHeight ? minHeight : cellWidth / 1.4;
-    final aspectRatio = cellWidth / cellHeight;
+  void _showModeSwitcher(BuildContext context, SystemModeManager modeManager) {
+    final palette = AppColors.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: palette.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Consumer<SystemModeManager>(
+        builder: (ctx, mgr, _) {
+          final modes = [
+            (mode: SystemMode.operating,    label: 'Operating',      subtitle: 'Open & accepting orders',          icon: Icons.verified_user,  color: palette.statusOperating,    bg: palette.statusOperatingLight),
+            (mode: SystemMode.staffAway,    label: 'Staff Away',     subtitle: 'Out delivering, still accepting',  icon: Icons.access_time,    color: palette.statusAway,         bg: palette.statusAwayLight),
+            (mode: SystemMode.full,         label: 'Full / Busy',    subtitle: 'No more deliveries today',         icon: Icons.do_not_disturb, color: palette.statusBusy,         bg: palette.statusBusyLight),
+            (mode: SystemMode.maintenance,  label: 'Maintenance',    subtitle: 'Station closed',                   icon: Icons.build,          color: palette.statusMaintenance,  bg: palette.statusMaintenanceLight),
+          ];
 
-    final metrics = [
-      (
-        label: 'Total Gallons',
-        value: '${orderProv.totalGallons}',
-        color: AppColors.of(context).primary,
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(color: palette.border, borderRadius: BorderRadius.circular(2)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Station Status', style: Theme.of(ctx).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text('Select current operating mode', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: palette.mutedForeground)),
+                const SizedBox(height: 16),
+                ...modes.map((m) {
+                  final isActive = mgr.currentMode == m.mode;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: InkWell(
+                      onTap: () {
+                        mgr.setMode(m.mode);
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Mode set to ${m.label} ✓'), duration: const Duration(seconds: 2)),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: isActive ? m.bg : palette.background,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isActive ? m.color.withValues(alpha: 0.5) : palette.border,
+                            width: isActive ? 2 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36, height: 36,
+                              decoration: BoxDecoration(
+                                color: isActive ? m.color.withValues(alpha: 0.2) : palette.muted,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(m.icon, size: 18, color: isActive ? m.color : palette.mutedForeground),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(m.label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isActive ? m.color : palette.foreground)),
+                                  Text(m.subtitle, style: TextStyle(fontSize: 12, color: palette.mutedForeground)),
+                                ],
+                              ),
+                            ),
+                            if (isActive)
+                              Icon(Icons.check_circle, color: m.color, size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          );
+        },
       ),
-      (
-        label: 'Pending',
-        value: '${orderProv.pendingCount}',
-        color: AppColors.of(context).statusAway,
-      ),
-      (
-        label: 'Confirmed',
-        value: '${orderProv.confirmedCount}',
-        color: AppColors.of(context).statusOperating,
-      ),
-      (
-        label: 'Customers',
-        value: '${customerProv.count}',
-        color: AppColors.of(context).primary,
-      ),
-    ];
+    );
+  }
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: aspectRatio,
-      children: metrics
-          .map((m) => MetricCard(
-                label: m.label,
-                value: m.value,
-                valueColor: m.color,
-              ))
-          .toList(),
+  Widget _buildTodayOverview(BuildContext context, OrderProvider orderProv) {
+    final palette = AppColors.of(context);
+    final now = DateTime.now();
+    final hour = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
+    final amPm = now.hour >= 12 ? 'PM' : 'AM';
+    final min = now.minute.toString().padLeft(2, '0');
+    final timeLabel = 'Updated $hour:$min $amPm';
+
+    final inTransitCount = orderProv.todayOrders
+        .where((o) => o['status'] == 'in_transit')
+        .length;
+    final totalOrders = orderProv.todayOrders
+        .where((o) => o['type'] != 'unrecognized')
+        .length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Today Overview', style: Theme.of(context).textTheme.titleMedium),
+            Text(timeLabel, style: Theme.of(context).textTheme.labelSmall),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.55,
+          children: [
+            _overviewCard(context, '$totalOrders', 'Total Orders', palette.primary, 'View all'),
+            _overviewCard(context, '${orderProv.pendingCount}', 'Pending', palette.statusAway, 'View'),
+            _overviewCard(context, '${orderProv.confirmedCount}', 'Confirmed', palette.statusOperating, 'View'),
+            _overviewCard(context, '$inTransitCount', 'In Transit', palette.statusBusy, 'View'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _overviewCard(BuildContext context, String value, String label, Color color, String actionLabel) {
+    return Container(
+      padding: const EdgeInsets.all(kCardPadding),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).card,
+        borderRadius: BorderRadius.circular(kCardRadius),
+        border: Border.all(color: AppColors.of(context).border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            value,
+            style: Theme.of(context).textTheme.headlineLarge?.copyWith(color: color),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => widget.onNavigateToTab?.call(1),
+                child: Text(
+                  actionLabel,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

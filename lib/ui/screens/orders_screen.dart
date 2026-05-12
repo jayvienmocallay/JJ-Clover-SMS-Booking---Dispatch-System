@@ -13,7 +13,6 @@ import '../widgets/order_card.dart';
 import '../widgets/order_detail_sheet.dart';
 import '../widgets/shared/app_page_header.dart';
 import '../widgets/shared/empty_state.dart';
-import '../widgets/shared/filter_chip_row.dart';
 import 'delivery_logs_screen.dart';
 import 'order_history_screen.dart';
 
@@ -26,14 +25,26 @@ class OrdersScreen extends StatefulWidget {
 
 class _OrdersScreenState extends State<OrdersScreen> {
   int _filterIndex = 0;
+  String _searchQuery = '';
 
-  static const _filterTypes = ['all', 'deliver', 'drop', 'unrecognized'];
-  static const _filterLabels = ['All', 'Deliveries', 'Walk-ins', 'Invalid'];
+  static const _filterStatuses = ['all', 'pending', 'confirmed', 'in_transit'];
 
   List<Map<String, dynamic>> _filterOrders(List<Map<String, dynamic>> orders) {
-    final type = _filterTypes[_filterIndex];
-    if (type == 'all') return orders;
-    return orders.where((order) => order['type'] == type).toList();
+    var result = orders;
+    final status = _filterStatuses[_filterIndex];
+    if (status != 'all') {
+      result = result.where((o) => o['status'] == status).toList();
+    }
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      result = result.where((o) {
+        final name = (o['customer_name'] as String? ?? '').toLowerCase();
+        final phone = (o['phone_number'] as String? ?? '').toLowerCase();
+        final id = (o['id']?.toString() ?? '').toLowerCase();
+        return name.contains(q) || phone.contains(q) || id.contains(q);
+      }).toList();
+    }
+    return result;
   }
 
   void _showAddOrderSheet() {
@@ -225,6 +236,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
         final inTransitCount = orderProv.todayOrders
             .where((order) => order['status'] == 'in_transit')
             .length;
+        final allCount = orderProv.todayOrders
+            .where((o) => o['type'] != 'unrecognized')
+            .length;
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -235,13 +249,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
             padding: const EdgeInsets.all(kPagePadding),
             children: [
               AppPageHeader(
-                title: 'Today\'s Orders',
-                subtitle: "Manage today's dispatch and walk-in queue.",
+                title: 'Orders',
+                subtitle: "Manage today's delivery and walk-in orders.",
                 action: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _HeaderIconButton(
-                      icon: Icons.history,
+                      icon: Icons.calendar_month,
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -289,44 +303,75 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               const SizedBox(height: kSectionGap),
+              // Status filter tabs
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _SummaryChip(
-                      label: 'Pending ${orderProv.pendingCount}',
+                    _StatusTab(
+                      label: 'All',
+                      count: allCount,
+                      selected: _filterIndex == 0,
+                      color: AppColors.of(context).primary,
+                      onTap: () => setState(() => _filterIndex = 0),
+                    ),
+                    const SizedBox(width: 8),
+                    _StatusTab(
+                      label: 'Pending',
+                      count: orderProv.pendingCount,
+                      selected: _filterIndex == 1,
                       color: AppColors.of(context).statusAway,
+                      onTap: () => setState(() => _filterIndex = 1),
                     ),
                     const SizedBox(width: 8),
-                    _SummaryChip(
-                      label: 'Confirmed ${orderProv.confirmedCount}',
+                    _StatusTab(
+                      label: 'Confirmed',
+                      count: orderProv.confirmedCount,
+                      selected: _filterIndex == 2,
                       color: AppColors.of(context).statusOperating,
+                      onTap: () => setState(() => _filterIndex = 2),
                     ),
                     const SizedBox(width: 8),
-                    _SummaryChip(
-                      label: 'In Transit $inTransitCount',
+                    _StatusTab(
+                      label: 'In Transit',
+                      count: inTransitCount,
+                      selected: _filterIndex == 3,
                       color: AppColors.of(context).statusBusy,
+                      onTap: () => setState(() => _filterIndex = 3),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              FilterChipRow(
-                labels: _filterLabels,
-                selectedIndex: _filterIndex,
-                onSelected: (i) => setState(() => _filterIndex = i),
+              const SizedBox(height: 12),
+              // Search bar
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.of(context).card,
+                  borderRadius: BorderRadius.circular(kButtonRadius),
+                  border: Border.all(color: AppColors.of(context).border),
+                ),
+                child: TextField(
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  decoration: InputDecoration(
+                    hintText: 'Search order ID, customer, or address...',
+                    hintStyle: TextStyle(color: AppColors.of(context).mutedForeground, fontSize: 14),
+                    prefixIcon: Icon(Icons.search, size: 20, color: AppColors.of(context).mutedForeground),
+                    suffixIcon: Icon(Icons.tune, size: 20, color: AppColors.of(context).mutedForeground),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               if (filtered.isEmpty)
                 EmptyState(
                   icon: Icons.local_shipping,
-                  message: _filterIndex == 0
-                      ? 'No orders today.'
-                      : 'No ${_filterLabels[_filterIndex].toLowerCase()} orders.',
-                )
-              else if (_filterTypes[_filterIndex] == 'unrecognized')
-                ...filtered.map(
-                  (order) => _buildOrderCard(order, customerCache, orderProv),
+                  message: _searchQuery.isNotEmpty
+                      ? 'No orders match "$_searchQuery".'
+                      : _filterIndex == 0
+                          ? 'No orders today.'
+                          : 'No ${_filterStatuses[_filterIndex]} orders.',
                 )
               else
                 ..._buildGroupedDispatchList(
@@ -422,27 +467,63 @@ class _HeaderIconButton extends StatelessWidget {
   }
 }
 
-class _SummaryChip extends StatelessWidget {
+class _StatusTab extends StatelessWidget {
   final String label;
+  final int count;
+  final bool selected;
   final Color color;
+  final VoidCallback onTap;
 
-  const _SummaryChip({required this.label, required this.color});
+  const _StatusTab({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? color : color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(
+            color: selected ? color : color.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: selected ? Colors.white : color,
+                fontWeight: FontWeight.w600,
+              ),
             ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: selected ? Colors.white.withValues(alpha: 0.3) : color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: selected ? Colors.white : color,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -12,11 +12,13 @@ import '../theme/app_theme.dart';
 class CustomerInfoSheet extends StatefulWidget {
   final String phoneNumber;
   final String contactName;
+  final VoidCallback? onCreateOrder;
 
   const CustomerInfoSheet({
     super.key,
     required this.phoneNumber,
     required this.contactName,
+    this.onCreateOrder,
   });
 
   @override
@@ -545,14 +547,8 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
               label: 'New Order',
               color: AppColors.of(context).primary,
               onTap: () {
-                final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
-                messenger.showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                        'Go to the Orders tab to create an order'),
-                  ),
-                );
+                widget.onCreateOrder?.call();
               },
             ),
             const SizedBox(width: 8),
