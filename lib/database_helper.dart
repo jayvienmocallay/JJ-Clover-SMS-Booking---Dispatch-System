@@ -491,6 +491,10 @@ class DatabaseHelper {
     await _addColumnIfMissing(db, 'orders', 'source', 'TEXT');
     await _addColumnIfMissing(db, 'sms_messages', 'source_message_id', 'TEXT');
 
+    // Older production builds created this as UNIQUE, which is wrong — multiple
+    // outgoing SMS log rows legitimately share the same source message. Drop and
+    // recreate as a plain index so duplicate logs don't cause constraint errors.
+    await db.execute('DROP INDEX IF EXISTS idx_sms_source_message');
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sms_source_message '
       'ON sms_messages(source_message_id) '
@@ -598,6 +602,13 @@ class DatabaseHelper {
     await _addColumnIfMissing(db, 'customers', 'consent_channel', 'TEXT');
     await _addColumnIfMissing(db, 'customers', 'consent_version', 'TEXT');
     await _createPendingSmsActionsTable(db);
+    await _addColumnIfMissing(
+      db,
+      'delivery_logs',
+      'returned_containers',
+      'INTEGER',
+    );
+    await _addColumnIfMissing(db, 'delivery_logs', 'payment_method', 'TEXT');
     for (final entry in ZoneScheduleMap.zoneCBarangayDays.entries) {
       await db.rawUpdate(
         'UPDATE barangays SET delivery_day = ? WHERE name = ? AND delivery_day IS NULL',

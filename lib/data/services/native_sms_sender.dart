@@ -15,10 +15,9 @@ class NativeSmsSender {
       await _channel.invokeMethod<void>('sendSms', {
         'to': to,
         'message': message,
-      });
+      }).timeout(const Duration(seconds: 10));
     } on MissingPluginException {
-      if (_isFlutterTest) return;
-      rethrow;
+      if (!_isFlutterTest) rethrow;
     }
   }
 

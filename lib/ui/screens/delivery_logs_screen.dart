@@ -26,14 +26,26 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
   }
 
   Future<void> _loadLogs() async {
+    if (!mounted) return;
     setState(() => _loading = true);
-    final rawLogs = await context
-        .read<DeliveryLogRepository>()
-        .getDeliveryLogs();
-    setState(() {
-      _allLogs = rawLogs.map(DeliveryLog.fromMap).toList();
-      _loading = false;
-    });
+
+    try {
+      final rawLogs = await context
+          .read<DeliveryLogRepository>()
+          .getDeliveryLogs();
+      if (!mounted) return;
+      setState(() => _allLogs = rawLogs.map(DeliveryLog.fromMap).toList());
+    } catch (e, st) {
+      debugPrint('Failed to load delivery logs: $e');
+      debugPrintStack(stackTrace: st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to load delivery logs. Please restart or check logs.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   List<DeliveryLog> get _filteredLogs {

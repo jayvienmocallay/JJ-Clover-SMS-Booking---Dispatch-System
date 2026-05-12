@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jj_clover_sms/core/utils/phone_number_utils.dart';
 import 'package:jj_clover_sms/data/models/pre_book_context.dart';
 import 'package:jj_clover_sms/data/services/command_handlers/cancel_command_handler.dart';
+import 'package:jj_clover_sms/data/services/command_handlers/sms_handler_utils.dart';
 import 'package:jj_clover_sms/data/services/pre_book_store.dart';
 import 'package:jj_clover_sms/database_helper.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -37,6 +38,7 @@ void main() {
   });
 
   tearDown(() async {
+    await SmsHandlerUtils.waitForPendingRepliesForTesting();
     DatabaseHelper.setDatabaseForTesting(null);
     await db.close();
   });

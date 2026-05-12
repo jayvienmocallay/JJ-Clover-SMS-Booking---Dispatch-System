@@ -23,12 +23,18 @@ class SmsHandlerUtils {
   static bool _isSending = false;
 
   /// Queues an SMS reply for sending and records the final send status.
+  ///
+  /// By default this returns after queueing so command/database processing is
+  /// not blocked by Android SMS delivery or MethodChannel behavior. Tests and
+  /// explicit send flows can pass [waitForSend] when they need the final log
+  /// status before continuing.
   static Future<void> sendReply(
     String phoneNumber,
     String message, {
     Telephony? smsSender,
     String? sourceMessageId,
-  }) async {
+    bool waitForSend = false,
+  }) {
     final completer = Completer<void>();
     final outgoingSourceMessageId = _outgoingSourceMessageId(
       sourceMessageId,
@@ -46,7 +52,14 @@ class SmsHandlerUtils {
     );
 
     unawaited(_drainQueue());
-    return completer.future;
+    return waitForSend ? completer.future : Future<void>.value();
+  }
+
+  @visibleForTesting
+  static Future<void> waitForPendingRepliesForTesting() async {
+    while (_isSending || _replyQueue.isNotEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
   }
 
   static Future<void> _drainQueue() async {

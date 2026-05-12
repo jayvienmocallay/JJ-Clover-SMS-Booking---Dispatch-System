@@ -64,19 +64,29 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   Future<void> _loadOrders() async {
     if (!mounted) return;
     setState(() => _loading = true);
-    final range = _dateRange(_dateFilter);
-    final rows = await context.read<OrderRepository>().getOrderHistory(
-          startDate: range?.$1,
-          endDate: range?.$2,
-          status: _statusFilter,
-          type: _typeFilter,
-          search: _searchController.text,
+
+    try {
+      final range = _dateRange(_dateFilter);
+      final rows = await context.read<OrderRepository>().getOrderHistory(
+            startDate: range?.$1,
+            endDate: range?.$2,
+            status: _statusFilter,
+            type: _typeFilter,
+            search: _searchController.text,
+          );
+      if (!mounted) return;
+      setState(() => _orders = rows);
+    } catch (e, st) {
+      debugPrint('Failed to load order history: $e');
+      debugPrintStack(stackTrace: st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to load orders. Please restart or check logs.')),
         );
-    if (!mounted) return;
-    setState(() {
-      _orders = rows;
-      _loading = false;
-    });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   (DateTime, DateTime)? _dateRange(String filter) {

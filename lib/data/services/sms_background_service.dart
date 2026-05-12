@@ -247,12 +247,15 @@ class SmsBackgroundService {
     if (!claimResult.claimed) {
       if (claimResult.isDuplicate) {
         debugPrint('Duplicate order within 1 hour: $effectiveSourceMessageId');
-        await SmsHandlerUtils.sendReply(
+        unawaited(SmsHandlerUtils.sendReply(
           sender,
           'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
           smsSender: smsSender,
           sourceMessageId: effectiveSourceMessageId,
-        );
+        ).catchError((Object e, StackTrace st) {
+          debugPrint('Queued reply failed: $e');
+          debugPrintStack(stackTrace: st);
+        }));
       } else {
         debugPrint(
           'Message still processing, skipped: $effectiveSourceMessageId',
@@ -340,12 +343,15 @@ class SmsBackgroundService {
           );
           break;
         case SmsCommand.status:
-          await SmsHandlerUtils.sendReply(
+          unawaited(SmsHandlerUtils.sendReply(
             sender,
             'Current status: ${_modeManager.currentMode.displayName}',
             smsSender: smsSender,
             sourceMessageId: effectiveSourceMessageId,
-          );
+          ).catchError((Object e, StackTrace st) {
+            debugPrint('Queued reply failed: $e');
+            debugPrintStack(stackTrace: st);
+          }));
           break;
         case SmsCommand.register:
         case SmsCommand.agree:
@@ -364,12 +370,15 @@ class SmsBackgroundService {
             sourceMessageId: effectiveSourceMessageId,
             quantity: parsed.quantity ?? 0,
           );
-          await SmsHandlerUtils.sendReply(
+          unawaited(SmsHandlerUtils.sendReply(
             sender,
             SmsParser.getUnknownCommandReply(),
             smsSender: smsSender,
             sourceMessageId: effectiveSourceMessageId,
-          );
+          ).catchError((Object e, StackTrace st) {
+            debugPrint('Queued reply failed: $e');
+            debugPrintStack(stackTrace: st);
+          }));
           break;
       }
 
@@ -416,12 +425,15 @@ class SmsBackgroundService {
         ? '${SmsRegistrationCopy.firstContactWelcome}\n\n${SmsRegistrationCopy.firstContactPrivacyNotice}'
         : SmsRegistrationCopy.firstContactWelcome;
 
-    await SmsHandlerUtils.sendReply(
+    unawaited(SmsHandlerUtils.sendReply(
       sender,
       firstContactMessage,
       smsSender: smsSender,
       sourceMessageId: sourceMessageId,
-    );
+    ).catchError((Object e, StackTrace st) {
+      debugPrint('Queued reply failed: $e');
+      debugPrintStack(stackTrace: st);
+    }));
 
     await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
     debugPrint('First-contact automated reply sent to $normalizedSender');

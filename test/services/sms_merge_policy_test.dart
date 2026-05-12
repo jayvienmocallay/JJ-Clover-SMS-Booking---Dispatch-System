@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jj_clover_sms/data/services/command_handlers/sms_handler_utils.dart';
@@ -57,6 +59,8 @@ void main() {
       sourceMessageId: sourceMessageId,
     );
 
+    await SmsHandlerUtils.waitForPendingRepliesForTesting();
+
     final outgoing = await outgoingFor(normalized);
     expect(outgoing, hasLength(1));
     final reply = outgoing.single['message'] as String;
@@ -83,8 +87,100 @@ void main() {
       sourceMessageId: 'failed-source',
     );
 
+    await SmsHandlerUtils.waitForPendingRepliesForTesting();
     final outgoing = await outgoingFor(normalized);
     expect(outgoing, hasLength(1));
     expect(outgoing.single['status'], 'failed');
+  });
+
+  test('queue continues draining after a failed send', () async {
+    const phone = '+63 917 100 0004';
+    const normalized = '09171000004';
+
+    var callCount = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async {
+      callCount++;
+      if (callCount == 1) throw PlatformException(code: 'forced_failure');
+      return null;
+    });
+
+    await SmsHandlerUtils.sendReply(
+      phone,
+      'first reply',
+      sourceMessageId: 'queue-source-1',
+    );
+    await SmsHandlerUtils.sendReply(
+      phone,
+      'second reply',
+      sourceMessageId: 'queue-source-2',
+    );
+
+    await SmsHandlerUtils.waitForPendingRepliesForTesting();
+
+    final outgoing = await outgoingFor(normalized);
+    expect(outgoing, hasLength(2));
+    expect(outgoing.map((r) => r['status']), containsAll(['failed', 'sent']));
+  });
+
+  test('fire-and-forget reply does not cause uncaught async test errors',
+      () async {
+    const phone = '+63 917 100 0005';
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async {
+      throw PlatformException(code: 'forced_failure');
+    });
+
+    // fire-and-forget: sendReply returns Future.value() immediately
+    unawaited(
+      SmsHandlerUtils.sendReply(
+        phone,
+        'fire-and-forget reply',
+        sourceMessageId: 'ff-source',
+      ).catchError((Object e, StackTrace st) {
+        // defensive: should never fire since sendReply returns Future.value()
+      }),
+    );
+
+    // draining must complete without throwing into the test zone
+    await SmsHandlerUtils.waitForPendingRepliesForTesting();
+    // reaching here means no uncaught error escaped
+  });
+
+  test('registered first contact gets only welcome and returns early', () async {
+    const sender = '+63 917 100 0006';
+    const normalized = '09171000006';
+    const sourceMessageId = 'first-contact-registered';
+
+    // insert a customer so the sender is registered
+    final barangays = await db.query('barangays', limit: 1);
+    final barangayId = barangays.first['id'] as int;
+    await db.insert('customers', {
+      'name': 'Test Customer',
+      'contact_number': normalized,
+      'barangay_id': barangayId,
+      'consent_given': 1,
+    });
+
+    await SmsBackgroundService.instance.processIncomingSmsPayloadForTesting(
+      sender: sender,
+      message: 'hello',
+      timestamp: DateTime(2026, 5, 12, 10).millisecondsSinceEpoch,
+      sourceMessageId: sourceMessageId,
+    );
+
+    await SmsHandlerUtils.waitForPendingRepliesForTesting();
+
+    final outgoing = await outgoingFor(normalized);
+    expect(outgoing, hasLength(1));
+    final reply = outgoing.single['message'] as String;
+    expect(reply, contains(SmsRegistrationCopy.firstContactWelcome));
+    expect(reply, isNot(contains(SmsRegistrationCopy.firstContactPrivacyNotice)));
+    expect(await helper.isFirstContactNotified(sender), isTrue);
+    // first-contact returns early: no order created
+    expect(await helper.getOrders(), isEmpty);
+    final receipt = await helper.getIncomingSmsReceipt(sourceMessageId);
+    expect(receipt!['status'], 'completed');
   });
 }

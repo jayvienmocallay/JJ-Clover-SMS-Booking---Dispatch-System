@@ -49,16 +49,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
-    final barangays = await _barangayRepo.getBarangays();
-    final hour = await _settingsRepo.getCutoffHour();
-    final minute = await _settingsRepo.getCutoffMinute();
-    if (mounted) {
-      setState(() {
-        _barangays = barangays;
-        _cutoffHour = hour;
-        _cutoffMinute = minute;
-        _isLoading = false;
-      });
+
+    try {
+      final barangays = await _barangayRepo.getBarangays();
+      final hour = await _settingsRepo.getCutoffHour();
+      final minute = await _settingsRepo.getCutoffMinute();
+      if (mounted) {
+        setState(() {
+          _barangays = barangays;
+          _cutoffHour = hour;
+          _cutoffMinute = minute;
+        });
+      }
+    } catch (e, st) {
+      debugPrint('Failed to load settings: $e');
+      debugPrintStack(stackTrace: st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to load settings. Please restart or check logs.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
