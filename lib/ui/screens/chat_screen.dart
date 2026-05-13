@@ -15,16 +15,14 @@ import '../widgets/add_order_form.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/chat_header.dart';
 import '../widgets/message_input.dart';
+import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/empty_state.dart';
 
 class ChatScreen extends StatefulWidget {
   final String phoneNumber;
   final String? contactName;
 
-  const ChatScreen({
-    super.key,
-    required this.phoneNumber,
-    this.contactName,
-  });
+  const ChatScreen({super.key, required this.phoneNumber, this.contactName});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -75,13 +73,17 @@ class _ChatScreenState extends State<ChatScreen> {
     bool isNewMessage = false,
   }) async {
     try {
-      final messages = await _smsRepo.getSmsMessagesForPhone(widget.phoneNumber);
+      final messages = await _smsRepo.getSmsMessagesForPhone(
+        widget.phoneNumber,
+      );
       final sorted = messages.toList()
         ..sort((a, b) {
           final timeA =
-              DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime(2000);
+              DateTime.tryParse(a['sent_at'] as String? ?? '') ??
+              DateTime(2000);
           final timeB =
-              DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime(2000);
+              DateTime.tryParse(b['sent_at'] as String? ?? '') ??
+              DateTime(2000);
           return timeA.compareTo(timeB);
         });
       if (mounted) {
@@ -173,9 +175,9 @@ class _ChatScreenState extends State<ChatScreen> {
       await _smsRepo.updateSmsMessageStatus(messageId, 'failed');
       await _loadMessages(isNewMessage: true);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send SMS: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send SMS: $e')));
       }
     }
   }
@@ -248,7 +250,9 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  List<Map<String, dynamic>> _buildDisplayList(List<Map<String, dynamic>> messages) {
+  List<Map<String, dynamic>> _buildDisplayList(
+    List<Map<String, dynamic>> messages,
+  ) {
     final result = <Map<String, dynamic>>[];
     DateTime? lastDate;
 
@@ -272,7 +276,9 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: AppColors.of(context).background,
         appBar: AppBar(backgroundColor: AppColors.of(context).background),
         body: Center(
-          child: CircularProgressIndicator(color: AppColors.of(context).primary),
+          child: CircularProgressIndicator(
+            color: AppColors.of(context).primary,
+          ),
         ),
       );
     }
@@ -293,7 +299,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 ? _EmptyConversation()
                 : ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     itemCount: displayList.length,
                     itemBuilder: (context, index) {
                       final item = displayList[index];
@@ -303,7 +312,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       }
 
                       final message = item['message'] as String? ?? '';
-                      final direction = item['direction'] as String? ?? 'incoming';
+                      final direction =
+                          item['direction'] as String? ?? 'incoming';
                       final sentAt = item['sent_at'] as String? ?? '';
                       final status = item['status'] as String? ?? '';
                       final isIncoming = direction == 'incoming';
@@ -324,7 +334,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                 isIncoming: isIncoming,
                                 timestamp: sentAt,
                                 status: status,
-                                onRetry: !isIncoming && status.toLowerCase() == 'failed'
+                                onRetry:
+                                    !isIncoming &&
+                                        status.toLowerCase() == 'failed'
                                     ? () => _retryMessage(item)
                                     : null,
                               ),
@@ -334,7 +346,11 @@ class _ChatScreenState extends State<ChatScreen> {
                               curve: Curves.easeOut,
                               child: isExpanded
                                   ? Padding(
-                                      padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+                                      padding: const EdgeInsets.only(
+                                        top: 4,
+                                        left: 4,
+                                        right: 4,
+                                      ),
                                       child: Text(
                                         _formatTime(sentAt),
                                         style: TextStyle(
@@ -435,32 +451,12 @@ class _ChatScreenState extends State<ChatScreen> {
 class _EmptyConversation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.forum_outlined,
-            size: 56,
-            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No messages yet',
-            style: TextStyle(
-              fontSize: 16,
-              color: AppColors.of(context).mutedForeground.withValues(alpha: 0.7),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Start a conversation',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.of(context).mutedForeground.withValues(alpha: 0.5),
-            ),
-          ),
-        ],
+    return const Center(
+      child: EmptyState(
+        icon: Icons.forum_outlined,
+        mascot: MascotPose.smsConfirm,
+        title: 'No messages yet',
+        message: 'Start a conversation',
       ),
     );
   }

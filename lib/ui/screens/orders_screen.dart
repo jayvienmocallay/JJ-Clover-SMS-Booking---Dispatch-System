@@ -12,6 +12,7 @@ import '../widgets/dispatch_grouping.dart';
 import '../widgets/order_card.dart';
 import '../widgets/order_detail_sheet.dart';
 import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/empty_state.dart';
 import 'delivery_logs_screen.dart';
 import 'order_history_screen.dart';
@@ -68,17 +69,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Future<void> _confirmOrder(Order order, OrderProvider orderProv) async {
     await orderProv.updateStatus(order.id!, 'confirmed');
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Order confirmed ✓')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Order confirmed ✓')));
   }
 
   Future<void> _startDelivery(Order order, OrderProvider orderProv) async {
     await orderProv.updateStatus(order.id!, 'in_transit');
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Delivery started ✓')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Delivery started ✓')));
   }
 
   Future<void> _showCompleteOrderSheet(
@@ -115,15 +116,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
         phone: order.phoneNumber,
         barangay: customer?['barangay'] as String?,
         address: order.address ?? (customer?['address'] as String?),
-        onConfirm: order.type != OrderType.unrecognized &&
+        onConfirm:
+            order.type != OrderType.unrecognized &&
                 order.status == OrderStatus.pending
             ? () => _confirmOrder(order, orderProv)
             : null,
-        onReject: order.type != OrderType.unrecognized &&
+        onReject:
+            order.type != OrderType.unrecognized &&
                 order.status == OrderStatus.pending
             ? () => _showRejectDialog(order.id!, orderProv)
             : null,
-        onStartDelivery: order.type != OrderType.unrecognized &&
+        onStartDelivery:
+            order.type != OrderType.unrecognized &&
                 order.status == OrderStatus.confirmed
             ? () => _startDelivery(order, orderProv)
             : null,
@@ -142,9 +146,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return {
       ...order,
       if (customer?['name'] != null) 'customer_name': customer!['name'],
-      if (customer?['address'] != null) 'customer_address': customer!['address'],
+      if (customer?['address'] != null)
+        'customer_address': customer!['address'],
       if (customer?['barangay'] != null) 'barangay': customer!['barangay'],
-      if (customer?['delivery_zone'] != null) 'delivery_zone': customer!['delivery_zone'],
+      if (customer?['delivery_zone'] != null)
+        'delivery_zone': customer!['delivery_zone'],
     };
   }
 
@@ -154,7 +160,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
     OrderProvider orderProv,
   ) {
     final order = Order.fromMap(orderMap);
-    final customer = order.customerId != null ? customerCache[order.customerId] : null;
+    final customer = order.customerId != null
+        ? customerCache[order.customerId]
+        : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: OrderCard(
@@ -164,19 +172,23 @@ class _OrdersScreenState extends State<OrdersScreen> {
         phone: order.phoneNumber,
         barangay: customer?['barangay'] as String?,
         address: order.address ?? (customer?['address'] as String?),
-        onConfirm: order.type != OrderType.unrecognized &&
+        onConfirm:
+            order.type != OrderType.unrecognized &&
                 order.status == OrderStatus.pending
             ? () => _confirmOrder(order, orderProv)
             : null,
-        onReject: order.type != OrderType.unrecognized &&
+        onReject:
+            order.type != OrderType.unrecognized &&
                 order.status == OrderStatus.pending
             ? () => _showRejectDialog(order.id!, orderProv)
             : null,
-        onStartDelivery: order.type != OrderType.unrecognized &&
+        onStartDelivery:
+            order.type != OrderType.unrecognized &&
                 order.status == OrderStatus.confirmed
             ? () => _startDelivery(order, orderProv)
             : null,
-        onComplete: order.type != OrderType.unrecognized &&
+        onComplete:
+            order.type != OrderType.unrecognized &&
                 order.status == OrderStatus.inTransit
             ? () => _showCompleteOrderSheet(order, orderProv)
             : null,
@@ -191,9 +203,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
   ) {
     final activeStatuses = {'pending', 'confirmed', 'in_transit'};
     final activeOrders = filtered
-        .where((order) =>
-            order['type'] != 'unrecognized' &&
-            activeStatuses.contains(order['status'] as String? ?? ''))
+        .where(
+          (order) =>
+              order['type'] != 'unrecognized' &&
+              activeStatuses.contains(order['status'] as String? ?? ''),
+        )
         .toList();
     final otherOrders = filtered
         .where((order) => !activeOrders.contains(order))
@@ -201,12 +215,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
     final groups = buildDispatchGroups(activeOrders);
 
     return [
-      ...groups.expand((group) => [
-            DispatchGroupHeader(title: group.title, subtitle: group.subtitle),
-            ...group.items.map(
-              (order) => _buildOrderCard(order, customerCache, orderProv),
-            ),
-          ]),
+      ...groups.expand(
+        (group) => [
+          DispatchGroupHeader(title: group.title, subtitle: group.subtitle),
+          ...group.items.map(
+            (order) => _buildOrderCard(order, customerCache, orderProv),
+          ),
+        ],
+      ),
       if (otherOrders.isNotEmpty) ...[
         const DispatchGroupHeader(
           title: 'Completed / Review',
@@ -286,13 +302,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.add, size: 16, color: Colors.white),
+                            const Icon(
+                              Icons.add,
+                              size: 16,
+                              color: Colors.white,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Add',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelLarge
+                              style: Theme.of(context).textTheme.labelLarge
                                   ?.copyWith(color: Colors.white),
                             ),
                           ],
@@ -355,9 +373,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   style: Theme.of(context).textTheme.bodyMedium,
                   decoration: InputDecoration(
                     hintText: 'Search order ID, customer, or address...',
-                    hintStyle: TextStyle(color: AppColors.of(context).mutedForeground, fontSize: 14),
-                    prefixIcon: Icon(Icons.search, size: 20, color: AppColors.of(context).mutedForeground),
-                    suffixIcon: Icon(Icons.tune, size: 20, color: AppColors.of(context).mutedForeground),
+                    hintStyle: TextStyle(
+                      color: AppColors.of(context).mutedForeground,
+                      fontSize: 14,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 20,
+                      color: AppColors.of(context).mutedForeground,
+                    ),
+                    suffixIcon: Icon(
+                      Icons.tune,
+                      size: 20,
+                      color: AppColors.of(context).mutedForeground,
+                    ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -367,11 +396,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
               if (filtered.isEmpty)
                 EmptyState(
                   icon: Icons.local_shipping,
+                  mascot: _searchQuery.isNotEmpty
+                      ? MascotPose.checklist
+                      : MascotPose.deliveryTruck,
+                  title: _searchQuery.isNotEmpty
+                      ? 'Nothing matched'
+                      : 'No active orders',
                   message: _searchQuery.isNotEmpty
                       ? 'No orders match "$_searchQuery".'
                       : _filterIndex == 0
-                          ? 'No orders today.'
-                          : 'No ${_filterStatuses[_filterIndex]} orders.',
+                      ? 'No orders today.'
+                      : 'No ${_filterStatuses[_filterIndex]} orders.',
                 )
               else
                 ..._buildGroupedDispatchList(
@@ -392,7 +427,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.of(ctx).card,
-        title: Text('Reject Order', style: Theme.of(ctx).textTheme.headlineSmall),
+        title: Text(
+          'Reject Order',
+          style: Theme.of(ctx).textTheme.headlineSmall,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,8 +438,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
             Text(
               'Are you sure you want to reject this order?',
               style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.of(ctx).mutedForeground,
-                  ),
+                color: AppColors.of(ctx).mutedForeground,
+              ),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -430,11 +468,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              await orderProv.updateStatus(orderId, 'rejected', reason: reason?.trim());
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Order rejected ✓')),
+              await orderProv.updateStatus(
+                orderId,
+                'rejected',
+                reason: reason?.trim(),
               );
+              if (!mounted) return;
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('Order rejected ✓')));
             },
             child: const Text('Reject'),
           ),
@@ -461,7 +503,11 @@ class _HeaderIconButton extends StatelessWidget {
           color: AppColors.of(context).muted,
           borderRadius: BorderRadius.circular(kButtonRadius),
         ),
-        child: Icon(icon, size: 20, color: AppColors.of(context).mutedForeground),
+        child: Icon(
+          icon,
+          size: 20,
+          color: AppColors.of(context).mutedForeground,
+        ),
       ),
     );
   }
@@ -510,7 +556,9 @@ class _StatusTab extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
-                color: selected ? Colors.white.withValues(alpha: 0.3) : color.withValues(alpha: 0.15),
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.3)
+                    : color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(

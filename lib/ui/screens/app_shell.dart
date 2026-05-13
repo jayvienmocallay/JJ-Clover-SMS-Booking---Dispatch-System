@@ -10,6 +10,7 @@ import '../../data/providers/customer_provider.dart';
 import '../../data/services/alarm_service.dart';
 import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/brand_mascot.dart';
 import '../widgets/walk_in_alert.dart';
 import 'dashboard_screen.dart';
 import 'orders_screen.dart';
@@ -160,16 +161,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: AppColors.of(context).primaryLight,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.of(context).border),
-                ),
-                child: Icon(Icons.water_drop, size: 36, color: AppColors.of(context).primary),
-              ),
+              const MascotBadge(pose: MascotPose.waterBottle, size: 82),
               const SizedBox(height: 20),
               Text(
                 'JJ Clover',
@@ -182,7 +174,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
               const SizedBox(height: 6),
               Text(
                 'Loading...',
-                style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.of(context).mutedForeground,
+                ),
               ),
               const SizedBox(height: 28),
               SizedBox(
@@ -233,10 +228,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             unselectedFontSize: 11,
             iconSize: 22,
             items: _navItems
-                .map((item) => BottomNavigationBarItem(
-                      icon: Icon(item.icon),
-                      label: item.label,
-                    ))
+                .map(
+                  (item) => BottomNavigationBarItem(
+                    icon: Icon(item.icon),
+                    label: item.label,
+                  ),
+                )
                 .toList(),
           ),
         ),

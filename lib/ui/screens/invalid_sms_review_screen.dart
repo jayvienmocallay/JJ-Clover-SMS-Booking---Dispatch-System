@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../data/models/order_model.dart';
 import '../../data/repositories/order_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/empty_state.dart';
 
 class InvalidSmsReviewScreen extends StatefulWidget {
@@ -37,22 +38,24 @@ class _InvalidSmsReviewScreenState extends State<InvalidSmsReviewScreen> {
     final id = order.id;
     if (id == null) return;
     await context.read<OrderRepository>().updateOrderStatus(
-          id,
-          'rejected',
-          reason: order.cancelReason ?? 'Reviewed invalid SMS',
-        );
+      id,
+      'rejected',
+      reason: order.cancelReason ?? 'Reviewed invalid SMS',
+    );
     if (!mounted) return;
     await _loadRows();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Message marked reviewed.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Message marked reviewed.')));
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = AppColors.of(context);
-    final pendingReview = _rows.where((row) => row['status'] != 'rejected').toList();
+    final pendingReview = _rows
+        .where((row) => row['status'] != 'rejected')
+        .toList();
     final reviewed = _rows.where((row) => row['status'] == 'rejected').toList();
 
     return Scaffold(
@@ -92,6 +95,8 @@ class _InvalidSmsReviewScreenState extends State<InvalidSmsReviewScreen> {
             else if (_rows.isEmpty)
               const EmptyState(
                 icon: Icons.sms_failed,
+                mascot: MascotPose.smsConfirm,
+                title: 'SMS queue is clean',
                 message: 'No invalid SMS messages found.',
               )
             else ...[
@@ -166,9 +171,9 @@ class _SummaryValue extends StatelessWidget {
         children: [
           Text(
             value,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 2),
           Text(label, style: Theme.of(context).textTheme.labelSmall),
@@ -188,10 +193,10 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       label.toUpperCase(),
       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: AppColors.of(context).mutedForeground,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-          ),
+        color: AppColors.of(context).mutedForeground,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.8,
+      ),
     );
   }
 }
@@ -233,8 +238,8 @@ class _InvalidSmsCard extends StatelessWidget {
                     Text(
                       order.phoneNumber,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -247,16 +252,18 @@ class _InvalidSmsCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: reviewed ? palette.muted : palette.statusMaintenanceLight,
+                  color: reviewed
+                      ? palette.muted
+                      : palette.statusMaintenanceLight,
                   borderRadius: BorderRadius.circular(100),
                 ),
                 child: Text(
                   reviewed ? 'Reviewed' : 'Needs Review',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: reviewed
-                            ? palette.mutedForeground
-                            : palette.statusMaintenance,
-                      ),
+                    color: reviewed
+                        ? palette.mutedForeground
+                        : palette.statusMaintenance,
+                  ),
                 ),
               ),
             ],

@@ -11,6 +11,9 @@ import '../../data/repositories/barangay_repository.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/services/sms_registration_copy.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/empty_state.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
@@ -104,60 +107,49 @@ class _CustomersScreenState extends State<CustomersScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               // --- Header ---
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Customers',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.of(context).foreground,
+              AppPageHeader(
+                title: 'Customers',
+                subtitle: '${customerProv.count} registered customers',
+                action: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const MascotBadge(pose: MascotPose.waterBottle, size: 44),
+                    const SizedBox(width: 8),
+                    // Task 011 — Add Customer button
+                    GestureDetector(
+                      onTap: _showAddCustomerSheet,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${customerProv.count} registered customers',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.of(context).mutedForeground,
+                        decoration: BoxDecoration(
+                          color: AppColors.of(context).primary,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ),
-                    ],
-                  ),
-                  // Task 011 — Add Customer button
-                  GestureDetector(
-                    onTap: _showAddCustomerSheet,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.of(context).primary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.person_add, size: 16, color: Colors.white),
-                          SizedBox(width: 4),
-                          Text(
-                            'Add',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.person_add,
+                              size: 16,
                               color: Colors.white,
                             ),
-                          ),
-                        ],
+                            SizedBox(width: 4),
+                            Text(
+                              'Add',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 20),
 
@@ -190,25 +182,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
               // --- Customer list ---
               if (filtered.isEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 48),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.people,
-                        size: 48,
-                        color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No customers found.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.of(context).mutedForeground,
-                        ),
-                      ),
-                    ],
-                  ),
+                EmptyState(
+                  icon: Icons.people,
+                  mascot: MascotPose.waterBottle,
+                  title: _search.isEmpty
+                      ? 'No customers yet'
+                      : 'No customers found',
+                  message: _search.isEmpty
+                      ? 'Registered delivery customers will appear here.'
+                      : 'No customers match "$_search".',
                 )
               else
                 ...filtered.map((c) {
@@ -268,21 +250,27 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                     Icon(
                                       Icons.phone,
                                       size: 12,
-                                      color: AppColors.of(context).mutedForeground,
+                                      color: AppColors.of(
+                                        context,
+                                      ).mutedForeground,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       phone,
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: AppColors.of(context).mutedForeground,
+                                        color: AppColors.of(
+                                          context,
+                                        ).mutedForeground,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
                                     Icon(
                                       Icons.location_on,
                                       size: 12,
-                                      color: AppColors.of(context).mutedForeground,
+                                      color: AppColors.of(
+                                        context,
+                                      ).mutedForeground,
                                     ),
                                     const SizedBox(width: 4),
                                     Flexible(
@@ -290,7 +278,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                         barangay,
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: AppColors.of(context).mutedForeground,
+                                          color: AppColors.of(
+                                            context,
+                                          ).mutedForeground,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -464,7 +454,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           dropdownColor: AppColors.of(context).card,
                           hint: Text(
                             'Select Barangay...',
-                            style: TextStyle(color: AppColors.of(context).mutedForeground),
+                            style: TextStyle(
+                              color: AppColors.of(context).mutedForeground,
+                            ),
                           ),
                           items: barangays
                               .map(
@@ -884,7 +876,9 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
-                color: _privacyConsent ? AppColors.of(context).primary : AppColors.of(context).muted,
+                color: _privacyConsent
+                    ? AppColors.of(context).primary
+                    : AppColors.of(context).muted,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
@@ -951,7 +945,10 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
         // Name
         Text(
           'Full Name',
-          style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.of(context).mutedForeground,
+          ),
         ),
         const SizedBox(height: 6),
         _buildTextField(_nameController, 'Full Name', TextInputType.name),
@@ -960,7 +957,10 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
         // Phone
         Text(
           'Phone Number',
-          style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.of(context).mutedForeground,
+          ),
         ),
         const SizedBox(height: 6),
         _buildTextField(_phoneController, 'Phone Number', TextInputType.phone),
@@ -969,7 +969,10 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
         // Address
         Text(
           'Full Address',
-          style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.of(context).mutedForeground,
+          ),
         ),
         const SizedBox(height: 6),
         _buildTextField(
@@ -982,7 +985,10 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
         // Barangay dropdown
         Text(
           'Barangay',
-          style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.of(context).mutedForeground,
+          ),
         ),
         const SizedBox(height: 6),
         Container(
