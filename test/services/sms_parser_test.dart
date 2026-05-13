@@ -185,5 +185,42 @@ void main() {
       final result = SmsParser.parse('   ');
       expect(result.command, SmsCommand.unknown);
     });
+
+    test('normalizes tabs, CRLF, NBSP, and repeated spaces', () {
+      final result = SmsParser.parse('DELIVER\t\u00A0 5\r\nPurok   2');
+      expect(result.command, SmsCommand.deliver);
+      expect(result.quantity, 5);
+      expect(result.address, 'Purok 2');
+    });
+
+    test('accepts command separators and trailing punctuation', () {
+      final deliver = SmsParser.parse('DELIVER: 5,');
+      final drop = SmsParser.parse('DROP - 2.');
+      final cancel = SmsParser.parse('CANCEL!');
+      final confirm = SmsParser.parse('CONFIRM-DELETE.');
+
+      expect(deliver.command, SmsCommand.deliver);
+      expect(deliver.quantity, 5);
+      expect(drop.command, SmsCommand.drop);
+      expect(drop.quantity, 2);
+      expect(cancel.command, SmsCommand.cancel);
+      expect(confirm.command, SmsCommand.confirmDelete);
+    });
+
+    test('preserves raw message while parsing normalized text', () {
+      final raw = '  deliver:\t5.  ';
+      final result = SmsParser.parse(raw);
+      expect(result.command, SmsCommand.deliver);
+      expect(result.rawMessage, raw);
+    });
+
+    test('does not accept aliases or natural-language orders', () {
+      expect(SmsParser.parse('DEL 5').command, SmsCommand.unknown);
+      expect(SmsParser.parse('D 5').command, SmsCommand.unknown);
+      expect(
+        SmsParser.parse('pa deliver 5 gallons tomorrow').command,
+        SmsCommand.unknown,
+      );
+    });
   });
 }

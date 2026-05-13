@@ -15,6 +15,7 @@ import '../repositories/sms_message_repository.dart';
 import 'sms_parser.dart';
 import 'system_mode_manager.dart';
 import 'app_event_bus.dart';
+import 'native_sms_sender.dart';
 import 'push_notification_service.dart';
 import 'pre_book_store.dart';
 import 'sms_registration_copy.dart';
@@ -35,11 +36,14 @@ const MethodChannel _nativeSmsForegroundChannel = MethodChannel(
 );
 
 final _databaseRuntime = DatabaseRuntimeRepository();
+const int _maxIncomingReceiptAttempts = 3;
+const Duration _staleIncomingReceiptAfter = Duration(minutes: 10);
 
 @pragma('vm:entry-point')
 Future<void> smsNativeBackgroundMain() async {
   WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
+  await NativeSmsSender.ensureStatusMonitoring();
 
   _nativeSmsBackgroundChannel.setMethodCallHandler((call) async {
     if (call.method != 'processSms') {
@@ -88,6 +92,7 @@ class SmsBackgroundService {
 
   bool _isListening = false;
   bool _foregroundChannelReady = false;
+  bool _isRetryingReceipts = false;
 
   SmsBackgroundService._internal() {
     _deliverHandler = DeliverCommandHandler(_preBookStore);
@@ -105,6 +110,7 @@ class SmsBackgroundService {
 
   Future<void> startListening() async {
     await _preBookStore.loadFromDb();
+    await NativeSmsSender.ensureStatusMonitoring();
     await _startForegroundChannel();
 
     if (_isListening) return;
@@ -113,6 +119,13 @@ class SmsBackgroundService {
     // DefaultSmsReceiver. Do not also register another_telephony.listenIncomingSms;
     // that creates duplicate processors for one physical SMS.
     _isListening = true;
+    unawaited(
+      _retryPendingReceipts().catchError((Object e, StackTrace st) {
+        debugPrint('SMS receipt retry failed: $e');
+        debugPrintStack(stackTrace: st);
+        return 0;
+      }),
+    );
     debugPrint('SMS native receiver bridge started');
   }
 
@@ -353,6 +366,60 @@ class SmsBackgroundService {
     }
   }
 
+  Future<int> _retryPendingReceipts() async {
+    if (_isRetryingReceipts) return 0;
+    _isRetryingReceipts = true;
+
+    try {
+      await _receipts.failExhaustedStaleProcessing(
+        maxAttempts: _maxIncomingReceiptAttempts,
+        staleAfter: _staleIncomingReceiptAfter,
+      );
+
+      final rows = await _receipts.getRetryable(
+        maxAttempts: _maxIncomingReceiptAttempts,
+        staleAfter: _staleIncomingReceiptAfter,
+      );
+      var retried = 0;
+
+      for (final row in rows) {
+        final messageId = row['message_id']?.toString();
+        final sender = row['phone_number']?.toString();
+        final message = row['message']?.toString();
+        if (messageId == null ||
+            messageId.isEmpty ||
+            sender == null ||
+            sender.isEmpty ||
+            message == null ||
+            message.isEmpty) {
+          continue;
+        }
+
+        try {
+          await _processIncomingSmsPayload(
+            sender: sender,
+            message: message,
+            timestamp: _asInt(row['sms_timestamp']),
+            sourceMessageId: messageId,
+          );
+          retried += 1;
+        } catch (e, st) {
+          debugPrint('Retry failed for SMS receipt $messageId: $e');
+          debugPrintStack(stackTrace: st);
+        }
+      }
+
+      return retried;
+    } finally {
+      _isRetryingReceipts = false;
+    }
+  }
+
+  @visibleForTesting
+  Future<int> retryPendingReceiptsForTesting() {
+    return _retryPendingReceipts();
+  }
+
   @visibleForTesting
   Future<void> processIncomingSmsPayloadForTesting({
     required String sender,
@@ -440,4 +507,10 @@ class _SmsPayloadArgs {
     required this.subscriptionId,
     required this.serviceCenterAddress,
   });
+}
+
+int? _asInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '');
 }

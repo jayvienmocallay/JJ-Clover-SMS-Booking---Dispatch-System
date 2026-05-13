@@ -14,6 +14,11 @@ import android.util.Log
 class SmsProcessingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "Foreground SMS processing timed out; stopping service.")
+        stopSelf(startId)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val payload = intent?.let { SmsPayload.fromIntent(it) }
         if (payload == null) {

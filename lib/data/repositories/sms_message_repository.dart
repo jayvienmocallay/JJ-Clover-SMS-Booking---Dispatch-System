@@ -24,12 +24,22 @@ class SmsMessageRepository {
     final db = await DatabaseHelper.instance.database;
     return db.update(
       'sms_messages',
-      {
-        'status': status,
-        'sent_at': DateTime.now().toIso8601String(),
-      },
+      {'status': status, 'sent_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  Future<int> updateSmsMessageStatusBySourceMessageId(
+    String sourceMessageId,
+    String status,
+  ) async {
+    final db = await DatabaseHelper.instance.database;
+    return db.update(
+      'sms_messages',
+      {'status': status, 'sent_at': DateTime.now().toIso8601String()},
+      where: 'source_message_id = ?',
+      whereArgs: [sourceMessageId],
     );
   }
 

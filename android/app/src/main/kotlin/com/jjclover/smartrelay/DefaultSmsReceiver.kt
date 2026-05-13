@@ -23,7 +23,7 @@ class DefaultSmsReceiver : BroadcastReceiver() {
 
                 Log.i(TAG, "Received ${intent.action}; enqueueing SMS processing.")
 
-                val payloads = buildPayloads(intent)
+                val payloads = SmsPayloadReader.fromIntent(intent)
                 persistIncomingSms(appContext, payloads)
 
                 payloads.forEach { payload ->
@@ -58,53 +58,6 @@ class DefaultSmsReceiver : BroadcastReceiver() {
         } finally {
             pendingResult.finish()
         }
-    }
-
-    private fun buildPayloads(intent: Intent): List<SmsPayload> {
-        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-        if (messages.isEmpty()) return emptyList()
-
-        val subscriptionId = extractSubscriptionId(intent)
-        return messages
-            .groupBy { message ->
-                listOf(
-                    message.originatingAddress.orEmpty(),
-                    message.timestampMillis,
-                    message.indexOnIcc,
-                )
-            }
-            .mapNotNull { (_, parts) ->
-                val sortedParts = parts.sortedBy { it.indexOnIcc }
-                val first = sortedParts.first()
-                val sender = first.originatingAddress.orEmpty()
-                val body = sortedParts.joinToString(separator = "") { it.messageBody.orEmpty() }
-                if (sender.isBlank() || body.isBlank()) {
-                    null
-                } else {
-                    SmsPayload.create(
-                        sender = sender,
-                        message = body,
-                        timestamp = first.timestampMillis,
-                        subscriptionId = subscriptionId,
-                        serviceCenterAddress = first.serviceCenterAddress,
-                    )
-                }
-            }
-    }
-
-    private fun extractSubscriptionId(intent: Intent): Int? {
-        val candidates = listOf(
-            "subscription",
-            "subscriptionId",
-            "android.telephony.extra.SUBSCRIPTION_INDEX",
-        )
-        for (key in candidates) {
-            if (intent.hasExtra(key)) {
-                val value = intent.getIntExtra(key, -1)
-                if (value >= 0) return value
-            }
-        }
-        return null
     }
 
     private fun persistIncomingSms(context: Context, payloads: List<SmsPayload>) {
