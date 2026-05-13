@@ -7,6 +7,7 @@ class PreBookContext {
   final String deliveryDay;
   final DateTime scheduledFor;
   final DateTime createdAt;
+  final int? pendingOrderId;
 
   static const expirationHours = 48;
 
@@ -18,6 +19,7 @@ class PreBookContext {
     required this.deliveryDay,
     DateTime? scheduledFor,
     DateTime? createdAt,
+    this.pendingOrderId,
   }) : scheduledFor = scheduledFor ?? createdAt ?? DateTime.now(),
        createdAt = createdAt ?? DateTime.now();
 

@@ -108,7 +108,7 @@ class DeliverCommandHandler {
     );
 
     if (validation.result == ValidationResult.invalidDay) {
-      await SmsHandlerUtils.saveUnrecognized(
+      final pendingOrderId = await SmsHandlerUtils.saveUnrecognized(
         sender,
         'DELIVER ${parsed.quantity ?? 0} - Wrong Day (${validation.message})',
         'prebook',
@@ -129,6 +129,7 @@ class DeliverCommandHandler {
               validation.correctDay!,
               from: requestTime,
             ),
+            pendingOrderId: pendingOrderId == 0 ? null : pendingOrderId,
           ),
         );
       }

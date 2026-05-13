@@ -62,6 +62,16 @@ class OrderRepository {
     return DatabaseHelper.instance.insertOrder(orderData);
   }
 
+  Future<int> promotePendingUnrecognizedOrder(
+    int id,
+    Map<String, dynamic> orderData,
+  ) {
+    return DatabaseHelper.instance.promotePendingUnrecognizedOrder(
+      id,
+      orderData,
+    );
+  }
+
   Future<int> updateOrderStatus(
     int id,
     String status, {

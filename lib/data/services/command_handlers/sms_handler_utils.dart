@@ -148,7 +148,7 @@ class SmsHandlerUtils {
 
   /// Saves a message that couldn't be processed as a regular order so it
   /// remains visible in the Messages / Unrecognized tab.
-  static Future<void> saveUnrecognized(
+  static Future<int> saveUnrecognized(
     String sender,
     String message,
     String status, {
@@ -184,7 +184,7 @@ class SmsHandlerUtils {
       sourceMessageId: sourceMessageId,
       source: 'sms',
     );
-    await _orders.insertOrder(order.toMap());
+    final orderId = await _orders.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showMessageNotification(
       title: 'Unrecognized Message',
@@ -192,6 +192,7 @@ class SmsHandlerUtils {
       sender: sender,
     );
     debugPrint('Saved unrecognized message from $normalizedSender: $status');
+    return orderId;
   }
 }
 

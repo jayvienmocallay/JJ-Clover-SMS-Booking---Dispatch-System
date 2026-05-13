@@ -113,7 +113,9 @@ class DatabaseHelper {
       // Delete the stale file and create a fresh encrypted database.
       final file = File(path);
       if (await file.exists()) {
-        debugPrint('DB open failed ($e) — stale encrypted file detected, recreating.');
+        debugPrint(
+          'DB open failed ($e) — stale encrypted file detected, recreating.',
+        );
         await file.delete();
       }
       return await openDatabase(
@@ -785,7 +787,10 @@ class DatabaseHelper {
       // barangays (not in the hardcoded map) also get schedules.
       List<String> deliveryDays;
       if (zone == 'Zone C' && barangayDeliveryDay != null) {
-        deliveryDays = barangayDeliveryDay.split(',').map((d) => d.trim()).toList();
+        deliveryDays = barangayDeliveryDay
+            .split(',')
+            .map((d) => d.trim())
+            .toList();
       } else {
         deliveryDays = ZoneScheduleMap.getDaysForZone(
           zone,
@@ -1044,6 +1049,28 @@ class DatabaseHelper {
       'orders',
       normalizedData,
       conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<int> promotePendingUnrecognizedOrder(
+    int id,
+    Map<String, dynamic> orderData,
+  ) async {
+    final db = await instance.database;
+    final normalizedData = Map<String, dynamic>.from(orderData)
+      ..remove('id')
+      ..remove('created_at');
+    final phoneNumber = normalizedData['phone_number'] as String?;
+    if (phoneNumber != null) {
+      normalizedData['phone_number'] = PhoneNumberUtils.normalize(phoneNumber);
+    }
+    normalizedData['cancel_reason'] = null;
+
+    return await db.update(
+      'orders',
+      normalizedData,
+      where: 'id = ? AND type = ? AND status = ?',
+      whereArgs: [id, 'unrecognized', 'pending'],
     );
   }
 
@@ -1720,6 +1747,7 @@ class DatabaseHelper {
       'address': _asNonEmptyString(value['address']),
       'deliveryDay': deliveryDay,
       'scheduledFor': _asNonEmptyString(value['scheduledFor']),
+      'pendingOrderId': _asInt(value['pendingOrderId']),
       'timestamp': _asInt(value['timestamp']) ?? 0,
     };
   }
