@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
-import 'package:another_telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
 import '../../models/order_model.dart';
 import '../../repositories/customer_repository.dart';
@@ -31,7 +30,6 @@ class SmsHandlerUtils {
   static Future<void> sendReply(
     String phoneNumber,
     String message, {
-    Telephony? smsSender,
     String? sourceMessageId,
     bool waitForSend = false,
   }) {
@@ -45,7 +43,6 @@ class SmsHandlerUtils {
       _QueuedReply(
         phoneNumber: phoneNumber,
         message: message,
-        smsSender: smsSender,
         sourceMessageId: outgoingSourceMessageId,
         completer: completer,
       ),
@@ -91,11 +88,7 @@ class SmsHandlerUtils {
     final normalizedPhone = PhoneNumberUtils.normalize(item.phoneNumber);
 
     try {
-      await _doSend(
-        item.phoneNumber,
-        item.message,
-        smsSender: item.smsSender,
-      );
+      await _doSend(item.phoneNumber, item.message);
       await _insertOutgoingMessage(
         phoneNumber: normalizedPhone,
         message: item.message,
@@ -137,7 +130,10 @@ class SmsHandlerUtils {
     }
   }
 
-  static String? _outgoingSourceMessageId(String? incomingSourceMessageId, String message) {
+  static String? _outgoingSourceMessageId(
+    String? incomingSourceMessageId,
+    String message,
+  ) {
     if (incomingSourceMessageId == null || incomingSourceMessageId.isEmpty) {
       return null;
     }
@@ -145,11 +141,7 @@ class SmsHandlerUtils {
     return 'reply|$incomingSourceMessageId|$hash';
   }
 
-  static Future<void> _doSend(
-    String phoneNumber,
-    String message, {
-    Telephony? smsSender,
-  }) async {
+  static Future<void> _doSend(String phoneNumber, String message) async {
     await NativeSmsSender.sendSms(to: phoneNumber, message: message);
     debugPrint('Reply sent to $phoneNumber');
   }
@@ -206,14 +198,12 @@ class SmsHandlerUtils {
 class _QueuedReply {
   final String phoneNumber;
   final String message;
-  final Telephony? smsSender;
   final String? sourceMessageId;
   final Completer<void> completer;
 
   _QueuedReply({
     required this.phoneNumber,
     required this.message,
-    required this.smsSender,
     required this.sourceMessageId,
     required this.completer,
   });

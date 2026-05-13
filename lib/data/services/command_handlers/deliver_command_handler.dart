@@ -1,4 +1,3 @@
-import 'package:another_telephony/telephony.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/phone_number_utils.dart';
 import '../../models/customer_model.dart';
@@ -36,7 +35,6 @@ class DeliverCommandHandler {
     String sender,
     ParsedSms parsed, {
     required String sourceMessageId,
-    Telephony? smsSender,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
 
@@ -51,7 +49,7 @@ class DeliverCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         _modeManager.getDeliveryReply(),
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -69,7 +67,7 @@ class DeliverCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         SmsRegistrationCopy.unknownNumberPrompt,
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -89,7 +87,7 @@ class DeliverCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'Customer profile is incomplete. Please call the station.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -138,7 +136,7 @@ class DeliverCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         validation.message!,
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -180,7 +178,7 @@ class DeliverCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'No active delivery schedule found for your account. Please call the station.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -209,7 +207,7 @@ class DeliverCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -228,21 +226,21 @@ class DeliverCommandHandler {
         _modeManager.getDeliveryReply(
           queuedDeliveryDay: isBeforeCutoff ? null : deliveryDay,
         ),
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
     } else if (isBeforeCutoff) {
       await SmsHandlerUtils.sendReply(
         sender,
         _modeManager.getDeliveryReply(),
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
     } else {
       await SmsHandlerUtils.sendReply(
         sender,
         'Order received. Past today\'s cutoff time. Your order has been queued for $deliveryDay.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
     }

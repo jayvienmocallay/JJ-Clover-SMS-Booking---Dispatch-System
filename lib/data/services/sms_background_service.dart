@@ -3,7 +3,6 @@
 // Task 008 — Zone-specific validation integration, next-day scheduling
 import 'dart:async';
 import 'dart:ui';
-import 'package:another_telephony/telephony.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../../core/constants/app_constants.dart';
@@ -57,7 +56,6 @@ Future<void> smsNativeBackgroundMain() async {
         subscriptionId: args.subscriptionId,
         serviceCenterAddress: args.serviceCenterAddress,
         sourceMessageId: args.sourceMessageId,
-        smsSender: Telephony.backgroundInstance,
       );
     } catch (e, st) {
       debugPrint('smsNativeBackgroundMain processing error: $e\n$st');
@@ -72,26 +70,9 @@ Future<void> _ensureSmsRuntimeReady() async {
   await _databaseRuntime.ensureReady();
 }
 
-@pragma('vm:entry-point')
-Future<void> smsBackgroundMessageHandler(SmsMessage msg) async {
-  WidgetsFlutterBinding.ensureInitialized();
-  DartPluginRegistrant.ensureInitialized();
-
-  try {
-    await _ensureSmsRuntimeReady();
-    await SmsBackgroundService.instance._processIncomingSms(
-      msg,
-      smsSender: Telephony.backgroundInstance,
-    );
-  } catch (e, st) {
-    debugPrint('smsBackgroundMessageHandler error: $e\n$st');
-  }
-}
-
 class SmsBackgroundService {
   static final SmsBackgroundService instance = SmsBackgroundService._internal();
 
-  final Telephony _telephony = Telephony.instance;
   final IncomingSmsReceiptRepository _receipts = IncomingSmsReceiptRepository();
   final SmsMessageRepository _messages = SmsMessageRepository();
   final CustomerRepository _customers = CustomerRepository();
@@ -149,7 +130,6 @@ class SmsBackgroundService {
               subscriptionId: args.subscriptionId,
               serviceCenterAddress: args.serviceCenterAddress,
               sourceMessageId: args.sourceMessageId,
-              smsSender: _telephony,
             ),
           );
           return true;
@@ -158,7 +138,9 @@ class SmsBackgroundService {
           AppEventBus().notifyOrderReceived();
           return true;
         default:
-          throw MissingPluginException('Unknown foreground SMS method: ${call.method}');
+          throw MissingPluginException(
+            'Unknown foreground SMS method: ${call.method}',
+          );
       }
     });
     _foregroundChannelReady = true;
@@ -201,20 +183,6 @@ class SmsBackgroundService {
     }
   }
 
-  Future<void> _processIncomingSms(
-    SmsMessage msg, {
-    Telephony? smsSender,
-  }) async {
-    await _processIncomingSmsPayload(
-      sender: msg.address ?? '',
-      message: msg.body ?? '',
-      timestamp: msg.date,
-      subscriptionId: msg.subscriptionId,
-      serviceCenterAddress: msg.serviceCenterAddress,
-      smsSender: smsSender,
-    );
-  }
-
   Future<void> _processIncomingSmsPayload({
     required String sender,
     required String message,
@@ -222,7 +190,6 @@ class SmsBackgroundService {
     int? subscriptionId,
     String? serviceCenterAddress,
     String? sourceMessageId,
-    Telephony? smsSender,
   }) async {
     if (sender.isEmpty) return;
     final normalizedSender = PhoneNumberUtils.normalize(sender);
@@ -247,15 +214,16 @@ class SmsBackgroundService {
     if (!claimResult.claimed) {
       if (claimResult.isDuplicate) {
         debugPrint('Duplicate order within 1 hour: $effectiveSourceMessageId');
-        unawaited(SmsHandlerUtils.sendReply(
-          sender,
-          'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
-          smsSender: smsSender,
-          sourceMessageId: effectiveSourceMessageId,
-        ).catchError((Object e, StackTrace st) {
-          debugPrint('Queued reply failed: $e');
-          debugPrintStack(stackTrace: st);
-        }));
+        unawaited(
+          SmsHandlerUtils.sendReply(
+            sender,
+            'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
+            sourceMessageId: effectiveSourceMessageId,
+          ).catchError((Object e, StackTrace st) {
+            debugPrint('Queued reply failed: $e');
+            debugPrintStack(stackTrace: st);
+          }),
+        );
       } else {
         debugPrint(
           'Message still processing, skipped: $effectiveSourceMessageId',
@@ -290,7 +258,6 @@ class SmsBackgroundService {
 
       final handledByFirstContact = await _handleFirstContactIfNeeded(
         sender: sender,
-        smsSender: smsSender,
         sourceMessageId: effectiveSourceMessageId,
       );
       if (handledByFirstContact) {
@@ -304,7 +271,6 @@ class SmsBackgroundService {
         sender: sender,
         parsed: parsed,
         sourceMessageId: effectiveSourceMessageId,
-        smsSender: smsSender,
       );
       if (handledByPrivacyFlow) {
         await _receipts.complete(effectiveSourceMessageId);
@@ -317,7 +283,6 @@ class SmsBackgroundService {
             sender,
             parsed,
             sourceMessageId: effectiveSourceMessageId,
-            smsSender: smsSender,
           );
           break;
         case SmsCommand.drop:
@@ -325,33 +290,31 @@ class SmsBackgroundService {
             sender,
             parsed,
             sourceMessageId: effectiveSourceMessageId,
-            smsSender: smsSender,
           );
           break;
         case SmsCommand.yes:
           await _yesHandler.handle(
             sender,
             sourceMessageId: effectiveSourceMessageId,
-            smsSender: smsSender,
           );
           break;
         case SmsCommand.cancel:
           await _cancelHandler.handle(
             sender,
             sourceMessageId: effectiveSourceMessageId,
-            smsSender: smsSender,
           );
           break;
         case SmsCommand.status:
-          unawaited(SmsHandlerUtils.sendReply(
-            sender,
-            'Current status: ${_modeManager.currentMode.displayName}',
-            smsSender: smsSender,
-            sourceMessageId: effectiveSourceMessageId,
-          ).catchError((Object e, StackTrace st) {
-            debugPrint('Queued reply failed: $e');
-            debugPrintStack(stackTrace: st);
-          }));
+          unawaited(
+            SmsHandlerUtils.sendReply(
+              sender,
+              'Current status: ${_modeManager.currentMode.displayName}',
+              sourceMessageId: effectiveSourceMessageId,
+            ).catchError((Object e, StackTrace st) {
+              debugPrint('Queued reply failed: $e');
+              debugPrintStack(stackTrace: st);
+            }),
+          );
           break;
         case SmsCommand.register:
         case SmsCommand.agree:
@@ -370,15 +333,16 @@ class SmsBackgroundService {
             sourceMessageId: effectiveSourceMessageId,
             quantity: parsed.quantity ?? 0,
           );
-          unawaited(SmsHandlerUtils.sendReply(
-            sender,
-            SmsParser.getUnknownCommandReply(),
-            smsSender: smsSender,
-            sourceMessageId: effectiveSourceMessageId,
-          ).catchError((Object e, StackTrace st) {
-            debugPrint('Queued reply failed: $e');
-            debugPrintStack(stackTrace: st);
-          }));
+          unawaited(
+            SmsHandlerUtils.sendReply(
+              sender,
+              SmsParser.getUnknownCommandReply(),
+              sourceMessageId: effectiveSourceMessageId,
+            ).catchError((Object e, StackTrace st) {
+              debugPrint('Queued reply failed: $e');
+              debugPrintStack(stackTrace: st);
+            }),
+          );
           break;
       }
 
@@ -397,7 +361,6 @@ class SmsBackgroundService {
     int? subscriptionId,
     String? serviceCenterAddress,
     String? sourceMessageId,
-    Telephony? smsSender,
   }) {
     return _processIncomingSmsPayload(
       sender: sender,
@@ -406,13 +369,11 @@ class SmsBackgroundService {
       subscriptionId: subscriptionId,
       serviceCenterAddress: serviceCenterAddress,
       sourceMessageId: sourceMessageId,
-      smsSender: smsSender,
     );
   }
 
   Future<bool> _handleFirstContactIfNeeded({
     required String sender,
-    Telephony? smsSender,
     String? sourceMessageId,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
@@ -425,15 +386,16 @@ class SmsBackgroundService {
         ? '${SmsRegistrationCopy.firstContactWelcome}\n\n${SmsRegistrationCopy.firstContactPrivacyNotice}'
         : SmsRegistrationCopy.firstContactWelcome;
 
-    unawaited(SmsHandlerUtils.sendReply(
-      sender,
-      firstContactMessage,
-      smsSender: smsSender,
-      sourceMessageId: sourceMessageId,
-    ).catchError((Object e, StackTrace st) {
-      debugPrint('Queued reply failed: $e');
-      debugPrintStack(stackTrace: st);
-    }));
+    unawaited(
+      SmsHandlerUtils.sendReply(
+        sender,
+        firstContactMessage,
+        sourceMessageId: sourceMessageId,
+      ).catchError((Object e, StackTrace st) {
+        debugPrint('Queued reply failed: $e');
+        debugPrintStack(stackTrace: st);
+      }),
+    );
 
     await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
     debugPrint('First-contact automated reply sent to $normalizedSender');

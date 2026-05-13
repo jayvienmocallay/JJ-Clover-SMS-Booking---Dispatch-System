@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:another_telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
 import '../../models/customer_model.dart';
 import '../../repositories/barangay_repository.dart';
@@ -25,7 +24,6 @@ class RegistrationFlowHandler {
     required String sender,
     required ParsedSms parsed,
     required String sourceMessageId,
-    Telephony? smsSender,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
     final pending = await _pendingActions.get(
@@ -46,7 +44,7 @@ class RegistrationFlowHandler {
         await SmsHandlerUtils.sendReply(
           sender,
           SmsRegistrationCopy.noDataOnFile,
-          smsSender: smsSender,
+
           sourceMessageId: sourceMessageId,
         );
         return true;
@@ -65,7 +63,7 @@ class RegistrationFlowHandler {
           barangay: c.barangay,
           address: c.address,
         ),
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return true;
@@ -78,7 +76,7 @@ class RegistrationFlowHandler {
         await SmsHandlerUtils.sendReply(
           sender,
           SmsRegistrationCopy.noDataOnFile,
-          smsSender: smsSender,
+
           sourceMessageId: sourceMessageId,
         );
         return true;
@@ -91,7 +89,7 @@ class RegistrationFlowHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         SmsRegistrationCopy.deleteWarning,
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return true;
@@ -103,7 +101,7 @@ class RegistrationFlowHandler {
         await SmsHandlerUtils.sendReply(
           sender,
           SmsRegistrationCopy.confirmDeleteWithoutRequest,
-          smsSender: smsSender,
+
           sourceMessageId: sourceMessageId,
         );
         return true;
@@ -121,7 +119,7 @@ class RegistrationFlowHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         SmsRegistrationCopy.deleteComplete,
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return true;
@@ -136,7 +134,7 @@ class RegistrationFlowHandler {
         action == 'delete'
             ? SmsRegistrationCopy.deleteCancelled
             : SmsRegistrationCopy.registrationCancelled,
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return true;
@@ -149,7 +147,7 @@ class RegistrationFlowHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         SmsRegistrationCopy.deleteCancelled,
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return true;
@@ -161,7 +159,7 @@ class RegistrationFlowHandler {
         await SmsHandlerUtils.sendReply(
           sender,
           SmsRegistrationCopy.alreadyRegistered,
-          smsSender: smsSender,
+
           sourceMessageId: sourceMessageId,
         );
         return true;
@@ -171,7 +169,7 @@ class RegistrationFlowHandler {
         await SmsHandlerUtils.sendReply(
           sender,
           SmsRegistrationCopy.registerHelp,
-          smsSender: smsSender,
+
           sourceMessageId: sourceMessageId,
         );
         return true;
@@ -185,7 +183,7 @@ class RegistrationFlowHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         SmsRegistrationCopy.registrationConsent(name: name),
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return true;
@@ -201,7 +199,6 @@ class RegistrationFlowHandler {
         parsed: parsed,
         pending: pending,
         sourceMessageId: sourceMessageId,
-        smsSender: smsSender,
       );
     }
 
@@ -212,7 +209,7 @@ class RegistrationFlowHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         SmsRegistrationCopy.noPendingRegistration,
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return true;
@@ -230,7 +227,7 @@ class RegistrationFlowHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         SmsRegistrationCopy.unknownNumberPrompt,
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return true;
@@ -269,7 +266,6 @@ class RegistrationFlowHandler {
     required ParsedSms parsed,
     required Map<String, dynamic> pending,
     required String sourceMessageId,
-    Telephony? smsSender,
   }) async {
     final step = pending['step'] as String;
     final pendingName = pending['name'] as String?;
@@ -294,7 +290,7 @@ class RegistrationFlowHandler {
           await SmsHandlerUtils.sendReply(
             sender,
             SmsRegistrationCopy.askBarangay(list),
-            smsSender: smsSender,
+
             sourceMessageId: sourceMessageId,
           );
           return true;
@@ -302,7 +298,7 @@ class RegistrationFlowHandler {
         await SmsHandlerUtils.sendReply(
           sender,
           SmsRegistrationCopy.consentRequired,
-          smsSender: smsSender,
+
           sourceMessageId: sourceMessageId,
         );
         return true;
@@ -314,7 +310,7 @@ class RegistrationFlowHandler {
             await SmsHandlerUtils.sendReply(
               sender,
               SmsRegistrationCopy.invalidBarangay,
-              smsSender: smsSender,
+
               sourceMessageId: sourceMessageId,
             );
             return true;
@@ -324,7 +320,7 @@ class RegistrationFlowHandler {
             await SmsHandlerUtils.sendReply(
               sender,
               SmsRegistrationCopy.invalidBarangay,
-              smsSender: smsSender,
+
               sourceMessageId: sourceMessageId,
             );
             return true;
@@ -341,7 +337,7 @@ class RegistrationFlowHandler {
           await SmsHandlerUtils.sendReply(
             sender,
             SmsRegistrationCopy.askAddress,
-            smsSender: smsSender,
+
             sourceMessageId: sourceMessageId,
           );
           return true;
@@ -349,7 +345,7 @@ class RegistrationFlowHandler {
         await SmsHandlerUtils.sendReply(
           sender,
           SmsRegistrationCopy.barangayPromptReminder,
-          smsSender: smsSender,
+
           sourceMessageId: sourceMessageId,
         );
         return true;
@@ -361,7 +357,7 @@ class RegistrationFlowHandler {
             await SmsHandlerUtils.sendReply(
               sender,
               SmsRegistrationCopy.addressPromptReminder,
-              smsSender: smsSender,
+
               sourceMessageId: sourceMessageId,
             );
             return true;
@@ -371,7 +367,7 @@ class RegistrationFlowHandler {
             await SmsHandlerUtils.sendReply(
               sender,
               SmsRegistrationCopy.registerHelp,
-              smsSender: smsSender,
+
               sourceMessageId: sourceMessageId,
             );
             return true;
@@ -393,7 +389,7 @@ class RegistrationFlowHandler {
             await SmsHandlerUtils.sendReply(
               sender,
               SmsRegistrationCopy.alreadyRegistered,
-              smsSender: smsSender,
+
               sourceMessageId: sourceMessageId,
             );
             return true;
@@ -407,7 +403,7 @@ class RegistrationFlowHandler {
               name: pendingName,
               barangay: barangay?['name'] as String? ?? '',
             ),
-            smsSender: smsSender,
+
             sourceMessageId: sourceMessageId,
           );
           return true;
@@ -415,7 +411,7 @@ class RegistrationFlowHandler {
         await SmsHandlerUtils.sendReply(
           sender,
           SmsRegistrationCopy.addressPromptReminder,
-          smsSender: smsSender,
+
           sourceMessageId: sourceMessageId,
         );
         return true;

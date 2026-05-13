@@ -1,4 +1,3 @@
-import 'package:another_telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
 import '../../models/order_model.dart';
 import '../../repositories/customer_repository.dart';
@@ -22,7 +21,6 @@ class DropCommandHandler {
     String sender,
     ParsedSms parsed, {
     required String sourceMessageId,
-    Telephony? smsSender,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
 
@@ -38,7 +36,7 @@ class DropCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         _modeManager.getDropReply(),
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -72,7 +70,7 @@ class DropCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -89,7 +87,6 @@ class DropCommandHandler {
     await SmsHandlerUtils.sendReply(
       sender,
       _modeManager.getDropReply(),
-      smsSender: smsSender,
       sourceMessageId: sourceMessageId,
     );
 

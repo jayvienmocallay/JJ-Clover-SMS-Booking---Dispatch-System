@@ -1,5 +1,3 @@
-import 'package:another_telephony/telephony.dart';
-
 import '../../../core/utils/phone_number_utils.dart';
 import '../../repositories/order_repository.dart';
 import '../app_event_bus.dart';
@@ -20,11 +18,7 @@ class CancelCommandHandler {
   final PreBookStore _preBookStore;
   final _orders = OrderRepository();
 
-  Future<void> handle(
-    String sender, {
-    required String sourceMessageId,
-    Telephony? smsSender,
-  }) async {
+  Future<void> handle(String sender, {required String sourceMessageId}) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
     final pendingPreBook = _preBookStore[normalizedSender];
     final clearedPreBook = pendingPreBook != null;
@@ -50,7 +44,7 @@ class CancelCommandHandler {
         await SmsHandlerUtils.sendReply(
           sender,
           'Pending pre-book cancelled. No active order remains.',
-          smsSender: smsSender,
+
           sourceMessageId: sourceMessageId,
         );
         return;
@@ -59,7 +53,7 @@ class CancelCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'No active order found to cancel.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -71,7 +65,7 @@ class CancelCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'Your latest order is already in transit. Please call the station to cancel.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -82,7 +76,7 @@ class CancelCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'We could not find an active order to cancel.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -98,7 +92,7 @@ class CancelCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'We could not find an active order to cancel.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -117,7 +111,6 @@ class CancelCommandHandler {
     await SmsHandlerUtils.sendReply(
       sender,
       'Order #$orderId has been cancelled.$preBookNote',
-      smsSender: smsSender,
       sourceMessageId: sourceMessageId,
     );
   }

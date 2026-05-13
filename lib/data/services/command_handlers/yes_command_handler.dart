@@ -1,4 +1,3 @@
-import 'package:another_telephony/telephony.dart';
 import '../../../core/utils/phone_number_utils.dart';
 import '../../models/order_model.dart';
 import '../app_event_bus.dart';
@@ -14,11 +13,7 @@ class YesCommandHandler {
   final PreBookStore _preBookStore;
   final _orderCreation = OrderCreationService();
 
-  Future<void> handle(
-    String sender, {
-    required String sourceMessageId,
-    Telephony? smsSender,
-  }) async {
+  Future<void> handle(String sender, {required String sourceMessageId}) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
     final context = _preBookStore[normalizedSender];
 
@@ -26,7 +21,7 @@ class YesCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'No pending pre-book found. Please send a DELIVER command first.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -37,7 +32,7 @@ class YesCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'Pre-book offer has expired. Please send a new DELIVER command.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -68,7 +63,7 @@ class YesCommandHandler {
       await SmsHandlerUtils.sendReply(
         sender,
         'This pre-book was already confirmed. Reply CANCEL to cancel it, or send a new DELIVER command later.',
-        smsSender: smsSender,
+
         sourceMessageId: sourceMessageId,
       );
       return;
@@ -88,7 +83,6 @@ class YesCommandHandler {
       sender,
       'Pre-book confirmed! Your order of ${context.quantity} gallon(s) '
       'is scheduled for ${context.deliveryDay}.',
-      smsSender: smsSender,
       sourceMessageId: sourceMessageId,
     );
   }
