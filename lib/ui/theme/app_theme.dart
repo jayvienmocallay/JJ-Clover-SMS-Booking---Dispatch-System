@@ -37,27 +37,25 @@ class AppColors {
 /// Builds the app-wide [ThemeData] for the dark theme.
 class AppTheme {
   static ThemeData get darkTheme {
-    final textTheme = GoogleFonts.plusJakartaSansTextTheme(
-      const TextTheme(
-        displayLarge:  TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: AppColors.foreground),
-        headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.foreground),
-        headlineMedium:TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.foreground),
-        headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.foreground),
-        titleLarge:    TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.foreground),
-        titleMedium:   TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.foreground),
-        titleSmall:    TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground),
-        bodyLarge:     TextStyle(fontSize: 14, fontWeight: FontWeight.w400, color: AppColors.foreground),
-        bodyMedium:    TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: AppColors.foreground),
-        bodySmall:     TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: AppColors.mutedForeground),
-        labelLarge:    TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.foreground),
-        labelMedium:   TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.mutedForeground),
-        labelSmall:    TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.mutedForeground),
-      ),
+    final textTheme = TextTheme(
+      displayLarge:  GoogleFonts.quicksand(fontSize: 32, fontWeight: FontWeight.w700, color: AppColors.foreground),
+      headlineLarge: GoogleFonts.quicksand(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.foreground),
+      headlineMedium:GoogleFonts.quicksand(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.foreground),
+      headlineSmall: GoogleFonts.quicksand(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.foreground),
+      titleLarge:    GoogleFonts.quicksand(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.foreground),
+      titleMedium:   GoogleFonts.quicksand(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.foreground),
+      titleSmall:    GoogleFonts.quicksand(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground),
+      bodyLarge:     GoogleFonts.nunitoSans(fontSize: 14, fontWeight: FontWeight.w400, color: AppColors.foreground),
+      bodyMedium:    GoogleFonts.nunitoSans(fontSize: 13, fontWeight: FontWeight.w400, color: AppColors.foreground),
+      bodySmall:     GoogleFonts.nunitoSans(fontSize: 12, fontWeight: FontWeight.w400, color: AppColors.mutedForeground),
+      labelLarge:    GoogleFonts.nunitoSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.foreground),
+      labelMedium:   GoogleFonts.nunitoSans(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.mutedForeground),
+      labelSmall:    GoogleFonts.nunitoSans(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.mutedForeground),
     );
 
     return ThemeData(
       brightness: Brightness.dark,
-      fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
+      fontFamily: GoogleFonts.nunitoSans().fontFamily,
       scaffoldBackgroundColor: AppColors.background,
       textTheme: textTheme,
       colorScheme: const ColorScheme.dark(
@@ -73,7 +71,7 @@ class AppTheme {
         backgroundColor: AppColors.card,
         foregroundColor: AppColors.foreground,
         elevation: 0,
-        titleTextStyle: GoogleFonts.plusJakartaSans(
+        titleTextStyle: GoogleFonts.quicksand(
           fontSize: 16,
           fontWeight: FontWeight.w600,
           color: AppColors.foreground,
@@ -134,7 +132,7 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.muted,
-        contentTextStyle: GoogleFonts.plusJakartaSans(
+        contentTextStyle: GoogleFonts.nunitoSans(
           color: AppColors.foreground,
           fontSize: 13,
           fontWeight: FontWeight.w500,
@@ -145,12 +143,12 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        titleTextStyle: GoogleFonts.plusJakartaSans(
+        titleTextStyle: GoogleFonts.quicksand(
           fontSize: 18,
           fontWeight: FontWeight.w700,
           color: AppColors.foreground,
         ),
-        contentTextStyle: GoogleFonts.plusJakartaSans(
+        contentTextStyle: GoogleFonts.nunitoSans(
           fontSize: 14,
           color: AppColors.mutedForeground,
         ),
@@ -165,27 +163,25 @@ class AppTheme {
   }
 
   static ThemeData get lightTheme {
-    final textTheme = GoogleFonts.plusJakartaSansTextTheme(
-      const TextTheme(
-        displayLarge:   TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
-        headlineLarge:  TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
-        headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
-        headlineSmall:  TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
-        titleLarge:     TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
-        titleMedium:    TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
-        titleSmall:     TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF0F172A)),
-        bodyLarge:      TextStyle(fontSize: 14, fontWeight: FontWeight.w400, color: Color(0xFF0F172A)),
-        bodyMedium:     TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: Color(0xFF0F172A)),
-        bodySmall:      TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: Color(0xFF64748B)),
-        labelLarge:     TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
-        labelMedium:    TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
-        labelSmall:     TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
-      ),
+    final textTheme = TextTheme(
+      displayLarge:   GoogleFonts.quicksand(fontSize: 32, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+      headlineLarge:  GoogleFonts.quicksand(fontSize: 22, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+      headlineMedium: GoogleFonts.quicksand(fontSize: 20, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+      headlineSmall:  GoogleFonts.quicksand(fontSize: 18, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+      titleLarge:     GoogleFonts.quicksand(fontSize: 16, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+      titleMedium:    GoogleFonts.quicksand(fontSize: 15, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+      titleSmall:     GoogleFonts.quicksand(fontSize: 14, fontWeight: FontWeight.w500, color: const Color(0xFF0F172A)),
+      bodyLarge:      GoogleFonts.nunitoSans(fontSize: 14, fontWeight: FontWeight.w400, color: const Color(0xFF0F172A)),
+      bodyMedium:     GoogleFonts.nunitoSans(fontSize: 13, fontWeight: FontWeight.w400, color: const Color(0xFF0F172A)),
+      bodySmall:      GoogleFonts.nunitoSans(fontSize: 12, fontWeight: FontWeight.w400, color: const Color(0xFF64748B)),
+      labelLarge:     GoogleFonts.nunitoSans(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+      labelMedium:    GoogleFonts.nunitoSans(fontSize: 12, fontWeight: FontWeight.w500, color: const Color(0xFF64748B)),
+      labelSmall:     GoogleFonts.nunitoSans(fontSize: 11, fontWeight: FontWeight.w500, color: const Color(0xFF64748B)),
     );
 
     return ThemeData(
       brightness: Brightness.light,
-      fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
+      fontFamily: GoogleFonts.nunitoSans().fontFamily,
       scaffoldBackgroundColor: const Color(0xFFF8FAFC),
       textTheme: textTheme,
       colorScheme: const ColorScheme.light(
@@ -201,7 +197,7 @@ class AppTheme {
         backgroundColor: const Color(0xFFFFFFFF),
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
-        titleTextStyle: GoogleFonts.plusJakartaSans(
+        titleTextStyle: GoogleFonts.quicksand(
           fontSize: 16,
           fontWeight: FontWeight.w600,
           color: const Color(0xFF0F172A),
@@ -262,7 +258,7 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: const Color(0xFFF1F5F9),
-        contentTextStyle: GoogleFonts.plusJakartaSans(
+        contentTextStyle: GoogleFonts.nunitoSans(
           color: const Color(0xFF0F172A),
           fontSize: 13,
           fontWeight: FontWeight.w500,
@@ -273,12 +269,12 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: const Color(0xFFFFFFFF),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        titleTextStyle: GoogleFonts.plusJakartaSans(
+        titleTextStyle: GoogleFonts.quicksand(
           fontSize: 18,
           fontWeight: FontWeight.w700,
           color: const Color(0xFF0F172A),
         ),
-        contentTextStyle: GoogleFonts.plusJakartaSans(
+        contentTextStyle: GoogleFonts.nunitoSans(
           fontSize: 14,
           color: const Color(0xFF64748B),
         ),
