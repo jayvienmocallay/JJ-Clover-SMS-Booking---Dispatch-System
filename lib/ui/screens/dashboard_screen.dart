@@ -457,7 +457,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Today Overview',
+              "Today's Overview",
               style: Theme.of(context).textTheme.titleMedium,
             ),
             Text(timeLabel, style: Theme.of(context).textTheme.labelSmall),
