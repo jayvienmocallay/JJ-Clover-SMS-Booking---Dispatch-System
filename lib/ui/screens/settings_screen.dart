@@ -31,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _cutoffHour = AppConstants.orderCutOffHour;
   int _cutoffMinute = AppConstants.orderCutOffMinute;
   bool _isLoading = true;
+  String? _loadError;
   late final BarangayRepository _barangayRepo;
   late final SettingsRepository _settingsRepo;
 
@@ -51,23 +52,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final barangays = await _barangayRepo.getBarangays();
       final hour = await _settingsRepo.getCutoffHour();
       final minute = await _settingsRepo.getCutoffMinute();
-      if (mounted) {
-        setState(() {
-          _barangays = barangays;
-          _cutoffHour = hour;
-          _cutoffMinute = minute;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _barangays = barangays;
+        _cutoffHour = hour;
+        _cutoffMinute = minute;
+        _isLoading = false;
+        _loadError = null;
+      });
     } catch (e, st) {
       debugPrint('Failed to load settings: $e');
       debugPrintStack(stackTrace: st);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load settings. Please restart or check logs.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = e.toString();
+      });
     }
   }
 
@@ -192,6 +192,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Center(child: CircularProgressIndicator(color: AppColors.of(context).primary));
+    }
+
+    if (_loadError != null) {
+      final palette = AppColors.of(context);
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, size: 48, color: palette.statusMaintenance),
+              const SizedBox(height: 12),
+              Text('Failed to load settings.', style: TextStyle(color: palette.foreground, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text(_loadError!, textAlign: TextAlign.center, style: TextStyle(color: palette.mutedForeground, fontSize: 12)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() { _isLoading = true; _loadError = null; });
+                  _loadData();
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     final palette = AppColors.of(context);
