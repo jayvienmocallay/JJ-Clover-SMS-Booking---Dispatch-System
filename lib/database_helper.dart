@@ -4,6 +4,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
+
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
 
@@ -94,16 +96,35 @@ class DatabaseHelper {
 
     final password = await _getSecurePassword();
 
-    return await openDatabase(
-      path,
-      password: password,
-      // Version 5: Enforces normalized, unique customer phone identity.
-      version: databaseVersion,
-      onConfigure: configureDatabase,
-      onCreate: _createSchema,
-      // Handles upgrading existing v1 databases to v2 schema
-      onUpgrade: _upgradeSchema,
-    );
+    try {
+      return await openDatabase(
+        path,
+        password: password,
+        // Version 5: Enforces normalized, unique customer phone identity.
+        version: databaseVersion,
+        onConfigure: configureDatabase,
+        onCreate: _createSchema,
+        // Handles upgrading existing v1 databases to v2 schema
+        onUpgrade: _upgradeSchema,
+      );
+    } catch (e) {
+      // DB exists but can't be opened — key mismatch from a prior install
+      // (Android Auto Backup restores the DB file but not the Keystore key).
+      // Delete the stale file and create a fresh encrypted database.
+      final file = File(path);
+      if (await file.exists()) {
+        debugPrint('DB open failed ($e) — stale encrypted file detected, recreating.');
+        await file.delete();
+      }
+      return await openDatabase(
+        path,
+        password: password,
+        version: databaseVersion,
+        onConfigure: configureDatabase,
+        onCreate: _createSchema,
+        onUpgrade: _upgradeSchema,
+      );
+    }
   }
 
   static Future<void> configureDatabase(Database db) async {
