@@ -91,8 +91,10 @@ class SupabaseSyncService extends ChangeNotifier {
 
   void _startAutoSync() {
     _connectivitySub?.cancel();
-    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) async {
       if (_shouldSync(results)) {
+        // Delay lets Android DNS resolver finish configuring after interface comes up.
+        await Future.delayed(const Duration(seconds: 3));
         unawaited(syncAll());
       }
     });
@@ -134,26 +136,39 @@ class SupabaseSyncService extends ChangeNotifier {
     _lastError = null;
     notifyListeners();
 
-    try {
-      final supabase = Supabase.instance.client;
+    const retryDelays = [Duration(seconds: 3), Duration(seconds: 8)];
+    Exception? lastException;
 
-      for (final table in _syncTables) {
-        await _syncTable(supabase, table);
+    for (int attempt = 0; attempt <= retryDelays.length; attempt++) {
+      try {
+        if (attempt > 0) {
+          debugPrint('Sync retry $attempt after DNS/network failure...');
+          await Future.delayed(retryDelays[attempt - 1]);
+        }
+
+        final supabase = Supabase.instance.client;
+        for (final table in _syncTables) {
+          await _syncTable(supabase, table);
+        }
+
+        _lastSyncedAt = DateTime.now();
+        _status = SyncStatus.success;
+        _lastError = null;
+        await _settings.setSetting(
+          'last_synced_at',
+          _lastSyncedAt!.toIso8601String(),
+        );
+        await _updatePendingCount();
+        notifyListeners();
+        return;
+      } on Exception catch (e) {
+        lastException = e;
+        debugPrint('Sync attempt ${attempt + 1} failed: $e');
       }
-
-      _lastSyncedAt = DateTime.now();
-      _status = SyncStatus.success;
-      await _settings.setSetting(
-        'last_synced_at',
-        _lastSyncedAt!.toIso8601String(),
-      );
-      await _updatePendingCount();
-    } catch (e) {
-      _lastError = e.toString();
-      _status = SyncStatus.error;
-      debugPrint('Sync error: $e');
     }
 
+    _lastError = lastException.toString();
+    _status = SyncStatus.error;
     notifyListeners();
   }
 
