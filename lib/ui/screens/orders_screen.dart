@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../data/models/order_model.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/providers/order_provider.dart';
+import '../../data/services/command_handlers/sms_handler_utils.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_order_form.dart';
 import '../widgets/complete_order_sheet.dart';
@@ -74,12 +75,90 @@ class _OrdersScreenState extends State<OrdersScreen> {
     ).showSnackBar(const SnackBar(content: Text('Order confirmed ✓')));
   }
 
-  Future<void> _startDelivery(Order order, OrderProvider orderProv) async {
-    await orderProv.updateStatus(order.id!, 'in_transit');
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Delivery started ✓')));
+  Future<bool> _startDelivery(Order order, OrderProvider orderProv) async {
+    final orderId = order.id;
+    if (orderId == null) return false;
+
+    final smsMessage = _deliveryStartedSms(order);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final palette = AppColors.of(ctx);
+        return AlertDialog(
+          backgroundColor: palette.card,
+          title: Text(
+            'Start Delivery?',
+            style: Theme.of(ctx).textTheme.headlineSmall,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This will move the order to In Transit and notify the customer by SMS.',
+                style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                  color: palette.mutedForeground,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: palette.muted,
+                  borderRadius: BorderRadius.circular(kButtonRadius),
+                  border: Border.all(color: palette.border),
+                ),
+                child: Text(
+                  smsMessage,
+                  style: Theme.of(ctx).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: palette.statusBusy,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Start Delivery'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return false;
+
+    await orderProv.updateStatus(orderId, 'in_transit');
+    if (!mounted) return false;
+    if (orderProv.error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProv.error!)));
+      return false;
+    }
+
+    await SmsHandlerUtils.sendReply(order.phoneNumber, smsMessage);
+    if (!mounted) return true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Delivery started. Customer SMS notification queued.'),
+      ),
+    );
+    return true;
+  }
+
+  String _deliveryStartedSms(Order order) {
+    final quantity = order.quantity > 0
+        ? ' (${order.quantity} gallon${order.quantity == 1 ? '' : 's'})'
+        : '';
+    return 'JJ Clover: Your water order$quantity is on the way. '
+        'Please prepare to receive it. Thank you!';
   }
 
   Future<void> _showCompleteOrderSheet(
@@ -185,7 +264,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
         onStartDelivery:
             order.type != OrderType.unrecognized &&
                 order.status == OrderStatus.confirmed
-            ? () => _startDelivery(order, orderProv)
+            ? () {
+                _startDelivery(order, orderProv);
+              }
             : null,
         onComplete:
             order.type != OrderType.unrecognized &&
