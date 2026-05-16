@@ -53,11 +53,23 @@ class YesCommandHandler {
       source: 'prebook',
     );
 
-    final orderId = await _orderCreation.createOrderFromModel(
-      order,
-      source: 'prebook',
-      validateSystemMode: false,
-    );
+    var orderId = 0;
+    final pendingOrderId = context.pendingOrderId;
+    if (pendingOrderId != null) {
+      orderId = await _orderCreation.promotePendingUnrecognizedOrderFromModel(
+        pendingOrderId,
+        order,
+        source: 'prebook',
+        validateSystemMode: false,
+      );
+    }
+    if (orderId == 0) {
+      orderId = await _orderCreation.createOrderFromModel(
+        order,
+        source: 'prebook',
+        validateSystemMode: false,
+      );
+    }
     if (orderId == 0) {
       await _preBookStore.remove(normalizedSender);
       await SmsHandlerUtils.sendReply(

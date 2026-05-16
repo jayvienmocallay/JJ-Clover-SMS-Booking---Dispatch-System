@@ -45,6 +45,39 @@ class OrderCreationService {
     return _orders.insertOrder(data);
   }
 
+  Future<int> promotePendingUnrecognizedOrderFromModel(
+    int id,
+    Order order, {
+    required String source,
+    bool validateSystemMode = true,
+  }) async {
+    final normalizedPhone = PhoneNumberUtils.normalize(order.phoneNumber);
+    _validateQuantity(order.quantity);
+    _validateType(order.type);
+    _validateMode(order.type, validateSystemMode: validateSystemMode);
+
+    if (order.type == OrderType.deliver) {
+      _validateDelivery(order.customerId, normalizedPhone, order.address);
+    }
+
+    final data = order.toMap();
+    data.remove('id');
+    data.remove('created_at');
+    data['phone_number'] = normalizedPhone;
+    data['source'] = source;
+    data['cancel_reason'] = null;
+    data['scheduled_for'] ??=
+        order.scheduledFor?.toIso8601String() ??
+        DateTime(
+          order.createdAt.year,
+          order.createdAt.month,
+          order.createdAt.day,
+        ).toIso8601String();
+
+    final updated = await _orders.promotePendingUnrecognizedOrder(id, data);
+    return updated == 0 ? 0 : id;
+  }
+
   Future<int> createManualOrder({
     required String phoneNumber,
     required OrderType type,

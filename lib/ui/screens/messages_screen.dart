@@ -6,6 +6,9 @@ import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/empty_state.dart';
 import './chat_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
@@ -78,7 +81,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   List<String> _getUniquePhones() {
-    return _smsMessages.map((m) => m['phone_number'] as String).toSet().toList();
+    return _smsMessages
+        .map((m) => m['phone_number'] as String)
+        .toSet()
+        .toList();
   }
 
   @override
@@ -96,33 +102,34 @@ class _MessagesScreenState extends State<MessagesScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Messages',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.of(context).foreground,
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.refresh, color: AppColors.of(context).primary),
-                onPressed: _loadMessages,
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            uniquePhones.isEmpty
+          AppPageHeader(
+            title: 'Messages',
+            subtitle: uniquePhones.isEmpty
                 ? 'No conversations'
                 : '${uniquePhones.length} ${uniquePhones.length == 1 ? 'conversation' : 'conversations'}',
-            style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground),
+            action: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const MascotBadge(pose: MascotPose.smsConfirm, size: 44),
+                const SizedBox(width: 6),
+                IconButton(
+                  icon: Icon(
+                    Icons.refresh,
+                    color: AppColors.of(context).primary,
+                  ),
+                  onPressed: _loadMessages,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           if (uniquePhones.isEmpty)
-            _EmptyConversations()
+            const EmptyState(
+              icon: Icons.forum_outlined,
+              mascot: MascotPose.smsConfirm,
+              title: 'Inbox is quiet',
+              message: 'No SMS conversations yet',
+            )
           else
             ...uniquePhones.map(_conversationTile),
         ],
@@ -131,11 +138,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   Widget _conversationTile(String phone) {
-    final phoneMsgs = _smsMessages.where((m) => m['phone_number'] == phone).toList();
+    final phoneMsgs = _smsMessages
+        .where((m) => m['phone_number'] == phone)
+        .toList();
     if (phoneMsgs.isEmpty) return const SizedBox.shrink();
     phoneMsgs.sort((a, b) {
-      final timeA = DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime.now();
-      final timeB = DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime.now();
+      final timeA =
+          DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime.now();
+      final timeB =
+          DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime.now();
       return timeB.compareTo(timeA);
     });
 
@@ -152,7 +163,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ChatScreen(phoneNumber: phone, contactName: displayName),
+            builder: (_) =>
+                ChatScreen(phoneNumber: phone, contactName: displayName),
           ),
         );
       },
@@ -190,7 +202,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     message,
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.of(context).mutedForeground.withValues(alpha: 0.8),
+                      color: AppColors.of(
+                        context,
+                      ).mutedForeground.withValues(alpha: 0.8),
                       height: 1.3,
                     ),
                     maxLines: 1,
@@ -207,7 +221,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   _formatTimeShort(sentAt),
                   style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.of(context).mutedForeground.withValues(alpha: 0.6),
+                    color: AppColors.of(
+                      context,
+                    ).mutedForeground.withValues(alpha: 0.6),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -264,29 +280,6 @@ class _Avatar extends StatelessWidget {
             color: AppColors.of(context).primary,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _EmptyConversations extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Column(
-        children: [
-          Icon(
-            Icons.forum_outlined,
-            size: 48,
-            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'No SMS conversations yet',
-            style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground),
-          ),
-        ],
       ),
     );
   }

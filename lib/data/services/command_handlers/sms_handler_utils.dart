@@ -86,37 +86,50 @@ class SmsHandlerUtils {
 
   static Future<void> _sendAndRecord(_QueuedReply item) async {
     final normalizedPhone = PhoneNumberUtils.normalize(item.phoneNumber);
+    final messageId = await _insertOutgoingMessage(
+      phoneNumber: normalizedPhone,
+      message: item.message,
+      status: SmsSendStatus.queued.name,
+      sourceMessageId: item.sourceMessageId,
+    );
 
     try {
-      await _doSend(item.phoneNumber, item.message);
-      await _insertOutgoingMessage(
-        phoneNumber: normalizedPhone,
-        message: item.message,
-        status: 'sent',
+      final result = await _doSend(
+        item.phoneNumber,
+        item.message,
         sourceMessageId: item.sourceMessageId,
       );
+      await _updateOutgoingStatus(
+        messageId: messageId,
+        sourceMessageId: item.sourceMessageId,
+        status: result.status.name,
+      );
+      if (result.failed) {
+        debugPrint(
+          'SMS reply send failed: ${result.errorCode} ${result.errorMessage}',
+        );
+      }
     } catch (e, st) {
       debugPrint('SMS reply send failed: $e');
       debugPrintStack(stackTrace: st);
-      await _insertOutgoingMessage(
-        phoneNumber: normalizedPhone,
-        message: item.message,
-        status: 'failed',
+      await _updateOutgoingStatus(
+        messageId: messageId,
         sourceMessageId: item.sourceMessageId,
+        status: SmsSendStatus.failed.name,
       );
     } finally {
       AppEventBus().notifyMessageReceived();
     }
   }
 
-  static Future<void> _insertOutgoingMessage({
+  static Future<int> _insertOutgoingMessage({
     required String phoneNumber,
     required String message,
     required String status,
     required String? sourceMessageId,
   }) async {
     try {
-      await _messages.insertSmsMessage({
+      return await _messages.insertSmsMessage({
         'phone_number': phoneNumber,
         'message': message,
         'direction': 'outgoing',
@@ -126,6 +139,29 @@ class SmsHandlerUtils {
       });
     } catch (e, st) {
       debugPrint('Failed to record outgoing SMS as $status: $e');
+      debugPrintStack(stackTrace: st);
+      return 0;
+    }
+  }
+
+  static Future<void> _updateOutgoingStatus({
+    required int messageId,
+    required String? sourceMessageId,
+    required String status,
+  }) async {
+    try {
+      if (sourceMessageId != null && sourceMessageId.isNotEmpty) {
+        final updated = await _messages.updateSmsMessageStatusBySourceMessageId(
+          sourceMessageId,
+          status,
+        );
+        if (updated > 0) return;
+      }
+      if (messageId > 0) {
+        await _messages.updateSmsMessageStatus(messageId, status);
+      }
+    } catch (e, st) {
+      debugPrint('Failed to update outgoing SMS as $status: $e');
       debugPrintStack(stackTrace: st);
     }
   }
@@ -141,14 +177,23 @@ class SmsHandlerUtils {
     return 'reply|$incomingSourceMessageId|$hash';
   }
 
-  static Future<void> _doSend(String phoneNumber, String message) async {
-    await NativeSmsSender.sendSms(to: phoneNumber, message: message);
-    debugPrint('Reply sent to $phoneNumber');
+  static Future<SmsSendResult> _doSend(
+    String phoneNumber,
+    String message, {
+    required String? sourceMessageId,
+  }) async {
+    final result = await NativeSmsSender.sendTrackedSms(
+      to: phoneNumber,
+      message: message,
+      sourceMessageId: sourceMessageId,
+    );
+    debugPrint('Reply queued to $phoneNumber (${result.status.name})');
+    return result;
   }
 
   /// Saves a message that couldn't be processed as a regular order so it
   /// remains visible in the Messages / Unrecognized tab.
-  static Future<void> saveUnrecognized(
+  static Future<int> saveUnrecognized(
     String sender,
     String message,
     String status, {
@@ -184,7 +229,7 @@ class SmsHandlerUtils {
       sourceMessageId: sourceMessageId,
       source: 'sms',
     );
-    await _orders.insertOrder(order.toMap());
+    final orderId = await _orders.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showMessageNotification(
       title: 'Unrecognized Message',
@@ -192,6 +237,7 @@ class SmsHandlerUtils {
       sender: sender,
     );
     debugPrint('Saved unrecognized message from $normalizedSender: $status');
+    return orderId;
   }
 }
 

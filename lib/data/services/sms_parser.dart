@@ -69,6 +69,13 @@ class ParsedSms {
 /// - `DELETEDATA` / `OPTOUT` — request deletion (RA 10173 right to erasure)
 /// - `CONFIRM DELETE` — confirms a pending deletion request
 class SmsParser {
+  static final RegExp _whitespaceRegex = RegExp(r'[\s\u00A0]+');
+  static final RegExp _commandSeparatorRegex = RegExp(
+    r'^\s*([A-Z]+)\s*[:\-,]\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _trailingPunctuationRegex = RegExp(r'[.!?,;:]+$');
+
   /// Matches: DELIVER [qty] [optional: address]
   /// Group 1 = quantity (required digits, max 4 digits for safety)
   /// Group 2 = address (optional: remaining text)
@@ -150,9 +157,22 @@ class SmsParser {
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
+  static String _normalizeForParsing(String message) {
+    final commandSeparated = message.replaceFirstMapped(
+      _commandSeparatorRegex,
+      (match) => '${match.group(1)} ',
+    );
+    return commandSeparated
+        .replaceAll('\u00A0', ' ')
+        .replaceAll(_whitespaceRegex, ' ')
+        .trim()
+        .replaceFirst(_trailingPunctuationRegex, '')
+        .trim();
+  }
+
   /// Parses an incoming SMS message into a [ParsedSms] command object.
   static ParsedSms parse(String message) {
-    final trimmed = message.trim();
+    final trimmed = _normalizeForParsing(message);
 
     final deliverMatch = _deliverRegex.firstMatch(trimmed);
     if (deliverMatch != null) {
@@ -251,7 +271,7 @@ class SmsParser {
   /// Tries to parse only DELIVER or DROP commands.
   /// Returns null if message doesn't match either pattern.
   static ParsedSms? tryParseDeliverOrDrop(String message) {
-    final trimmed = message.trim();
+    final trimmed = _normalizeForParsing(message);
 
     final deliverMatch = _deliverRegex.firstMatch(trimmed);
     if (deliverMatch != null) {

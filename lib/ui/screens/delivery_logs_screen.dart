@@ -5,6 +5,8 @@ import '../../data/models/delivery_log_model.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/repositories/delivery_log_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/empty_state.dart';
 
 class DeliveryLogsScreen extends StatefulWidget {
   const DeliveryLogsScreen({super.key});
@@ -40,7 +42,11 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
       debugPrintStack(stackTrace: st);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load delivery logs. Please restart or check logs.')),
+          const SnackBar(
+            content: Text(
+              'Failed to load delivery logs. Please restart or check logs.',
+            ),
+          ),
         );
       }
     } finally {
@@ -155,29 +161,13 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
                   const SizedBox(height: 16),
                   // --- Log list ---
                   if (logs.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 48),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.receipt_long,
-                              size: 48,
-                              color: AppColors.of(context).mutedForeground,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _filter == 'today'
-                                  ? 'No deliveries recorded today.'
-                                  : 'No delivery logs found.',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: AppColors.of(context).mutedForeground,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    EmptyState(
+                      icon: Icons.receipt_long,
+                      mascot: MascotPose.checklist,
+                      title: 'No logs yet',
+                      message: _filter == 'today'
+                          ? 'No deliveries recorded today.'
+                          : 'No delivery logs found.',
                     )
                   else
                     ...logs.map(
