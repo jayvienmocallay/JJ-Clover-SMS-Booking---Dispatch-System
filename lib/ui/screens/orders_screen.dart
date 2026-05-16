@@ -48,57 +48,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return result;
   }
 
-  PopupMenuItem<int> _buildStatusMenuItem({
-    required BuildContext context,
-    required int index,
-    required String label,
-    required int count,
-    required Color color,
-  }) {
-    final palette = AppColors.of(context);
-    final selected = _filterIndex == index;
-    return PopupMenuItem<int>(
-      value: index,
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$count',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          if (selected) ...[
-            const SizedBox(width: 8),
-            Icon(Icons.check, size: 16, color: palette.primary),
-          ],
-        ],
-      ),
-    );
-  }
-
   void _showAddOrderSheet() {
     showModalBottomSheet(
       context: context,
@@ -290,7 +239,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Widget build(BuildContext context) {
     return Consumer2<OrderProvider, CustomerProvider>(
       builder: (context, orderProv, customerProv, _) {
-        final palette = AppColors.of(context);
         final customerCache = <int, Map<String, dynamic>>{};
         for (final customer in customerProv.customers) {
           final id = customer['id'] as int?;
@@ -373,12 +321,52 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               const SizedBox(height: kSectionGap),
+              // Status filter tabs
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _StatusTab(
+                      label: 'All',
+                      count: allCount,
+                      selected: _filterIndex == 0,
+                      color: AppColors.of(context).primary,
+                      onTap: () => setState(() => _filterIndex = 0),
+                    ),
+                    const SizedBox(width: 8),
+                    _StatusTab(
+                      label: 'Pending',
+                      count: orderProv.pendingCount,
+                      selected: _filterIndex == 1,
+                      color: AppColors.of(context).statusAway,
+                      onTap: () => setState(() => _filterIndex = 1),
+                    ),
+                    const SizedBox(width: 8),
+                    _StatusTab(
+                      label: 'Confirmed',
+                      count: orderProv.confirmedCount,
+                      selected: _filterIndex == 2,
+                      color: AppColors.of(context).statusOperating,
+                      onTap: () => setState(() => _filterIndex = 2),
+                    ),
+                    const SizedBox(width: 8),
+                    _StatusTab(
+                      label: 'In Transit',
+                      count: inTransitCount,
+                      selected: _filterIndex == 3,
+                      color: AppColors.of(context).statusBusy,
+                      onTap: () => setState(() => _filterIndex = 3),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               // Search bar
               Container(
                 decoration: BoxDecoration(
-                  color: palette.card,
+                  color: AppColors.of(context).card,
                   borderRadius: BorderRadius.circular(kButtonRadius),
-                  border: Border.all(color: palette.border),
+                  border: Border.all(color: AppColors.of(context).border),
                 ),
                 child: TextField(
                   onChanged: (v) => setState(() => _searchQuery = v),
@@ -386,75 +374,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   decoration: InputDecoration(
                     hintText: 'Search order ID, customer, or address...',
                     hintStyle: TextStyle(
-                      color: palette.mutedForeground,
+                      color: AppColors.of(context).mutedForeground,
                       fontSize: 14,
                     ),
                     prefixIcon: Icon(
                       Icons.search,
                       size: 20,
-                      color: palette.mutedForeground,
+                      color: AppColors.of(context).mutedForeground,
                     ),
-                    suffixIcon: PopupMenuButton<int>(
-                      tooltip: 'Filter status',
-                      onSelected: (index) =>
-                          setState(() => _filterIndex = index),
-                      itemBuilder: (context) => [
-                        _buildStatusMenuItem(
-                          context: context,
-                          index: 0,
-                          label: 'All',
-                          count: allCount,
-                          color: palette.primary,
-                        ),
-                        _buildStatusMenuItem(
-                          context: context,
-                          index: 1,
-                          label: 'Pending',
-                          count: orderProv.pendingCount,
-                          color: palette.statusAway,
-                        ),
-                        _buildStatusMenuItem(
-                          context: context,
-                          index: 2,
-                          label: 'Confirmed',
-                          count: orderProv.confirmedCount,
-                          color: palette.statusOperating,
-                        ),
-                        _buildStatusMenuItem(
-                          context: context,
-                          index: 3,
-                          label: 'In Transit',
-                          count: inTransitCount,
-                          color: palette.statusBusy,
-                        ),
-                      ],
-                      icon: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Icon(
-                              Icons.tune,
-                              size: 20,
-                              color: palette.mutedForeground,
-                            ),
-                            if (_filterIndex != 0)
-                              Positioned(
-                                right: 1,
-                                top: 2,
-                                child: Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: palette.primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
+                    suffixIcon: Icon(
+                      Icons.tune,
+                      size: 20,
+                      color: AppColors.of(context).mutedForeground,
                     ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -576,6 +507,70 @@ class _HeaderIconButton extends StatelessWidget {
           icon,
           size: 20,
           color: AppColors.of(context).mutedForeground,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusTab extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _StatusTab({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? color : color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(
+            color: selected ? color : color.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: selected ? Colors.white : color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.3)
+                    : color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: selected ? Colors.white : color,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
