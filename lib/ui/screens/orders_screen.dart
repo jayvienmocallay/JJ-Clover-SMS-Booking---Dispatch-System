@@ -43,10 +43,28 @@ class _OrdersScreenState extends State<OrdersScreen> {
         final name = (o['customer_name'] as String? ?? '').toLowerCase();
         final phone = (o['phone_number'] as String? ?? '').toLowerCase();
         final id = (o['id']?.toString() ?? '').toLowerCase();
-        return name.contains(q) || phone.contains(q) || id.contains(q);
+        final address =
+            ((o['address'] ?? o['customer_address']) as String? ?? '')
+                .toLowerCase();
+        final barangay = (o['barangay'] as String? ?? '').toLowerCase();
+        return name.contains(q) ||
+            phone.contains(q) ||
+            id.contains(q) ||
+            address.contains(q) ||
+            barangay.contains(q);
       }).toList();
     }
     return result;
+  }
+
+  int _operationalCount(List<Map<String, dynamic>> orders) {
+    return orders.where((o) => o['type'] != 'unrecognized').length;
+  }
+
+  int _statusCount(List<Map<String, dynamic>> orders, String status) {
+    return orders
+        .where((o) => o['type'] != 'unrecognized' && o['status'] == status)
+        .length;
   }
 
   void _showAddOrderSheet() {
@@ -316,6 +334,24 @@ class _OrdersScreenState extends State<OrdersScreen> {
     ];
   }
 
+  List<Widget> _buildPreBookSection(
+    List<Map<String, dynamic>> preBookOrders,
+    Map<int, Map<String, dynamic>> customerCache,
+    OrderProvider orderProv,
+  ) {
+    final count = preBookOrders.length;
+    return [
+      DispatchGroupHeader(
+        title: 'Pre-booked Orders',
+        subtitle:
+            '$count upcoming ${count == 1 ? 'order' : 'orders'} scheduled after today',
+      ),
+      ...preBookOrders.map(
+        (order) => _buildOrderCard(order, customerCache, orderProv),
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<OrderProvider, CustomerProvider>(
@@ -329,13 +365,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
         final enrichedOrders = orderProv.todayOrders
             .map((order) => _enrichOrder(order, customerCache))
             .toList();
+        final enrichedPreBookOrders = orderProv.upcomingPreBookOrders
+            .map((order) => _enrichOrder(order, customerCache))
+            .toList();
+        final countableOrders = [...enrichedOrders, ...enrichedPreBookOrders];
         final filtered = _filterOrders(enrichedOrders);
-        final inTransitCount = orderProv.todayOrders
-            .where((order) => order['status'] == 'in_transit')
-            .length;
-        final allCount = orderProv.todayOrders
-            .where((o) => o['type'] != 'unrecognized')
-            .length;
+        final filteredPreBook = _filterOrders(enrichedPreBookOrders);
+        final hasVisibleOrders =
+            filtered.isNotEmpty || filteredPreBook.isNotEmpty;
+        final inTransitCount = _statusCount(countableOrders, 'in_transit');
+        final allCount = _operationalCount(countableOrders);
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -347,7 +386,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
             children: [
               AppPageHeader(
                 title: 'Orders',
-                subtitle: "Manage today's delivery and walk-in orders.",
+                subtitle:
+                    "Manage today's delivery, walk-in, and pre-booked orders.",
                 action: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -417,7 +457,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     const SizedBox(width: 8),
                     _StatusTab(
                       label: 'Pending',
-                      count: orderProv.pendingCount,
+                      count: _statusCount(countableOrders, 'pending'),
                       selected: _filterIndex == 1,
                       color: AppColors.of(context).statusAway,
                       onTap: () => setState(() => _filterIndex = 1),
@@ -425,7 +465,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     const SizedBox(width: 8),
                     _StatusTab(
                       label: 'Confirmed',
-                      count: orderProv.confirmedCount,
+                      count: _statusCount(countableOrders, 'confirmed'),
                       selected: _filterIndex == 2,
                       color: AppColors.of(context).statusOperating,
                       onTap: () => setState(() => _filterIndex = 2),
@@ -474,7 +514,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              if (filtered.isEmpty)
+              if (!hasVisibleOrders)
                 EmptyState(
                   icon: Icons.local_shipping,
                   mascot: _searchQuery.isNotEmpty
@@ -489,12 +529,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       ? 'No orders today.'
                       : 'No ${_filterStatuses[_filterIndex]} orders.',
                 )
-              else
-                ..._buildGroupedDispatchList(
-                  filtered,
-                  customerCache,
-                  orderProv,
-                ),
+              else ...[
+                if (filteredPreBook.isNotEmpty)
+                  ..._buildPreBookSection(
+                    filteredPreBook,
+                    customerCache,
+                    orderProv,
+                  ),
+                if (filtered.isNotEmpty)
+                  ..._buildGroupedDispatchList(
+                    filtered,
+                    customerCache,
+                    orderProv,
+                  ),
+              ],
             ],
           ),
         );

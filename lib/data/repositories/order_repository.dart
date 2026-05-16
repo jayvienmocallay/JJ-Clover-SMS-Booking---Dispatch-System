@@ -18,6 +18,10 @@ class OrderRepository {
     return DatabaseHelper.instance.getTodayOrders();
   }
 
+  Future<List<Map<String, dynamic>>> getUpcomingPreBookOrders() {
+    return DatabaseHelper.instance.getUpcomingPreBookOrders();
+  }
+
   Future<List<Map<String, dynamic>>> getOrderHistory({
     DateTime? startDate,
     DateTime? endDate,

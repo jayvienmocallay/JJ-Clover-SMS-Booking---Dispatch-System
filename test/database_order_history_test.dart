@@ -92,4 +92,64 @@ void main() {
 
     expect(rows.map((row) => row['id']).toList(), [newerId, olderId]);
   });
+
+  test(
+    'getUpcomingPreBookOrders returns active future pre-books only',
+    () async {
+      final helper = DatabaseHelper.instance;
+      final today = DateTime.now();
+      final startOfToday = DateTime(today.year, today.month, today.day);
+      final futureDate = startOfToday.add(const Duration(days: 2));
+      final pastDate = startOfToday.subtract(const Duration(days: 1));
+
+      final futurePreBookId = await helper.insertOrder({
+        'phone_number': '09175550000',
+        'type': 'deliver',
+        'quantity': 4,
+        'status': 'pending',
+        'created_at': today.toIso8601String(),
+        'delivery_day': 'Thursday',
+        'scheduled_for': futureDate.toIso8601String(),
+        'is_pre_book': 1,
+        'source': 'prebook',
+      });
+      await helper.insertOrder({
+        'phone_number': '09176660000',
+        'type': 'deliver',
+        'quantity': 2,
+        'status': 'pending',
+        'created_at': pastDate.toIso8601String(),
+        'delivery_day': 'Monday',
+        'scheduled_for': pastDate.toIso8601String(),
+        'is_pre_book': 1,
+        'source': 'prebook',
+      });
+      await helper.insertOrder({
+        'phone_number': '09177770000',
+        'type': 'deliver',
+        'quantity': 1,
+        'status': 'completed',
+        'created_at': today.toIso8601String(),
+        'delivery_day': 'Thursday',
+        'scheduled_for': futureDate.toIso8601String(),
+        'is_pre_book': 1,
+        'source': 'prebook',
+      });
+      await helper.insertOrder({
+        'phone_number': '09178880000',
+        'type': 'deliver',
+        'quantity': 3,
+        'status': 'pending',
+        'created_at': today.toIso8601String(),
+        'delivery_day': 'Thursday',
+        'scheduled_for': futureDate.toIso8601String(),
+        'is_pre_book': 0,
+        'source': 'sms',
+      });
+
+      final rows = await helper.getUpcomingPreBookOrders();
+
+      expect(rows.map((row) => row['id']), [futurePreBookId]);
+    },
+  );
 }

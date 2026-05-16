@@ -120,7 +120,8 @@ class Order {
           ? null
           : DateTime.tryParse(map['scheduled_for'] as String),
       // SQLite stores booleans as 0/1 integers
-      isPreBook: (map['is_pre_book'] as int?) == 1,
+      isPreBook:
+          (map['is_pre_book'] as int?) == 1 || map['source'] == 'prebook',
       staffId: map['staff_id'] as int?,
       cancelReason: map['cancel_reason'] as String?,
       sourceMessageId: map['source_message_id'] as String?,
