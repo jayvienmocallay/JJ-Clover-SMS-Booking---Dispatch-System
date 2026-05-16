@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../data/models/order_model.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/providers/order_provider.dart';
+import '../../data/services/command_handlers/sms_handler_utils.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_order_form.dart';
 import '../widgets/complete_order_sheet.dart';
@@ -42,10 +43,28 @@ class _OrdersScreenState extends State<OrdersScreen> {
         final name = (o['customer_name'] as String? ?? '').toLowerCase();
         final phone = (o['phone_number'] as String? ?? '').toLowerCase();
         final id = (o['id']?.toString() ?? '').toLowerCase();
-        return name.contains(q) || phone.contains(q) || id.contains(q);
+        final address =
+            ((o['address'] ?? o['customer_address']) as String? ?? '')
+                .toLowerCase();
+        final barangay = (o['barangay'] as String? ?? '').toLowerCase();
+        return name.contains(q) ||
+            phone.contains(q) ||
+            id.contains(q) ||
+            address.contains(q) ||
+            barangay.contains(q);
       }).toList();
     }
     return result;
+  }
+
+  int _operationalCount(List<Map<String, dynamic>> orders) {
+    return orders.where((o) => o['type'] != 'unrecognized').length;
+  }
+
+  int _statusCount(List<Map<String, dynamic>> orders, String status) {
+    return orders
+        .where((o) => o['type'] != 'unrecognized' && o['status'] == status)
+        .length;
   }
 
   void _showAddOrderSheet() {
@@ -74,12 +93,90 @@ class _OrdersScreenState extends State<OrdersScreen> {
     ).showSnackBar(const SnackBar(content: Text('Order confirmed ✓')));
   }
 
-  Future<void> _startDelivery(Order order, OrderProvider orderProv) async {
-    await orderProv.updateStatus(order.id!, 'in_transit');
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Delivery started ✓')));
+  Future<bool> _startDelivery(Order order, OrderProvider orderProv) async {
+    final orderId = order.id;
+    if (orderId == null) return false;
+
+    final smsMessage = _deliveryStartedSms(order);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final palette = AppColors.of(ctx);
+        return AlertDialog(
+          backgroundColor: palette.card,
+          title: Text(
+            'Start Delivery?',
+            style: Theme.of(ctx).textTheme.headlineSmall,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This will move the order to In Transit and notify the customer by SMS.',
+                style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                  color: palette.mutedForeground,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: palette.muted,
+                  borderRadius: BorderRadius.circular(kButtonRadius),
+                  border: Border.all(color: palette.border),
+                ),
+                child: Text(
+                  smsMessage,
+                  style: Theme.of(ctx).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: palette.statusBusy,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Start Delivery'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return false;
+
+    await orderProv.updateStatus(orderId, 'in_transit');
+    if (!mounted) return false;
+    if (orderProv.error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProv.error!)));
+      return false;
+    }
+
+    await SmsHandlerUtils.sendReply(order.phoneNumber, smsMessage);
+    if (!mounted) return true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Delivery started. Customer SMS notification queued.'),
+      ),
+    );
+    return true;
+  }
+
+  String _deliveryStartedSms(Order order) {
+    final quantity = order.quantity > 0
+        ? ' (${order.quantity} gallon${order.quantity == 1 ? '' : 's'})'
+        : '';
+    return 'JJ Clover: Your water order$quantity is on the way. '
+        'Please prepare to receive it. Thank you!';
   }
 
   Future<void> _showCompleteOrderSheet(
@@ -185,7 +282,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
         onStartDelivery:
             order.type != OrderType.unrecognized &&
                 order.status == OrderStatus.confirmed
-            ? () => _startDelivery(order, orderProv)
+            ? () {
+                _startDelivery(order, orderProv);
+              }
             : null,
         onComplete:
             order.type != OrderType.unrecognized &&
@@ -235,6 +334,24 @@ class _OrdersScreenState extends State<OrdersScreen> {
     ];
   }
 
+  List<Widget> _buildPreBookSection(
+    List<Map<String, dynamic>> preBookOrders,
+    Map<int, Map<String, dynamic>> customerCache,
+    OrderProvider orderProv,
+  ) {
+    final count = preBookOrders.length;
+    return [
+      DispatchGroupHeader(
+        title: 'Pre-booked Orders',
+        subtitle:
+            '$count upcoming ${count == 1 ? 'order' : 'orders'} scheduled after today',
+      ),
+      ...preBookOrders.map(
+        (order) => _buildOrderCard(order, customerCache, orderProv),
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<OrderProvider, CustomerProvider>(
@@ -248,13 +365,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
         final enrichedOrders = orderProv.todayOrders
             .map((order) => _enrichOrder(order, customerCache))
             .toList();
+        final enrichedPreBookOrders = orderProv.upcomingPreBookOrders
+            .map((order) => _enrichOrder(order, customerCache))
+            .toList();
+        final countableOrders = [...enrichedOrders, ...enrichedPreBookOrders];
         final filtered = _filterOrders(enrichedOrders);
-        final inTransitCount = orderProv.todayOrders
-            .where((order) => order['status'] == 'in_transit')
-            .length;
-        final allCount = orderProv.todayOrders
-            .where((o) => o['type'] != 'unrecognized')
-            .length;
+        final filteredPreBook = _filterOrders(enrichedPreBookOrders);
+        final hasVisibleOrders =
+            filtered.isNotEmpty || filteredPreBook.isNotEmpty;
+        final inTransitCount = _statusCount(countableOrders, 'in_transit');
+        final allCount = _operationalCount(countableOrders);
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -266,7 +386,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
             children: [
               AppPageHeader(
                 title: 'Orders',
-                subtitle: "Manage today's delivery and walk-in orders.",
+                subtitle:
+                    "Manage today's delivery, walk-in, and pre-booked orders.",
                 action: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -336,7 +457,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     const SizedBox(width: 8),
                     _StatusTab(
                       label: 'Pending',
-                      count: orderProv.pendingCount,
+                      count: _statusCount(countableOrders, 'pending'),
                       selected: _filterIndex == 1,
                       color: AppColors.of(context).statusAway,
                       onTap: () => setState(() => _filterIndex = 1),
@@ -344,7 +465,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     const SizedBox(width: 8),
                     _StatusTab(
                       label: 'Confirmed',
-                      count: orderProv.confirmedCount,
+                      count: _statusCount(countableOrders, 'confirmed'),
                       selected: _filterIndex == 2,
                       color: AppColors.of(context).statusOperating,
                       onTap: () => setState(() => _filterIndex = 2),
@@ -393,7 +514,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              if (filtered.isEmpty)
+              if (!hasVisibleOrders)
                 EmptyState(
                   icon: Icons.local_shipping,
                   mascot: _searchQuery.isNotEmpty
@@ -408,12 +529,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       ? 'No orders today.'
                       : 'No ${_filterStatuses[_filterIndex]} orders.',
                 )
-              else
-                ..._buildGroupedDispatchList(
-                  filtered,
-                  customerCache,
-                  orderProv,
-                ),
+              else ...[
+                if (filteredPreBook.isNotEmpty)
+                  ..._buildPreBookSection(
+                    filteredPreBook,
+                    customerCache,
+                    orderProv,
+                  ),
+                if (filtered.isNotEmpty)
+                  ..._buildGroupedDispatchList(
+                    filtered,
+                    customerCache,
+                    orderProv,
+                  ),
+              ],
             ],
           ),
         );

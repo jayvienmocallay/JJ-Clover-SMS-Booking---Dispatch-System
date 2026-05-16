@@ -13,12 +13,15 @@ class OrderProvider extends ChangeNotifier {
   final OrderRepository _repository;
 
   List<Map<String, dynamic>> _todayOrders = [];
+  List<Map<String, dynamic>> _upcomingPreBookOrders = [];
   bool _isLoading = false;
   String? _error;
   StreamSubscription? _orderEventSubscription;
   bool _disposed = false;
 
   List<Map<String, dynamic>> get todayOrders => _todayOrders;
+  List<Map<String, dynamic>> get upcomingPreBookOrders =>
+      _upcomingPreBookOrders;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -63,9 +66,13 @@ class OrderProvider extends ChangeNotifier {
     _notifyIfActive();
 
     try {
-      final orders = await _repository.getTodayOrders();
+      final results = await Future.wait([
+        _repository.getTodayOrders(),
+        _repository.getUpcomingPreBookOrders(),
+      ]);
       if (_disposed) return;
-      _todayOrders = orders;
+      _todayOrders = results[0];
+      _upcomingPreBookOrders = results[1];
     } catch (e) {
       if (_disposed) return;
       debugPrint('OrderProvider.loadOrders error: $e');

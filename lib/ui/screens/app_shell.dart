@@ -9,6 +9,8 @@ import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/alarm_service.dart';
 import '../../data/services/app_event_bus.dart';
+import '../../data/services/command_handlers/sms_handler_utils.dart';
+import '../../data/services/system_mode_manager.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/walk_in_alert.dart';
@@ -124,6 +126,31 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     setState(() => _currentIndex = index);
   }
 
+  Future<void> _acknowledgeWalkInAlert() async {
+    final alarm = AlarmService.instance;
+    final phone = alarm.customerPhone;
+    final reply = SystemModeManager.instance.getDropReply();
+
+    if (mounted) {
+      setState(() => _showWalkInAlert = false);
+    }
+    await alarm.acknowledge();
+
+    if (!_canSendWalkInAcknowledgement(phone)) return;
+    await SmsHandlerUtils.sendReply(phone!, reply);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Walk-in acknowledged. Customer SMS notification queued.'),
+      ),
+    );
+  }
+
+  bool _canSendWalkInAcknowledgement(String? phone) {
+    if (phone == null || phone.trim().isEmpty) return false;
+    return RegExp(r'\d').hasMatch(phone);
+  }
+
   static const List<_NavItem> _navItems = [
     _NavItem(icon: Icons.dashboard, label: 'Home'),
     _NavItem(icon: Icons.list_alt, label: 'Orders'),
@@ -202,8 +229,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           if (_showWalkInAlert)
             WalkInAlert(
               onAcknowledge: () {
-                unawaited(AlarmService.instance.acknowledge());
-                setState(() => _showWalkInAlert = false);
+                unawaited(_acknowledgeWalkInAlert());
               },
             ),
         ],

@@ -61,6 +61,29 @@ extension DatabaseOrderOperations on DatabaseHelper {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getUpcomingPreBookOrders() async {
+    final db = await DatabaseHelper.instance.database;
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    return await db.query(
+      'orders',
+      where:
+          '(is_pre_book = ? OR source = ?) '
+          'AND type != ? '
+          'AND status IN (?, ?, ?) '
+          'AND date(COALESCE(scheduled_for, created_at)) > ?',
+      whereArgs: [
+        1,
+        'prebook',
+        'unrecognized',
+        'pending',
+        'confirmed',
+        'in_transit',
+        today,
+      ],
+      orderBy: 'date(COALESCE(scheduled_for, created_at)) ASC, created_at DESC',
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getOrderHistory({
     DateTime? startDate,
     DateTime? endDate,

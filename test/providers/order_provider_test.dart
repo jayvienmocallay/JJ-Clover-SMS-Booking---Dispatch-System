@@ -90,4 +90,36 @@ void main() {
       expect(await helper.getDeliveryLogsForOrder(orderId), hasLength(1));
     },
   );
+
+  test('loadOrders exposes upcoming pre-booked orders', () async {
+    final helper = DatabaseHelper.instance;
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+    final futureDate = startOfToday.add(const Duration(days: 3));
+
+    final orderId = await helper.insertOrder({
+      'phone_number': '09189990000',
+      'type': 'deliver',
+      'quantity': 2,
+      'status': 'pending',
+      'created_at': today.toIso8601String(),
+      'delivery_day': 'Friday',
+      'scheduled_for': futureDate.toIso8601String(),
+      'is_pre_book': 1,
+      'source': 'prebook',
+    });
+
+    final provider = OrderProvider(OrderRepository());
+    await provider.loadOrders();
+
+    expect(provider.error, isNull);
+    expect(
+      provider.todayOrders.where((order) => order['id'] == orderId),
+      isEmpty,
+    );
+    expect(provider.upcomingPreBookOrders, hasLength(1));
+    expect(provider.upcomingPreBookOrders.single['id'], orderId);
+
+    provider.dispose();
+  });
 }

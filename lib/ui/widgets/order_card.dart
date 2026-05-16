@@ -177,7 +177,9 @@ class OrderCard extends StatelessWidget {
                             ],
                             const SizedBox(width: 12),
                             Text(
-                              _formatTime(order.createdAt),
+                              order.isPreBook && order.scheduledFor != null
+                                  ? 'Scheduled ${_formatDate(order.scheduledFor!)}'
+                                  : _formatTime(order.createdAt),
                               style: Theme.of(context).textTheme.labelSmall,
                             ),
                           ],
@@ -445,6 +447,10 @@ class OrderCard extends StatelessWidget {
     final minute = dt.minute.toString().padLeft(2, '0');
     final period = dt.hour >= 12 ? 'PM' : 'AM';
     return '$displayHour:$minute $period';
+  }
+
+  String _formatDate(DateTime dt) {
+    return '${dt.month}/${dt.day}/${dt.year}';
   }
 }
 

@@ -17,7 +17,7 @@ class OrderDetailSheet extends StatefulWidget {
   final String? address;
   final VoidCallback? onConfirm;
   final VoidCallback? onReject;
-  final VoidCallback? onStartDelivery;
+  final Future<bool> Function()? onStartDelivery;
   final VoidCallback? onCompleted;
 
   const OrderDetailSheet({
@@ -144,6 +144,13 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleStartDelivery() async {
+    final started = await widget.onStartDelivery?.call() ?? false;
+    if (started && mounted) {
+      Navigator.pop(context, true);
+    }
   }
 
   @override
@@ -425,10 +432,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                 if (canStartDelivery)
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        widget.onStartDelivery!();
-                        Navigator.pop(context, true);
-                      },
+                      onTap: _handleStartDelivery,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
@@ -540,7 +544,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
         _actionRow(
           Icons.local_shipping_outlined,
           'Start delivery',
-          widget.onStartDelivery!,
+          _handleStartDelivery,
         ),
       if (order.status == OrderStatus.inTransit)
         _actionRow(
@@ -611,6 +615,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
         if (mounted &&
             label != 'Complete delivery' &&
             label != 'Assign staff' &&
+            label != 'Start delivery' &&
             label != 'Record delivery issue') {
           Navigator.pop(context, true);
         }
