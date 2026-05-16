@@ -10,8 +10,8 @@ import '../sms_registration_copy.dart';
 import '../supabase_sync_service.dart';
 import 'sms_handler_utils.dart';
 
-/// Handles all RA 10173 privacy commands and the multi-step SMS registration
-/// state machine (REGISTER -> AGREE -> BARANGAY -> ADDRESS).
+/// Handles RA 10173 privacy commands and the single-step SMS registration
+/// format: REGISTER [name], [barangay], [address].
 ///
 /// Returns `true` if the message was fully handled so the caller can skip
 /// the normal command dispatch (DELIVER / DROP / YES / STATUS).
@@ -125,19 +125,19 @@ class RegistrationFlowHandler {
       return true;
     }
 
-    // --- STOP cancels any in-flight flow ---
+    // --- STOP cancels any in-flight delete request ---
     if (parsed.command == SmsCommand.stop && pending != null) {
       final action = pending['action'] as String?;
       await _pendingActions.delete(normalizedSender);
-      await SmsHandlerUtils.sendReply(
-        sender,
-        action == 'delete'
-            ? SmsRegistrationCopy.deleteCancelled
-            : SmsRegistrationCopy.registrationCancelled,
+      if (action == 'delete') {
+        await SmsHandlerUtils.sendReply(
+          sender,
+          SmsRegistrationCopy.deleteCancelled,
 
-        sourceMessageId: sourceMessageId,
-      );
-      return true;
+          sourceMessageId: sourceMessageId,
+        );
+        return true;
+      }
     }
 
     // --- Anything other than CONFIRM DELETE / STOP during a pending delete
@@ -153,7 +153,11 @@ class RegistrationFlowHandler {
       return true;
     }
 
-    // --- REGISTER kicks off (or restarts) the consent flow ---
+    if (pending != null && pending['action'] == 'register') {
+      await _pendingActions.delete(normalizedSender);
+    }
+
+    // --- REGISTER [name], [barangay], [address] ---
     if (parsed.command == SmsCommand.register) {
       if (customerData != null) {
         await SmsHandlerUtils.sendReply(
@@ -164,51 +168,87 @@ class RegistrationFlowHandler {
         );
         return true;
       }
-      final name = parsed.name?.trim();
-      if (name == null || name.isEmpty) {
+
+      final parts = _parseRegisterParts(parsed.name);
+      if (parts == null) {
         await SmsHandlerUtils.sendReply(
           sender,
-          SmsRegistrationCopy.registerHelp,
+          SmsRegistrationCopy.registerMissingFields,
 
           sourceMessageId: sourceMessageId,
         );
         return true;
       }
-      await _pendingActions.upsert(
-        phoneNumber: normalizedSender,
-        action: 'register',
-        step: 'awaiting_consent',
-        name: name,
-      );
+
+      final matchedBarangay = _matchBarangayName(parts.barangay);
+      if (matchedBarangay == null) {
+        await SmsHandlerUtils.sendReply(
+          sender,
+          SmsRegistrationCopy.invalidBarangay(parts.barangay),
+
+          sourceMessageId: sourceMessageId,
+        );
+        return true;
+      }
+
+      final barangay = await _barangays.getBarangayByName(matchedBarangay);
+      if (barangay == null) {
+        await SmsHandlerUtils.sendReply(
+          sender,
+          SmsRegistrationCopy.invalidBarangay(parts.barangay),
+
+          sourceMessageId: sourceMessageId,
+        );
+        return true;
+      }
+
+      final consentGivenAt = DateTime.now().toIso8601String();
+      final name = _toTitleCase(parts.name);
+      final barangayName = _toTitleCase(matchedBarangay);
+      final address = parts.address.trim();
+
+      try {
+        await _customers.insertCustomer({
+          'name': name,
+          'contact_number': normalizedSender,
+          'address': address,
+          'barangay_id': barangay['id'] as int,
+          'consent_given': 1,
+          'consent_timestamp': consentGivenAt,
+          'consent_channel': SmsRegistrationCopy.channelSms,
+          'consent_version': SmsRegistrationCopy.consentVersion,
+        });
+      } on CustomerPhoneAlreadyExistsException {
+        await SmsHandlerUtils.sendReply(
+          sender,
+          SmsRegistrationCopy.alreadyRegistered,
+
+          sourceMessageId: sourceMessageId,
+        );
+        return true;
+      }
+
+      AppEventBus().notifyOrderReceived();
       await SmsHandlerUtils.sendReply(
         sender,
-        SmsRegistrationCopy.registrationConsent(name: name),
+        SmsRegistrationCopy.registrationComplete(
+          name: name,
+          barangay: barangayName,
+          address: address,
+        ),
 
         sourceMessageId: sourceMessageId,
       );
       return true;
     }
 
-    // --- Continue an in-progress registration flow ---
-    if (pending != null &&
-        pending['action'] == 'register' &&
-        customerData == null) {
-      return await _continueRegistration(
-        sender: sender,
-        normalizedSender: normalizedSender,
-        parsed: parsed,
-        pending: pending,
-        sourceMessageId: sourceMessageId,
-      );
-    }
-
-    // --- AGREE / BARANGAY / ADDRESS without an active flow ---
+    // --- Legacy registration commands without REGISTER ---
     if (parsed.command == SmsCommand.agree ||
         parsed.command == SmsCommand.barangay ||
         parsed.command == SmsCommand.address) {
       await SmsHandlerUtils.sendReply(
         sender,
-        SmsRegistrationCopy.noPendingRegistration,
+        SmsRegistrationCopy.registerWrongFormat,
 
         sourceMessageId: sourceMessageId,
       );
@@ -257,168 +297,80 @@ class RegistrationFlowHandler {
         return false;
     }
   }
+}
 
-  /// Drives per-step transitions for a registration flow already recorded in
-  /// `pending_sms_actions`.
-  Future<bool> _continueRegistration({
-    required String sender,
-    required String normalizedSender,
-    required ParsedSms parsed,
-    required Map<String, dynamic> pending,
-    required String sourceMessageId,
-  }) async {
-    final step = pending['step'] as String;
-    final pendingName = pending['name'] as String?;
-    final pendingBarangayId = pending['barangay_id'] as int?;
-    final pendingConsentVersion = pending['consent_version'] as String?;
-    final pendingConsentGivenAt = pending['consent_given_at'] as String?;
+class _RegisterParts {
+  final String name;
+  final String barangay;
+  final String address;
 
-    switch (step) {
-      case 'awaiting_consent':
-        if (parsed.command == SmsCommand.agree) {
-          final consentGivenAt = DateTime.now().toIso8601String();
-          await _pendingActions.upsert(
-            phoneNumber: normalizedSender,
-            action: 'register',
-            step: 'awaiting_barangay',
-            name: pendingName,
-            consentVersion: SmsRegistrationCopy.consentVersion,
-            consentGivenAt: consentGivenAt,
-          );
-          final barangays = await _barangays.getBarangays();
-          final list = barangays.map((b) => b['name'] as String).join(', ');
-          await SmsHandlerUtils.sendReply(
-            sender,
-            SmsRegistrationCopy.askBarangay(list),
+  const _RegisterParts({
+    required this.name,
+    required this.barangay,
+    required this.address,
+  });
+}
 
-            sourceMessageId: sourceMessageId,
-          );
-          return true;
-        }
-        await SmsHandlerUtils.sendReply(
-          sender,
-          SmsRegistrationCopy.consentRequired,
+extension on RegistrationFlowHandler {
+  _RegisterParts? _parseRegisterParts(String? payload) {
+    final raw = (payload ?? '').trim();
+    if (raw.isEmpty) return null;
+    final parts = raw.split(',');
+    if (parts.length < 3) return null;
+    final name = parts[0].trim();
+    final barangay = parts[1].trim();
+    final address = parts.sublist(2).join(',').trim();
+    if (name.isEmpty || barangay.isEmpty || address.isEmpty) return null;
+    return _RegisterParts(name: name, barangay: barangay, address: address);
+  }
 
-          sourceMessageId: sourceMessageId,
-        );
-        return true;
+  String? _matchBarangayName(String input) {
+    final inputKey = _normalizeBarangayKey(input);
+    if (inputKey.isEmpty) return null;
 
-      case 'awaiting_barangay':
-        if (parsed.command == SmsCommand.barangay) {
-          final input = parsed.barangayName?.trim() ?? '';
-          if (input.isEmpty) {
-            await SmsHandlerUtils.sendReply(
-              sender,
-              SmsRegistrationCopy.invalidBarangay,
-
-              sourceMessageId: sourceMessageId,
-            );
-            return true;
-          }
-          final barangay = await _barangays.getBarangayByName(input);
-          if (barangay == null) {
-            await SmsHandlerUtils.sendReply(
-              sender,
-              SmsRegistrationCopy.invalidBarangay,
-
-              sourceMessageId: sourceMessageId,
-            );
-            return true;
-          }
-          await _pendingActions.upsert(
-            phoneNumber: normalizedSender,
-            action: 'register',
-            step: 'awaiting_address',
-            name: pendingName,
-            barangayId: barangay['id'] as int,
-            consentVersion: pendingConsentVersion,
-            consentGivenAt: pendingConsentGivenAt,
-          );
-          await SmsHandlerUtils.sendReply(
-            sender,
-            SmsRegistrationCopy.askAddress,
-
-            sourceMessageId: sourceMessageId,
-          );
-          return true;
-        }
-        await SmsHandlerUtils.sendReply(
-          sender,
-          SmsRegistrationCopy.barangayPromptReminder,
-
-          sourceMessageId: sourceMessageId,
-        );
-        return true;
-
-      case 'awaiting_address':
-        if (parsed.command == SmsCommand.address) {
-          final addr = parsed.address?.trim() ?? '';
-          if (addr.isEmpty) {
-            await SmsHandlerUtils.sendReply(
-              sender,
-              SmsRegistrationCopy.addressPromptReminder,
-
-              sourceMessageId: sourceMessageId,
-            );
-            return true;
-          }
-          if (pendingBarangayId == null || pendingName == null) {
-            await _pendingActions.delete(normalizedSender);
-            await SmsHandlerUtils.sendReply(
-              sender,
-              SmsRegistrationCopy.registerHelp,
-
-              sourceMessageId: sourceMessageId,
-            );
-            return true;
-          }
-          try {
-            await _customers.insertCustomer({
-              'name': pendingName,
-              'contact_number': normalizedSender,
-              'address': addr,
-              'barangay_id': pendingBarangayId,
-              'consent_given': 1,
-              'consent_timestamp': pendingConsentGivenAt,
-              'consent_channel': SmsRegistrationCopy.channelSms,
-              'consent_version':
-                  pendingConsentVersion ?? SmsRegistrationCopy.consentVersion,
-            });
-          } on CustomerPhoneAlreadyExistsException {
-            await _pendingActions.delete(normalizedSender);
-            await SmsHandlerUtils.sendReply(
-              sender,
-              SmsRegistrationCopy.alreadyRegistered,
-
-              sourceMessageId: sourceMessageId,
-            );
-            return true;
-          }
-          final barangay = await _barangays.getBarangayById(pendingBarangayId);
-          await _pendingActions.delete(normalizedSender);
-          AppEventBus().notifyOrderReceived();
-          await SmsHandlerUtils.sendReply(
-            sender,
-            SmsRegistrationCopy.registrationComplete(
-              name: pendingName,
-              barangay: barangay?['name'] as String? ?? '',
-            ),
-
-            sourceMessageId: sourceMessageId,
-          );
-          return true;
-        }
-        await SmsHandlerUtils.sendReply(
-          sender,
-          SmsRegistrationCopy.addressPromptReminder,
-
-          sourceMessageId: sourceMessageId,
-        );
-        return true;
+    String? exactMatch;
+    final candidates = <String>[];
+    for (final name in SmsRegistrationCopy.validBarangays) {
+      final key = _normalizeBarangayKey(name);
+      if (key == inputKey) {
+        exactMatch = name;
+        break;
+      }
+      if (key.startsWith(inputKey) || inputKey.startsWith(key)) {
+        candidates.add(name);
+      }
     }
 
-    // Unknown step - clear the row and treat as fresh.
-    await _pendingActions.delete(normalizedSender);
-    return false;
+    if (exactMatch != null) return exactMatch;
+    if (candidates.length == 1) return candidates.first;
+    return null;
+  }
+
+  String _normalizeBarangayKey(String value) {
+    final lowered = value
+        .toLowerCase()
+        .replaceAll('\u00F1', 'n')
+        .replaceAll('\u00D1', 'n');
+    return lowered.replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  String _toTitleCase(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return trimmed;
+    final words = trimmed.split(RegExp(r'\s+'));
+    return words
+        .map((word) {
+          final parts = word.split('-');
+          final cased = parts
+              .map((part) {
+                if (part.isEmpty) return part;
+                final head = part[0].toUpperCase();
+                final tail = part.substring(1).toLowerCase();
+                return '$head$tail';
+              })
+              .join('-');
+          return cased;
+        })
+        .join(' ');
   }
 }

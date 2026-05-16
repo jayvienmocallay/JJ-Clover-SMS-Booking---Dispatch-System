@@ -61,7 +61,7 @@ class ParsedSms {
 /// - `YES` — confirms a pre-booking offer
 /// - `CANCEL` - cancels the latest pending/confirmed order or pre-book offer
 /// - `STATUS` — returns current system mode
-/// - `REGISTER [name]` — starts self-registration (RA 10173 consent flow)
+/// - `REGISTER [name], [barangay], [address]` — single-step registration
 /// - `AGREE` / `STOP` — consent / cancel during registration
 /// - `BARANGAY [name]` — provides barangay during registration
 /// - `ADDRESS [text]` — provides delivery address during registration
@@ -101,9 +101,10 @@ class SmsParser {
   /// Matches: STATUS (exact, no extra text)
   static final RegExp _statusRegex = RegExp(r'^STATUS$', caseSensitive: false);
 
-  /// Matches: REGISTER [name]. Group 1 = full name (rest of the message).
+  /// Matches: REGISTER [name], [barangay], [address].
+  /// Group 1 = raw payload (may be null if no payload provided).
   static final RegExp _registerRegex = RegExp(
-    r'^REGISTER\s+([\s\S]+)$',
+    r'^REGISTER(?:\s+([\s\S]+))?$',
     caseSensitive: false,
   );
 

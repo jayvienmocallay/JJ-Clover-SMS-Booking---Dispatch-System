@@ -26,76 +26,61 @@ class SmsRegistrationCopy {
 
   // --- Registration flow ---
 
-  /// Step 1 — sent after `REGISTER [name]` is received from a new number.
-  /// Mirrors the privacy notice on the Customer Registration screen
-  /// (lib/ui/screens/customers_screen.dart) so consent statements match.
-  static String registrationConsent({required String name}) =>
-      'Hi $name! JJ Clover Water Delivery (RA 10173, Data Privacy Act of 2012) '
-      'will collect your name, phone number, barangay, and delivery address — '
-      'used only to process orders, contact you about deliveries, and improve '
-      'our service. Your data will not be shared with third parties without '
-      'your consent. Text MYDATA anytime to view your data, or DELETEDATA to '
-      'remove it. Reply AGREE to consent and continue, or STOP to cancel.';
+  /// Canonical barangay names for SMS registration (fuzzy matches allowed).
+  static const List<String> validBarangays = [
+    'Dagohoy',
+    'Gabuyan',
+    'Katipunan',
+    'Poblacion',
+    'San Isidro',
+    'San Jose',
+    'Santa Rosa',
+    'Santo Nino',
+    'Semong',
+    'Tiburcia',
+  ];
 
-  /// Step 2 — sent after AGREE.
-  static String askBarangay(String validBarangays) =>
-      'Consent recorded. Reply BARANGAY [name] to continue. '
-      'Available barangays: $validBarangays.';
+  static String get validBarangaysText => validBarangays.join(', ');
 
-  /// Step 3 — sent after a valid BARANGAY is provided.
-  static const String askAddress =
-      'Reply ADDRESS [your full delivery address]. '
-      'Example: ADDRESS Purok 4 near the chapel.';
-
-  /// Final — sent after ADDRESS is provided and the customer record is created.
+  /// Success reply — consent is embedded per RA 10173 (no separate AGREE step).
   static String registrationComplete({
     required String name,
     required String barangay,
+    required String address,
   }) =>
-      'Registered! $name in $barangay. You can now text DELIVER [qty] to order. '
-      'Text MYDATA to view your data or DELETEDATA to remove it anytime.';
+            '\u2705 Registered! $name | $barangay | $address\n'
+      'Data collected per RA 10173. Text MYDATA to view or DELETEDATA to remove '
+      'your data anytime.\n'
+      'You can now text DELIVER [qty] to order.';
 
-  /// Sent when the customer texts STOP during registration.
-  static const String registrationCancelled =
-      'Registration cancelled. Your data has not been saved. Reply REGISTER '
-      '[your full name] anytime to start again.';
+  /// Sent when REGISTER is missing required fields.
+  static const String registerMissingFields =
+      'Incomplete info. Please text:\n'
+      'REGISTER [name], [barangay], [address]\n'
+      'Example: REGISTER Juan, Katipunan, Purok 1-A';
 
-  /// Sent when AGREE arrives without an active registration in progress.
-  static const String noPendingRegistration =
-      'No registration in progress. Reply REGISTER [your full name] to start.';
+  /// Sent when REGISTER is not used.
+  static const String registerWrongFormat =
+      'To register, text:\n'
+      'REGISTER [name], [barangay], [address]\n'
+      'Example: REGISTER Juan, Katipunan, Purok 1-A';
 
-  /// Sent during awaiting_consent if anything other than AGREE/STOP arrives.
-  static const String consentRequired =
-      'Please reply AGREE to consent to data collection, or STOP to cancel '
-      'registration.';
-
-  /// Sent during awaiting_barangay if the input is invalid or missing.
-  static const String invalidBarangay =
-      'Barangay not recognized. Reply BARANGAY [valid name] to continue, '
-      'or STOP to cancel.';
-
-  /// Sent during awaiting_barangay if a non-BARANGAY command arrives.
-  static const String barangayPromptReminder =
-      'Please reply BARANGAY [name] to continue registration, or STOP to cancel.';
-
-  /// Sent during awaiting_address if a non-ADDRESS command arrives.
-  static const String addressPromptReminder =
-      'Please reply ADDRESS [your full delivery address], or STOP to cancel.';
+  /// Sent when the barangay is not recognized.
+  static String invalidBarangay(String input) =>
+      'Barangay "$input" not found.\n'
+      'Valid barangays: $validBarangaysText.\n'
+      'Please try again.';
 
   /// Sent when a known number sends REGISTER.
   static const String alreadyRegistered =
       'You are already registered. Text DELIVER [qty] to order, MYDATA to view '
       'your data, or DELETEDATA to remove it.';
 
-  /// Sent when REGISTER arrives without a name argument.
-  static const String registerHelp =
-      'Reply REGISTER [your full name] to register. Example: REGISTER Juan Dela Cruz.';
+    /// Sent when REGISTER arrives without required parts.
+    static const String registerHelp = registerMissingFields;
 
-  /// Replaces the old "Unknown number. Please register first..." reply so
-  /// new senders always see the self-registration path.
-  static const String unknownNumberPrompt =
-      'Unknown number. Reply REGISTER [your full name] to register. '
-      'Example: REGISTER Juan Dela Cruz. Or call the station.';
+    /// Shown to unregistered senders or unknown commands to route to REGISTER.
+    static const String unknownNumberPrompt = registerWrongFormat;
 
   /// Sent once, the first time any mobile number texts the app.
   static const String firstContactWelcome =
@@ -111,9 +96,8 @@ class SmsRegistrationCopy {
   /// Sent with [firstContactWelcome] when the first-time sender is not yet in
   /// the customer database.
   static const String firstContactPrivacyNotice =
-      'You are not yet registered in our system. Under the Data Privacy Act '
-      '(RA 10173), we need your consent before storing your information. '
-      'To register, reply REGISTER [your full name].';
+      'You are not yet registered in our system. To register, text: '
+      'REGISTER [name], [barangay], [address].';
 
   // --- Data subject rights (MYDATA / DELETEDATA / OPTOUT) ---
 
