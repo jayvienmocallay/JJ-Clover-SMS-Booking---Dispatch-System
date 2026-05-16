@@ -83,13 +83,7 @@ class DropCommandHandler {
       sender: sender,
     );
 
-    // Step 4: Mode-appropriate auto-reply
-    await SmsHandlerUtils.sendReply(
-      sender,
-      _modeManager.getDropReply(),
-      sourceMessageId: sourceMessageId,
-    );
-
+    // Staff acknowledgement sends the customer reply from the UI alert.
     // Task 012 — Trigger loud alarm for walk-in customer
     await AlarmService.instance.trigger(
       phone: normalizedSender,
