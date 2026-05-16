@@ -31,6 +31,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
+  final List<int> _tabHistory = [];
   bool _showWalkInAlert = false;
   bool _isInitialLoading = true;
   bool _isAutoRefreshing = false;
@@ -123,7 +124,28 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   void _navigateToTab(int index) {
+    _setTab(index);
+  }
+
+  void _setTab(int index) {
+    if (_currentIndex == index) return;
+    if (_tabHistory.isEmpty || _tabHistory.last != _currentIndex) {
+      _tabHistory.add(_currentIndex);
+    }
     setState(() => _currentIndex = index);
+  }
+
+  Future<bool> _onWillPop() async {
+    if (_tabHistory.isNotEmpty) {
+      final lastIndex = _tabHistory.removeLast();
+      setState(() => _currentIndex = lastIndex);
+      return false;
+    }
+    if (_currentIndex != 0) {
+      setState(() => _currentIndex = 0);
+      return false;
+    }
+    return true;
   }
 
   Future<void> _acknowledgeWalkInAlert() async {
@@ -221,46 +243,49 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       );
     }
 
-    return Scaffold(
-      backgroundColor: AppColors.of(context).background,
-      body: Stack(
-        children: [
-          SafeArea(child: _buildScreen()),
-          if (_showWalkInAlert)
-            WalkInAlert(
-              onAcknowledge: () {
-                unawaited(_acknowledgeWalkInAlert());
-              },
-            ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.of(context).border)),
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: AppColors.of(context).background,
+        body: Stack(
+          children: [
+            SafeArea(child: _buildScreen()),
+            if (_showWalkInAlert)
+              WalkInAlert(
+                onAcknowledge: () {
+                  unawaited(_acknowledgeWalkInAlert());
+                },
+              ),
+          ],
         ),
-        child: Theme(
-          data: Theme.of(context).copyWith(
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.of(context).border)),
           ),
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (i) => setState(() => _currentIndex = i),
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: AppColors.of(context).card,
-            selectedItemColor: AppColors.of(context).primary,
-            unselectedItemColor: AppColors.of(context).mutedForeground,
-            selectedFontSize: 11,
-            unselectedFontSize: 11,
-            iconSize: 22,
-            items: _navItems
-                .map(
-                  (item) => BottomNavigationBarItem(
-                    icon: Icon(item.icon),
-                    label: item.label,
-                  ),
-                )
-                .toList(),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+            ),
+            child: BottomNavigationBar(
+              currentIndex: _currentIndex,
+              onTap: _setTab,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: AppColors.of(context).card,
+              selectedItemColor: AppColors.of(context).primary,
+              unselectedItemColor: AppColors.of(context).mutedForeground,
+              selectedFontSize: 11,
+              unselectedFontSize: 11,
+              iconSize: 22,
+              items: _navItems
+                  .map(
+                    (item) => BottomNavigationBarItem(
+                      icon: Icon(item.icon),
+                      label: item.label,
+                    ),
+                  )
+                  .toList(),
+            ),
           ),
         ),
       ),
