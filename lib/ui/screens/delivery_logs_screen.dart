@@ -5,8 +5,12 @@ import '../../data/models/delivery_log_model.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/repositories/delivery_log_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/app_card.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/empty_state.dart';
+import '../widgets/shared/loading_state.dart';
+import '../widgets/shared/metric_card.dart';
+import '../widgets/shared/status_badge.dart';
 
 class DeliveryLogsScreen extends StatefulWidget {
   const DeliveryLogsScreen({super.key});
@@ -105,10 +109,10 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
         elevation: 0,
       ),
       body: _loading
-          ? Center(
-              child: CircularProgressIndicator(
-                color: AppColors.of(context).primary,
-              ),
+          ? const LoadingState(
+              title: 'Loading delivery logs',
+              message: 'Gathering completed deliveries...',
+              mascot: MascotPose.checklist,
             )
           : RefreshIndicator(
               onRefresh: _loadLogs,
@@ -118,20 +122,28 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
                   // --- Stats ---
                   Row(
                     children: [
-                      _StatCard(
-                        label: 'Deliveries',
-                        value: '${logs.length}',
-                        icon: Icons.local_shipping,
-                        iconBg: AppColors.of(context).primaryLight,
-                        iconColor: AppColors.of(context).primary,
+                      Expanded(
+                        child: MetricCard(
+                          label: 'Deliveries',
+                          value: '${logs.length}',
+                          valueColor: AppColors.of(context).primary,
+                          icon: Icons.local_shipping,
+                          iconBgColor: AppColors.of(context).primaryLight,
+                          iconColor: AppColors.of(context).primary,
+                        ),
                       ),
                       const SizedBox(width: 12),
-                      _StatCard(
-                        label: 'Gallons',
-                        value: '$totalGallons',
-                        icon: Icons.water_drop,
-                        iconBg: AppColors.of(context).statusOperatingLight,
-                        iconColor: AppColors.of(context).statusOperating,
+                      Expanded(
+                        child: MetricCard(
+                          label: 'Gallons',
+                          value: '$totalGallons',
+                          valueColor: AppColors.of(context).statusOperating,
+                          icon: Icons.water_drop,
+                          iconBgColor: AppColors.of(
+                            context,
+                          ).statusOperatingLight,
+                          iconColor: AppColors.of(context).statusOperating,
+                        ),
                       ),
                     ],
                   ),
@@ -179,70 +191,6 @@ class _DeliveryLogsScreenState extends State<DeliveryLogsScreen> {
                 ],
               ),
             ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.iconBg,
-    required this.iconColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.of(context).card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.of(context).border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, size: 20, color: iconColor),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.of(context).foreground,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.of(context).mutedForeground,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -296,14 +244,9 @@ class _DeliveryLogCard extends StatelessWidget {
     final qty = log.quantityDelivered;
     final quantityText = '$qty gallon${qty > 1 ? "s" : ""}';
 
-    return Container(
+    return AppCard(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.of(context).border),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -340,6 +283,13 @@ class _DeliveryLogCard extends StatelessWidget {
                     fontSize: 13,
                     color: AppColors.of(context).mutedForeground,
                   ),
+                ),
+                const SizedBox(height: 4),
+                StatusBadge(
+                  label: 'Delivered',
+                  icon: Icons.check,
+                  color: AppColors.of(context).statusOperating,
+                  bgColor: AppColors.of(context).statusOperatingLight,
                 ),
                 if (log.notes?.isNotEmpty == true) ...[
                   const SizedBox(height: 2),

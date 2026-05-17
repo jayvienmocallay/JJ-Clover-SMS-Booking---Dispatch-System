@@ -13,6 +13,7 @@ import '../../data/services/command_handlers/sms_handler_utils.dart';
 import '../../data/services/system_mode_manager.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/loading_state.dart';
 import '../widgets/walk_in_alert.dart';
 import 'dashboard_screen.dart';
 import 'orders_screen.dart';
@@ -143,17 +144,17 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     setState(() => _currentIndex = index);
   }
 
-  Future<bool> _onWillPop() async {
+  bool get _canPopApp => _tabHistory.isEmpty && _currentIndex == 0;
+
+  void _handleBackNavigation() {
     if (_tabHistory.isNotEmpty) {
       final lastIndex = _tabHistory.removeLast();
       setState(() => _currentIndex = lastIndex);
-      return false;
+      return;
     }
     if (_currentIndex != 0) {
       setState(() => _currentIndex = 0);
-      return false;
     }
-    return true;
   }
 
   Future<void> _acknowledgeWalkInAlert() async {
@@ -171,7 +172,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Walk-in acknowledged. Customer SMS notification queued.'),
+        content: Text(
+          'Walk-in acknowledged. Customer SMS notification queued.',
+        ),
       ),
     );
   }
@@ -217,45 +220,20 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (_isInitialLoading) {
       return Scaffold(
         backgroundColor: AppColors.of(context).background,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const MascotBadge(pose: MascotPose.waterBottle, size: 82),
-              const SizedBox(height: 20),
-              Text(
-                'JJ Clover',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.of(context).foreground,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Loading...',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.of(context).mutedForeground,
-                ),
-              ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: AppColors.of(context).primary,
-                  strokeWidth: 2.5,
-                ),
-              ),
-            ],
-          ),
+        body: const LoadingState(
+          title: 'JJ Clover',
+          message: "Preparing today's dispatch board...",
+          mascot: MascotPose.waterBottle,
         ),
       );
     }
 
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: _canPopApp,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBackNavigation();
+      },
       child: Scaffold(
         backgroundColor: AppColors.of(context).background,
         body: Stack(
@@ -271,7 +249,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         ),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: AppColors.of(context).border)),
+            border: Border(
+              top: BorderSide(color: AppColors.of(context).border),
+            ),
           ),
           child: Theme(
             data: Theme.of(context).copyWith(

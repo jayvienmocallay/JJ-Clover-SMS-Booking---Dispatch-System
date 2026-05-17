@@ -23,7 +23,7 @@ class AlarmService extends ChangeNotifier {
   static const String _activeAlertSettingKey = 'active_drop_alarm';
   static const String _uiAlarmPortName = 'jj_clover_drop_alarm_port';
 
-  final AudioPlayer _player = AudioPlayer();
+  AudioPlayer? _player;
   final _settings = SettingsRepository();
   ReceivePort? _uiAlarmPort;
   bool _isPlaying = false;
@@ -131,9 +131,10 @@ class AlarmService extends ChangeNotifier {
     if (alreadyPlaying) return;
 
     try {
-      await _player.setVolume(1.0);
-      await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.play(AssetSource('audio/alarm.wav'));
+      final player = _player ??= AudioPlayer();
+      await player.setVolume(1.0);
+      await player.setReleaseMode(ReleaseMode.loop);
+      await player.play(AssetSource('audio/alarm.wav'));
       debugPrint(
         'AlarmService: Alarm triggered for DROP from '
         '${alert.phone} (${alert.quantity} gal)',
@@ -152,7 +153,7 @@ class AlarmService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _player.stop();
+      await _player?.stop();
       debugPrint('AlarmService: Alarm acknowledged');
     } catch (e) {
       debugPrint('AlarmService: Error stopping alarm - $e');
@@ -216,7 +217,7 @@ class AlarmService extends ChangeNotifier {
   @override
   void dispose() {
     stopUiSync();
-    _player.dispose();
+    _player?.dispose();
     super.dispose();
   }
 }

@@ -8,7 +8,9 @@ import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/supabase_sync_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/app_page_header.dart';
 import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/loading_state.dart';
 import 'package:jj_clover_sms/main.dart' show setThemeMode, themeNotifier;
 
 // ─────────────────────────────────────────────
@@ -146,9 +148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (zoneData.deliveryDay != null) 'delivery_day': zoneData.deliveryDay,
     });
     _barangayController.clear();
-    setState(
-      () => _selectedDays.clear(),
-    );
+    setState(() => _selectedDays.clear());
     if (mounted) {
       ScaffoldMessenger.of(
         context,
@@ -217,8 +217,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: AppColors.of(context).primary),
+      return const LoadingState(
+        title: 'Loading settings',
+        message: 'Preparing station rules and delivery zones...',
+        mascot: MascotPose.waterBottle,
       );
     }
 
@@ -270,41 +272,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Header
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Settings',
-                style: Theme.of(
-                  context,
-                ).textTheme.displayLarge?.copyWith(fontSize: 26),
+        AppPageHeader(
+          title: 'Settings',
+          subtitle: "Configure your station's dispatch rules.",
+          action: ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeNotifier,
+            builder: (context, mode, _) => IconButton(
+              onPressed: () async {
+                final nextMode = mode == ThemeMode.light
+                    ? ThemeMode.dark
+                    : ThemeMode.light;
+                await setThemeMode(nextMode);
+              },
+              icon: Icon(
+                mode == ThemeMode.light ? Icons.light_mode : Icons.dark_mode,
+                color: palette.mutedForeground,
               ),
+              tooltip: mode == ThemeMode.light
+                  ? 'Switch to dark'
+                  : 'Switch to light',
             ),
-            ValueListenableBuilder<ThemeMode>(
-              valueListenable: themeNotifier,
-              builder: (context, mode, _) => IconButton(
-                onPressed: () async {
-                  final nextMode = mode == ThemeMode.light
-                      ? ThemeMode.dark
-                      : ThemeMode.light;
-                  await setThemeMode(nextMode);
-                },
-                icon: Icon(
-                  mode == ThemeMode.light ? Icons.light_mode : Icons.dark_mode,
-                  color: palette.mutedForeground,
-                ),
-                tooltip: mode == ThemeMode.light
-                    ? 'Switch to dark'
-                    : 'Switch to light',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "Configure your station's dispatch rules.",
-          style: TextStyle(fontSize: 14, color: palette.mutedForeground),
+          ),
         ),
         const SizedBox(height: 24),
 

@@ -6,6 +6,11 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/repositories/barangay_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/app_card.dart';
+import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/loading_state.dart';
+import '../widgets/shared/status_badge.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -47,8 +52,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: AppColors.of(context).primary),
+      return const LoadingState(
+        title: 'Loading schedule',
+        message: 'Checking barangay delivery days...',
+        mascot: MascotPose.deliveryTruck,
       );
     }
 
@@ -58,123 +65,105 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       onRefresh: _loadBarangays,
       color: AppColors.of(context).primary,
       child: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // --- Header ---
-        Text(
-          'Delivery Schedule',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-            color: AppColors.of(context).foreground,
+        padding: const EdgeInsets.all(16),
+        children: [
+          const AppPageHeader(
+            title: 'Delivery Schedule',
+            subtitle: 'Zone-to-day mapping for delivery operations.',
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Zone-to-day mapping for delivery operations.',
-          style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground),
-        ),
-        const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-        // --- Day cards ---
-        ...DeliveryDays.days.map((day) {
-          final isToday = day == today;
-          final barangays = _getBarangaysForDay(day);
+          // --- Day cards ---
+          ...DeliveryDays.days.map((day) {
+            final isToday = day == today;
+            final barangays = _getBarangaysForDay(day);
 
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.of(context).card,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isToday
-                      ? AppColors.of(context).primary.withValues(alpha: 0.4)
-                      : AppColors.of(context).border,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Day header
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.calendar_today,
-                        size: 16,
-                        color: isToday
-                            ? AppColors.of(context).primary
-                            : AppColors.of(context).mutedForeground,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        day,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: AppCard(
+                padding: const EdgeInsets.all(16),
+                borderColor: isToday
+                    ? AppColors.of(context).primary.withValues(alpha: 0.4)
+                    : AppColors.of(context).border,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Day header
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: 16,
                           color: isToday
                               ? AppColors.of(context).primary
-                              : AppColors.of(context).foreground,
+                              : AppColors.of(context).mutedForeground,
                         ),
-                      ),
-                      if (isToday) ...[
                         const SizedBox(width: 8),
                         Text(
-                          '(Today)',
+                          day,
                           style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.of(context).primary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isToday
+                                ? AppColors.of(context).primary
+                                : AppColors.of(context).foreground,
                           ),
                         ),
+                        if (isToday) ...[
+                          const SizedBox(width: 8),
+                          StatusBadge(
+                            label: 'Today',
+                            color: AppColors.of(context).primary,
+                            bgColor: AppColors.of(context).primaryLight,
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  // Barangay chips
-                  if (barangays.isEmpty)
-                    Text(
-                      'No deliveries',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
-                        color: AppColors.of(context).mutedForeground,
-                      ),
-                    )
-                  else
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: barangays.map((brgy) {
-                        final name = brgy['name'] as String? ?? 'Unknown';
-                        final zone = brgy['delivery_zone'] as String? ?? '';
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.of(context).primaryLight,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '$name ($zone)',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.of(context).primary,
-                            ),
-                          ),
-                        );
-                      }).toList(),
                     ),
-                ],
+                    const SizedBox(height: 12),
+                    // Barangay chips
+                    if (barangays.isEmpty)
+                      Text(
+                        'No deliveries',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: AppColors.of(context).mutedForeground,
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: barangays.map((brgy) {
+                          final name = brgy['name'] as String? ?? 'Unknown';
+                          final zone = brgy['delivery_zone'] as String? ?? '';
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.of(context).primaryLight,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '$name ($zone)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.of(context).primary,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }),
-      ],
-    ),
+            );
+          }),
+        ],
+      ),
     );
   }
 

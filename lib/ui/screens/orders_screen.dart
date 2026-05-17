@@ -15,6 +15,7 @@ import '../widgets/order_detail_sheet.dart';
 import '../widgets/shared/app_page_header.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/empty_state.dart';
+import '../widgets/shared/search_field.dart';
 import 'delivery_logs_screen.dart';
 import 'order_history_screen.dart';
 
@@ -101,6 +102,119 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return orders
         .where((o) => o['type'] != 'unrecognized' && o['status'] == status)
         .length;
+  }
+
+  int _filterCount(List<Map<String, dynamic>> orders, int index) {
+    final status = _filterStatuses[_clampFilterIndex(index)];
+    return status == 'all'
+        ? _operationalCount(orders)
+        : _statusCount(orders, status);
+  }
+
+  String _filterLabel(int index) {
+    switch (_filterStatuses[_clampFilterIndex(index)]) {
+      case 'pending':
+        return 'Pending';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'in_transit':
+        return 'In Transit';
+      default:
+        return 'All';
+    }
+  }
+
+  Color _filterColor(BuildContext context, int index) {
+    final palette = AppColors.of(context);
+    switch (_filterStatuses[_clampFilterIndex(index)]) {
+      case 'pending':
+        return palette.statusAway;
+      case 'confirmed':
+        return palette.statusOperating;
+      case 'in_transit':
+        return palette.statusBusy;
+      default:
+        return palette.primary;
+    }
+  }
+
+  IconData _filterIcon(int index) {
+    switch (_filterStatuses[_clampFilterIndex(index)]) {
+      case 'pending':
+        return Icons.hourglass_top;
+      case 'confirmed':
+        return Icons.check_circle;
+      case 'in_transit':
+        return Icons.local_shipping;
+      default:
+        return Icons.inventory_2_outlined;
+    }
+  }
+
+  void _showFilterSheet(List<Map<String, dynamic>> orders) {
+    final palette = AppColors.of(context);
+    final options = List.generate(
+      _filterStatuses.length,
+      (index) => _OrderFilterOption(
+        index: index,
+        label: _filterLabel(index),
+        count: _filterCount(orders, index),
+        color: _filterColor(context, index),
+        icon: _filterIcon(index),
+      ),
+    );
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: palette.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: palette.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Filter orders',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Choose which order status to show.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: palette.mutedForeground),
+              ),
+              const SizedBox(height: 16),
+              ...options.map(
+                (option) => _FilterOptionTile(
+                  option: option,
+                  selected: _filterIndex == option.index,
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _setFilterIndex(option.index);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showAddOrderSheet() {
@@ -409,8 +523,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
         final filteredPreBook = _filterOrders(enrichedPreBookOrders);
         final hasVisibleOrders =
             filtered.isNotEmpty || filteredPreBook.isNotEmpty;
-        final inTransitCount = _statusCount(countableOrders, 'in_transit');
-        final allCount = _operationalCount(countableOrders);
+        final activeFilterColor = _filterColor(context, _filterIndex);
+        final activeFilterCount = _filterCount(countableOrders, _filterIndex);
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -429,6 +543,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   children: [
                     _HeaderIconButton(
                       icon: Icons.calendar_month,
+                      tooltip: 'Order history',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -439,6 +554,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     const SizedBox(width: 8),
                     _HeaderIconButton(
                       icon: Icons.receipt_long,
+                      tooltip: 'Delivery logs',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -450,7 +566,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     GestureDetector(
                       onTap: _showAddOrderSheet,
                       child: Container(
-                        height: 40,
+                        height: 44,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         decoration: BoxDecoration(
                           color: AppColors.of(context).primary,
@@ -478,77 +594,35 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               const SizedBox(height: kSectionGap),
-              // Status filter tabs
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _StatusTab(
-                      label: 'All',
-                      count: allCount,
-                      selected: _filterIndex == 0,
-                      color: AppColors.of(context).primary,
-                      onTap: () => _setFilterIndex(0),
+              Row(
+                children: [
+                  Expanded(
+                    child: SearchField(
+                      hintText: 'Search ID, customer, phone, or barangay...',
+                      initialValue: _searchQuery,
+                      onChanged: (v) => setState(() => _searchQuery = v),
                     ),
-                    const SizedBox(width: 8),
-                    _StatusTab(
-                      label: 'Pending',
-                      count: _statusCount(countableOrders, 'pending'),
-                      selected: _filterIndex == 1,
-                      color: AppColors.of(context).statusAway,
-                      onTap: () => _setFilterIndex(1),
-                    ),
-                    const SizedBox(width: 8),
-                    _StatusTab(
-                      label: 'Confirmed',
-                      count: _statusCount(countableOrders, 'confirmed'),
-                      selected: _filterIndex == 2,
-                      color: AppColors.of(context).statusOperating,
-                      onTap: () => _setFilterIndex(2),
-                    ),
-                    const SizedBox(width: 8),
-                    _StatusTab(
-                      label: 'In Transit',
-                      count: inTransitCount,
-                      selected: _filterIndex == 3,
-                      color: AppColors.of(context).statusBusy,
-                      onTap: () => _setFilterIndex(3),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 10),
+                  _FilterButton(
+                    label: _filterLabel(_filterIndex),
+                    count: activeFilterCount,
+                    color: activeFilterColor,
+                    icon: _filterIcon(_filterIndex),
+                    onTap: () => _showFilterSheet(countableOrders),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              // Search bar
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.of(context).card,
-                  borderRadius: BorderRadius.circular(kButtonRadius),
-                  border: Border.all(color: AppColors.of(context).border),
-                ),
-                child: TextField(
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  decoration: InputDecoration(
-                    hintText: 'Search order ID, customer, or address...',
-                    hintStyle: TextStyle(
-                      color: AppColors.of(context).mutedForeground,
-                      fontSize: 14,
-                    ),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      size: 20,
-                      color: AppColors.of(context).mutedForeground,
-                    ),
-                    suffixIcon: Icon(
-                      Icons.tune,
-                      size: 20,
-                      color: AppColors.of(context).mutedForeground,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              if (_filterIndex != 0) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Showing ${_filterLabel(_filterIndex).toLowerCase()} orders',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: activeFilterColor,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
+              ],
               const SizedBox(height: 16),
               if (!hasVisibleOrders)
                 EmptyState(
@@ -653,89 +727,202 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
 class _HeaderIconButton extends StatelessWidget {
   final IconData icon;
+  final String tooltip;
   final VoidCallback onTap;
 
-  const _HeaderIconButton({required this.icon, required this.onTap});
+  const _HeaderIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: AppColors.of(context).muted,
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: AppColors.of(context).muted,
+        borderRadius: BorderRadius.circular(kButtonRadius),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(kButtonRadius),
-        ),
-        child: Icon(
-          icon,
-          size: 20,
-          color: AppColors.of(context).mutedForeground,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(
+              icon,
+              size: 20,
+              color: AppColors.of(context).mutedForeground,
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-class _StatusTab extends StatelessWidget {
+class _OrderFilterOption {
+  final int index;
   final String label;
   final int count;
-  final bool selected;
   final Color color;
-  final VoidCallback onTap;
+  final IconData icon;
 
-  const _StatusTab({
+  const _OrderFilterOption({
+    required this.index,
     required this.label,
     required this.count,
-    required this.selected,
     required this.color,
+    required this.icon,
+  });
+}
+
+class _FilterButton extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _FilterButton({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.icon,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? color : color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(100),
-          border: Border.all(
-            color: selected ? color : color.withValues(alpha: 0.3),
+    return Tooltip(
+      message: 'Filter orders',
+      child: Material(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(kButtonRadius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 52, minWidth: 96),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 18, color: color),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Filter',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: color,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        Text(
+                          '$label ($count)',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: color,
+                                fontWeight: FontWeight.w600,
+                              ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.expand_more, size: 18, color: color),
+                ],
+              ),
+            ),
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: selected ? Colors.white : color,
-                fontWeight: FontWeight.w600,
-              ),
+      ),
+    );
+  }
+}
+
+class _FilterOptionTile extends StatelessWidget {
+  final _OrderFilterOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FilterOptionTile({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected
+                ? option.color.withValues(alpha: 0.14)
+                : palette.background,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? option.color.withValues(alpha: 0.5)
+                  : palette.border,
+              width: selected ? 1.5 : 1,
             ),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.3)
-                    : color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: option.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(option.icon, size: 18, color: option.color),
               ),
-              child: Text(
-                '$count',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: selected ? Colors.white : color,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  option.label,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: selected ? option.color : palette.foreground,
+                  ),
                 ),
               ),
-            ),
-          ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: option.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${option.count}',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: option.color,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: 10),
+                Icon(Icons.check_circle, size: 18, color: option.color),
+              ],
+            ],
+          ),
         ),
       ),
     );

@@ -5,12 +5,18 @@ class MetricCard extends StatelessWidget {
   final String label;
   final String value;
   final Color? valueColor;
+  final IconData? icon;
+  final Color? iconColor;
+  final Color? iconBgColor;
 
   const MetricCard({
     super.key,
     required this.label,
     required this.value,
     this.valueColor,
+    this.icon,
+    this.iconColor,
+    this.iconBgColor,
   });
 
   @override
@@ -26,11 +32,27 @@ class MetricCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          if (icon != null) ...[
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: iconBgColor ?? AppColors.of(context).muted,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                size: 18,
+                color: iconColor ?? valueColor ?? AppColors.of(context).primary,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Text(
             value,
-            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-              color: valueColor,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineLarge?.copyWith(color: valueColor),
           ),
           const SizedBox(height: 4),
           Text(

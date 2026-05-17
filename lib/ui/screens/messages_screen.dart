@@ -7,8 +7,11 @@ import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/app_card.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/empty_state.dart';
+import '../widgets/shared/loading_state.dart';
+import '../widgets/shared/status_badge.dart';
 import './chat_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
@@ -90,8 +93,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: AppColors.of(context).primary),
+      return const LoadingState(
+        title: 'Loading messages',
+        message: 'Collecting recent SMS conversations...',
+        mascot: MascotPose.smsConfirm,
       );
     }
 
@@ -158,7 +163,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final isIncoming = direction == 'incoming';
     final title = displayName ?? phone;
 
-    return GestureDetector(
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       onTap: () {
         Navigator.push(
           context,
@@ -168,76 +175,55 @@ class _MessagesScreenState extends State<MessagesScreen> {
           ),
         );
       },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.of(context).card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: AppColors.of(context).border.withValues(alpha: 0.3),
-            width: 0.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            _Avatar(label: title),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.of(context).foreground,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    message,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.of(
-                        context,
-                      ).mutedForeground.withValues(alpha: 0.8),
-                      height: 1.3,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+      child: Row(
+        children: [
+          _Avatar(label: title),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _formatTimeShort(sentAt),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.of(
-                      context,
-                    ).mutedForeground.withValues(alpha: 0.6),
-                  ),
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Icon(
-                  isIncoming ? Icons.call_received : Icons.call_made,
-                  size: 14,
-                  color: isIncoming
-                      ? AppColors.of(context).primary
-                      : AppColors.of(context).statusOperating,
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.of(context).mutedForeground,
+                    height: 1.3,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _formatTimeShort(sentAt),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              const SizedBox(height: 6),
+              StatusBadge(
+                label: isIncoming ? 'Incoming' : 'Outgoing',
+                icon: isIncoming ? Icons.call_received : Icons.call_made,
+                color: isIncoming
+                    ? AppColors.of(context).primary
+                    : AppColors.of(context).statusOperating,
+                bgColor: isIncoming
+                    ? AppColors.of(context).primaryLight
+                    : AppColors.of(context).statusOperatingLight,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
