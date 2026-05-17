@@ -230,7 +230,7 @@ class SmsBackgroundService {
         unawaited(
           SmsHandlerUtils.sendReply(
             sender,
-            'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
+            'Nadawat na kining order. Tubaga ug CANCEL para kanselar, o hulat ug 1 ka oras para mo-order pag-usab.',
             sourceMessageId: effectiveSourceMessageId,
           ).catchError((Object e, StackTrace st) {
             debugPrint('Queued reply failed: $e');
@@ -262,8 +262,8 @@ class SmsBackgroundService {
       });
       AppEventBus().notifyMessageReceived();
       await PushNotificationService.showMessageNotification(
-        title: 'New Message',
-        body: 'Message from $sender',
+        title: 'Bag-ong Mensahe',
+        body: 'Mensahe gikan $sender',
         sender: sender,
       );
 
@@ -321,7 +321,7 @@ class SmsBackgroundService {
           unawaited(
             SmsHandlerUtils.sendReply(
               sender,
-              'Current status: ${_modeManager.currentMode.displayName}',
+              'Karon nga status: ${_smsModeLabel(_modeManager.currentMode)}',
               sourceMessageId: effectiveSourceMessageId,
             ).catchError((Object e, StackTrace st) {
               debugPrint('Queued reply failed: $e');
@@ -412,6 +412,19 @@ class SmsBackgroundService {
       return retried;
     } finally {
       _isRetryingReceipts = false;
+    }
+  }
+
+  String _smsModeLabel(SystemMode mode) {
+    switch (mode) {
+      case SystemMode.operating:
+        return 'NAG-OPERATE';
+      case SystemMode.staffAway:
+        return 'WALA ANG STAFF';
+      case SystemMode.full:
+        return 'PUNO / BUSY';
+      case SystemMode.maintenance:
+        return 'MAINTENANCE';
     }
   }
 

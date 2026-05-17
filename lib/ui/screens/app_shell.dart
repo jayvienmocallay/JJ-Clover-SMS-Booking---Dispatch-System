@@ -31,6 +31,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
+  int _ordersFilterIndex = 0;
   final List<int> _tabHistory = [];
   bool _showWalkInAlert = false;
   bool _isInitialLoading = true;
@@ -123,7 +124,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  void _navigateToTab(int index) {
+  void _navigateToTab(int index, {int? ordersFilterIndex}) {
+    if (ordersFilterIndex != null) {
+      _ordersFilterIndex = ordersFilterIndex;
+    }
+    if (_currentIndex == index) {
+      if (ordersFilterIndex != null) setState(() {});
+      return;
+    }
     _setTab(index);
   }
 
@@ -186,7 +194,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       case 0:
         return DashboardScreen(onNavigateToTab: _navigateToTab);
       case 1:
-        return const OrdersScreen();
+        return OrdersScreen(
+          initialFilterIndex: _ordersFilterIndex,
+          onFilterChanged: (index) => _ordersFilterIndex = index,
+        );
       case 2:
         return const MessagesScreen();
       case 3:

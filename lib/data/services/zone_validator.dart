@@ -72,7 +72,7 @@ class ZoneValidator {
     if (customerSchedules.isEmpty) {
       return ValidationResponse(
         result: ValidationResult.invalidDay,
-        message: 'No schedule found for customer.',
+        message: 'Walay schedule nga makita para sa customer.',
         customer: customer,
       );
     }
@@ -90,7 +90,7 @@ class ZoneValidator {
       // Today matches the customer's schedule — order is valid
       return ValidationResponse(
         result: ValidationResult.valid,
-        message: 'Zone validated successfully.',
+        message: 'Nakompleto ang pag-validate sa lugar.',
         customer: customer,
       );
     }
@@ -103,9 +103,9 @@ class ZoneValidator {
     return ValidationResponse(
       result: ValidationResult.invalidDay,
       message:
-          'Sorry, your barangay is not scheduled for today. '
-          'Your barangay (${customer.barangay}) is scheduled for $nextDay. '
-          'Would you like to pre-book? Reply YES.',
+          'Pasensya, dili naka-iskedyul karon ang imong barangay. '
+          'Ang imong barangay (${customer.barangay}) naka-iskedyul sa $nextDay. '
+          'Gusto ba nimo mag-pre-book? Tubaga ug YES.',
       customer: customer,
       // Store the next delivery day so _handleYes can use it for pre-booking
       correctDay: nextDay,
@@ -120,7 +120,7 @@ class ZoneValidator {
     if (customer == null) {
       return ValidationResponse(
         result: ValidationResult.unregistered,
-        message: 'Unknown number. Please register first or call the station.',
+        message: 'Unknown nga numero. Palihug magparehistro una o tawagi ang estasyon.',
       );
     }
     // Customer exists — return valid so the caller can proceed to schedule check

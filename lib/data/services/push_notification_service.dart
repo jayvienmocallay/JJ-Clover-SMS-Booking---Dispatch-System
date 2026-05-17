@@ -59,15 +59,15 @@ class PushNotificationService {
   static Future<void> _createNotificationChannels() async {
     const ordersChannel = AndroidNotificationChannel(
       'orders_channel',
-      'Order Notifications',
-      description: 'Notifications for new delivery orders and updates',
+      'Mga Notipikasyon sa Order',
+      description: 'Mga notipikasyon para sa bag-ong delivery ug mga update',
       importance: Importance.high,
     );
 
     const messagesChannel = AndroidNotificationChannel(
       'messages_channel',
-      'Message Notifications',
-      description: 'Notifications for unrecognized or rejected SMS messages',
+      'Mga Notipikasyon sa Mensahe',
+      description: 'Mga notipikasyon para sa dili mailhan o gi-reject nga SMS',
       importance: Importance.defaultImportance,
     );
 
@@ -188,8 +188,8 @@ class PushNotificationService {
       final androidDetails = AndroidNotificationDetails(
         channelId,
         channelId == 'orders_channel'
-            ? 'Order Notifications'
-            : 'Message Notifications',
+            ? 'Mga Notipikasyon sa Order'
+            : 'Mga Notipikasyon sa Mensahe',
         priority: channelId == 'orders_channel'
             ? Priority.high
             : Priority.defaultPriority,

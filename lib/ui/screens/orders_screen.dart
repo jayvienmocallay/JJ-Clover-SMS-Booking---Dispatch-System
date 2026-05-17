@@ -19,17 +19,53 @@ import 'delivery_logs_screen.dart';
 import 'order_history_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  final int initialFilterIndex;
+  final ValueChanged<int>? onFilterChanged;
+
+  const OrdersScreen({
+    super.key,
+    this.initialFilterIndex = 0,
+    this.onFilterChanged,
+  });
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  int _filterIndex = 0;
+  late int _filterIndex;
   String _searchQuery = '';
 
   static const _filterStatuses = ['all', 'pending', 'confirmed', 'in_transit'];
+
+  @override
+  void initState() {
+    super.initState();
+    _filterIndex = _clampFilterIndex(widget.initialFilterIndex);
+  }
+
+  @override
+  void didUpdateWidget(covariant OrdersScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialFilterIndex != widget.initialFilterIndex) {
+      final nextIndex = _clampFilterIndex(widget.initialFilterIndex);
+      if (_filterIndex != nextIndex) {
+        setState(() => _filterIndex = nextIndex);
+      }
+    }
+  }
+
+  int _clampFilterIndex(int index) {
+    if (index < 0 || index >= _filterStatuses.length) return 0;
+    return index;
+  }
+
+  void _setFilterIndex(int index) {
+    final nextIndex = _clampFilterIndex(index);
+    if (_filterIndex == nextIndex) return;
+    setState(() => _filterIndex = nextIndex);
+    widget.onFilterChanged?.call(nextIndex);
+  }
 
   List<Map<String, dynamic>> _filterOrders(List<Map<String, dynamic>> orders) {
     var result = orders;
@@ -452,7 +488,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       count: allCount,
                       selected: _filterIndex == 0,
                       color: AppColors.of(context).primary,
-                      onTap: () => setState(() => _filterIndex = 0),
+                      onTap: () => _setFilterIndex(0),
                     ),
                     const SizedBox(width: 8),
                     _StatusTab(
@@ -460,7 +496,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       count: _statusCount(countableOrders, 'pending'),
                       selected: _filterIndex == 1,
                       color: AppColors.of(context).statusAway,
-                      onTap: () => setState(() => _filterIndex = 1),
+                      onTap: () => _setFilterIndex(1),
                     ),
                     const SizedBox(width: 8),
                     _StatusTab(
@@ -468,7 +504,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       count: _statusCount(countableOrders, 'confirmed'),
                       selected: _filterIndex == 2,
                       color: AppColors.of(context).statusOperating,
-                      onTap: () => setState(() => _filterIndex = 2),
+                      onTap: () => _setFilterIndex(2),
                     ),
                     const SizedBox(width: 8),
                     _StatusTab(
@@ -476,7 +512,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       count: inTransitCount,
                       selected: _filterIndex == 3,
                       color: AppColors.of(context).statusBusy,
-                      onTap: () => setState(() => _filterIndex = 3),
+                      onTap: () => _setFilterIndex(3),
                     ),
                   ],
                 ),

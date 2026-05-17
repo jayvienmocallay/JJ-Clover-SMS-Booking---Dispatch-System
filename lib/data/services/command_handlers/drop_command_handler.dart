@@ -69,7 +69,7 @@ class DropCommandHandler {
     if (orderId == 0) {
       await SmsHandlerUtils.sendReply(
         sender,
-        'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
+        'Nadawat na kining order. Tubaga ug CANCEL para ma kansel, o hulat ug 1 ka oras para mo-order pag-usab.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -78,8 +78,8 @@ class DropCommandHandler {
 
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
-      title: 'Walk-in DROP Order',
-      body: '${parsed.quantity} gallon(s) from $sender – walk-in at station',
+      title: 'Walk-in DROP nga Order',
+      body: '${parsed.quantity} galon gikan $sender - walk-in sa estasyon',
       sender: sender,
     );
 

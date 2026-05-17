@@ -74,33 +74,33 @@ class SystemModeManager extends ChangeNotifier {
   String getDeliveryReply({String? queuedDeliveryDay}) {
     switch (_currentMode) {
       case SystemMode.operating:
-        return 'Order Confirmed. Delivery is being prepared.';
+        return 'Nakumpirma ang order. Giandam na ang delivery.';
       case SystemMode.staffAway:
         const reply =
-            'Order Received. Staff is currently out delivering. '
-            'We will process this upon return.';
+            'Nadawat ang order. Ang staff naa pa sa delivery. '
+            'Iproseso namo pagbalik.';
         if (queuedDeliveryDay == null || queuedDeliveryDay.isEmpty) {
           return reply;
         }
-        return '$reply Your order has been queued for $queuedDeliveryDay.';
+        return '$reply Gi-queue ang imong order para sa $queuedDeliveryDay.';
       case SystemMode.full:
-        return 'We are fully booked for today. Please order for the next schedule.';
+        return 'Puno na ang schedule karon. Palihug mo-order sa sunod nga iskedyul.';
       case SystemMode.maintenance:
-        return 'System under maintenance. We are currently closed.';
+        return 'Naay maintenance ang sistema. Sirado mi karon.';
     }
   }
 
   String getDropReply() {
     switch (_currentMode) {
       case SystemMode.operating:
-        return 'Order received, staff will assist.';
+        return 'Nadawat ang order, Palihug hulat sa staff nga mo assist.';
       case SystemMode.staffAway:
-        return 'Order received. Please leave bottles in the designated area. '
-            'We will process upon return.';
+        return 'Nadawat ang order. Palihug ibutang ang mga botelya sa gitudlo nga lugar. '
+            'Iproseso namo pagbalik.';
       case SystemMode.full:
-        return 'Order received. Please wait for confirmation.';
+        return 'Nadawat ang order. Palihug hulat sa kumpirmasyon.';
       case SystemMode.maintenance:
-        return 'System under maintenance. We are currently closed.';
+        return 'Naay maintenance ang sistema. Sirado mi karon.';
     }
   }
 

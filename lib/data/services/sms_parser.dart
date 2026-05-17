@@ -302,7 +302,7 @@ class SmsParser {
   /// Returns the help message sent when an unrecognized command is received
   /// from a registered customer.
   static String getUnknownCommandReply() {
-    return 'Invalid. Use DELIVER [${AppConstants.minQuantity}-${AppConstants.maxQuantity}] or DROP [${AppConstants.minQuantity}-${AppConstants.maxQuantity}]. '
-        'Reply CANCEL to cancel an active order. Text MYDATA / DELETEDATA for privacy rights.';
+    return 'Gamita ang DELIVER [${AppConstants.minQuantity}-${AppConstants.maxQuantity}] o DROP [${AppConstants.minQuantity}-${AppConstants.maxQuantity}]. '
+        'Tubaga ug CANCEL para kanselar ang aktibong order. I-text ang MYDATA / DELETEDATA para sa katungod sa data privacy.';
   }
 }

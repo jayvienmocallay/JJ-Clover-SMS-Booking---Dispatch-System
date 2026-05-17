@@ -146,7 +146,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (zoneData.deliveryDay != null) 'delivery_day': zoneData.deliveryDay,
     });
     _barangayController.clear();
-    setState(() => _selectedDays.clear());
+    setState(
+      () => _selectedDays.clear(),
+    );
     if (mounted) {
       ScaffoldMessenger.of(
         context,
@@ -598,43 +600,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               );
             }).toList(),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Builder(
-              builder: (context) {
-                final allSelected = _selectedDays.length == _allWeekdays.length;
-                return TextButton.icon(
-                  onPressed: () => setState(() {
-                    if (allSelected) {
-                      _selectedDays.clear();
-                    } else {
-                      _selectedDays
-                        ..clear()
-                        ..addAll(_allWeekdays);
-                    }
-                  }),
-                  icon: Icon(
-                    Icons.done_all,
-                    size: 16,
-                    color: allSelected ? Colors.white : palette.primary,
-                  ),
-                  label: Text(
-                    'Every day',
-                    style: TextStyle(
-                      color: allSelected ? Colors.white : palette.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    backgroundColor:
-                        allSelected ? palette.primary : palette.primaryLight,
-                  ),
-                );
-              },
-            ),
           ),
           const SizedBox(height: 12),
           if (_barangays.isEmpty)
