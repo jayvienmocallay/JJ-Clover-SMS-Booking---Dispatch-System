@@ -48,39 +48,39 @@ class SmsRegistrationCopy {
     required String barangay,
     required String address,
   }) =>
-                        'Registered! $name | $barangay | $address\n'
-      'Data collected per RA 10173. Text MYDATA to view or DELETEDATA to remove '
-      'your data anytime.\n'
-            'You can now text DELIVER [qty] or DROP [qty] to order.';
+                                                'Nakarehistro na! $name | $barangay | $address\n'
+            'Gikolekta ang datos sumala sa RA 10173. I-text ang MYDATA para makita o '
+            'DELETEDATA para tangtangon ang imong datos bisan kanusa.\n'
+                        'Pwede na ka mo-text ug DELIVER [qty] o DROP [qty] para mo-order.';
 
   /// Sent when REGISTER is missing required fields.
   static const String registerMissingFields =
-      'Incomplete info. Please text:\n'
+      'Kulangan ang impormasyon. Palihug i-text:\n'
       'REGISTER [name], [barangay], [address]\n'
-      'Example: REGISTER Juan, Katipunan, Purok 1-A\n'
-      'We collect your name, phone number, barangay, and address for order '
-      'processing. By registering, you agree to the app\'s Data Privacy Act '
-      'notice.';
+      'Pananglitan: REGISTER Juan, Katipunan, Purok 1-A\n'
+      'Gikuha namo ang imong ngalan, numero sa telepono, barangay, ug adres para '
+      'sa pagproseso sa order. Sa pagrehistro, miuyon ka sa abiso sa Data Privacy '
+      'Act sa app.';
 
   /// Sent when REGISTER is not used.
   static const String registerWrongFormat =
-      'To register, text:\n'
+      'Para marehistro, i-text:\n'
       'REGISTER [name], [barangay], [address]\n'
-      'Example: REGISTER Juan, Katipunan, Purok 1-A\n'
-      'We collect your name, phone number, barangay, and address for order '
-      'processing. By registering, you agree to the app\'s Data Privacy Act '
-      'notice.';
+      'Pananglitan: REGISTER Juan, Katipunan, Purok 1-A\n'
+      'Gikuha namo ang imong ngalan, numero sa telepono, barangay, ug adres para '
+      'sa pagproseso sa order. Sa pagrehistro, miuyon ka sa abiso sa Data Privacy '
+      'Act sa app.';
 
   /// Sent when the barangay is not recognized.
   static String invalidBarangay(String input) =>
-      'Barangay "$input" not found.\n'
-      'Valid barangays: $validBarangaysText.\n'
-      'Please try again.';
+      'Wala makita ang barangay "$input".\n'
+      'Balidong barangay: $validBarangaysText.\n'
+      'Palihug sulayi pag-usab.';
 
   /// Sent when a known number sends REGISTER.
   static const String alreadyRegistered =
-      'You are already registered. Text DELIVER [qty] or DROP [qty] to order, MYDATA to view '
-      'your data, or DELETEDATA to remove it.';
+      'Nakarehistro na ka. I-text ang DELIVER [qty] o DROP [qty] para mo-order, '
+      'MYDATA para makita ang imong datos, o DELETEDATA para tangtangon kini.';
 
     /// Sent when REGISTER arrives without required parts.
     static const String registerHelp = registerMissingFields;
@@ -90,21 +90,22 @@ class SmsRegistrationCopy {
 
   /// Sent once, the first time any mobile number texts the app.
   static const String firstContactWelcome =
-      'Hi! This is an automated response from JJ Clover Water Refilling '
-      'Station for field testing.\n\n'
-      'To order water delivery, text:\n'
-      'DELIVER [qty] - e.g. DELIVER 5\n'
-      'DELIVER [qty] NEW - for new gallons\n'
-      'DROP [qty] - for walk-in pickup\n'
-      'STATUS - to check station status\n\n'
-      'Your message will be processed automatically.';
+      'Hi! Kini awtomatikong tubag gikan sa JJ Clover Water Refilling '
+      'Station para sa field testing.\n\n'
+      'Para mo-order ug water delivery, i-text:\n'
+      'DELIVER [qty] - pananglitan DELIVER 5\n'
+      'DELIVER [qty] NEW - para sa bag-ong galon\n'
+      'DROP [qty] - para sa walk-in pickup\n'
+      'STATUS - para masusi ang status sa estasyon\n\n'
+      'Ang imong mensahe awtomatikong iproseso.';
 
   /// Sent with [firstContactWelcome] when the first-time sender is not yet in
   /// the customer database.
   static const String firstContactPrivacyNotice =
-      'You are not yet registered in our system. We collect your name, phone '
-      'number, barangay, and address for order processing. By registering, '
-      'you agree to the app\'s Data Privacy Act notice. To register, text: '
+      'Wala pa ka narehistro sa among sistema. Gikuha namo ang imong ngalan, '
+      'numero sa telepono, barangay, ug adres para sa pagproseso sa order. Sa '
+      'pagrehistro, miuyon ka sa abiso sa Data Privacy Act sa app. Para '
+      'marehistro, i-text: '
       'REGISTER [name], [barangay], [address].';
 
   // --- Data subject rights (MYDATA / DELETEDATA / OPTOUT) ---
@@ -117,36 +118,38 @@ class SmsRegistrationCopy {
     String? address,
   }) {
     final addressLine = (address != null && address.trim().isNotEmpty)
-        ? '\nAddress: $address'
+        ? '\nAdres: $address'
         : '';
-    return 'Your data on file:\n'
-        'Name: $name\n'
-        'Phone: $phone\n'
+    return 'Ang imong datos sa rekord:\n'
+        'Ngalan: $name\n'
+        'Telepono: $phone\n'
         'Barangay: $barangay'
         '$addressLine\n'
-        'Reply DELETEDATA to permanently remove your data.';
+        'Tubaga ang DELETEDATA para permanenteng tangtangon ang imong datos.';
   }
 
   /// Sent when MYDATA / DELETEDATA / OPTOUT comes from a number with no record.
   static const String noDataOnFile =
-      'No data found for this number. Reply REGISTER [your full name] to register.';
+      'Walay datos para niini nga numero. Tubaga og REGISTER [imong tibuok '
+      'ngalan] para marehistro.';
 
   /// Confirmation prompt that warns deletion is permanent (RA 10173 right to erasure).
   static const String deleteWarning =
-      'WARNING: This will PERMANENTLY delete your customer profile, schedules, '
-      'and message history. This CANNOT be undone. Reply CONFIRM DELETE within '
-      '30 minutes to proceed, or any other text to cancel.';
+      'PASIDAAN: Kini magpermanente nga mopapas sa imong customer profile, mga '
+      'schedule, ug historya sa mensahe. DILI NI MAUNDO. Tubaga og CONFIRM '
+      'DELETE sulod sa 30 minutos para ipadayon, o bisan unsang lain nga text '
+      'para kanselar.';
 
   /// Sent when the customer cancels the deletion (anything except CONFIRM DELETE).
   static const String deleteCancelled =
-      'Deletion cancelled. Your data has not been changed.';
+      'Gikanselar ang pagtangtang. Wala giusab ang imong datos.';
 
   /// Sent after the customer record (and related personal data) is removed.
   static const String deleteComplete =
-      'Your data has been permanently deleted. Thank you for using JJ Clover.';
+      'Permanente nang natangtang ang imong datos. Salamat sa paggamit sa JJ Clover.';
 
   /// Sent when CONFIRM DELETE arrives without a pending delete request.
   static const String confirmDeleteWithoutRequest =
-      'No pending deletion request. Reply DELETEDATA first if you wish to '
-      'remove your data.';
+      'Walay pending nga request sa pagtangtang. Tubaga una og DELETEDATA kung '
+      'gusto nimo tangtangon ang imong datos.';
 }
