@@ -4,10 +4,13 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/order_model.dart';
+import '../../data/providers/order_provider.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/order_repository.dart';
+import '../../data/services/command_handlers/sms_handler_utils.dart';
 import '../../core/utils/phone_number_utils.dart';
 import '../theme/app_theme.dart';
+import 'complete_order_sheet.dart';
 
 class CustomerInfoSheet extends StatefulWidget {
   final String phoneNumber;
@@ -44,11 +47,13 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
 
   Future<void> _loadData() async {
     try {
-      final customerMap = await _customerRepo
-          .getCustomerWithBarangayByPhone(widget.phoneNumber);
+      final customerMap = await _customerRepo.getCustomerWithBarangayByPhone(
+        widget.phoneNumber,
+      );
 
-      final Customer? customer =
-          customerMap != null ? Customer.fromMap(customerMap) : null;
+      final Customer? customer = customerMap != null
+          ? Customer.fromMap(customerMap)
+          : null;
 
       final normalizedPhone = PhoneNumberUtils.normalize(widget.phoneNumber);
 
@@ -91,55 +96,99 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
 
   Future<void> _makePhoneCall() async {
     try {
-      final launched = await launchUrl(Uri(scheme: 'tel', path: widget.phoneNumber), mode: LaunchMode.externalApplication); if (!launched) { throw Exception('Could not open dialer'); }
+      final launched = await launchUrl(
+        Uri(scheme: 'tel', path: widget.phoneNumber),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        throw Exception('Could not open dialer');
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not dial: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not dial: $e')));
       }
     }
   }
 
-  Future<void> _updateOrderStatus(String status, {String? reason}) async {
+  Future<bool> _updateOrderStatus(String status, {String? reason}) async {
     final id = _activeOrder?.id;
-    if (id == null) return;
+    if (id == null) return false;
     try {
-      await _orderRepo.updateOrderStatus(id, status, reason: reason);
+      final provider = context.read<OrderProvider>();
+      await provider.updateStatus(id, status, reason: reason);
+      if (provider.error != null) {
+        throw StateError(provider.error!);
+      }
       await _loadData();
+      return true;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
+      return false;
     }
   }
 
   Future<void> _confirmOrder() async {
-    await _updateOrderStatus('confirmed');
+    final updated = await _updateOrderStatus('confirmed');
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Order confirmed'),
-          backgroundColor: AppColors.of(context).statusOperating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      if (updated) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Order confirmed'),
+            backgroundColor: AppColors.of(context).statusOperating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
-  Future<void> _markDelivered() async {
-    await _updateOrderStatus('completed');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Marked as delivered'),
-          backgroundColor: AppColors.of(context).statusOperating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+  Future<void> _startDelivery() async {
+    final order = _activeOrder;
+    if (order?.id == null) return;
+    final updated = await _updateOrderStatus('in_transit');
+    if (!updated || !mounted) return;
+
+    await SmsHandlerUtils.sendReply(
+      order!.phoneNumber,
+      _deliveryStartedSms(order),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Delivery started. Customer SMS notification queued.'),
+      ),
+    );
+  }
+
+  Future<void> _completeDelivery() async {
+    final order = _activeOrder;
+    if (order == null) return;
+    final completed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => CompleteOrderSheet(order: order),
+    );
+    if (completed == true) {
+      await _loadData();
     }
+  }
+
+  String _deliveryStartedSms(Order order) {
+    final quantity = order.quantity > 0
+        ? ' (${order.quantity} gallon${order.quantity == 1 ? '' : 's'})'
+        : '';
+    return 'JJ Clover: Your water order$quantity is on the way. '
+        'Please prepare to receive it. Thank you!';
   }
 
   Future<void> _rejectOrder() async {
@@ -150,8 +199,9 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
         final controller = TextEditingController();
         return AlertDialog(
           backgroundColor: AppColors.of(context).card,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Text(
             'Reject Order',
             style: TextStyle(color: AppColors.of(context).foreground),
@@ -174,13 +224,17 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text('Cancel',
-                  style: TextStyle(color: AppColors.of(context).mutedForeground)),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: AppColors.of(context).mutedForeground),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text('Reject',
-                  style: TextStyle(color: AppColors.of(context).statusBusy)),
+              child: Text(
+                'Reject',
+                style: TextStyle(color: AppColors.of(context).statusBusy),
+              ),
             ),
           ],
         );
@@ -188,11 +242,13 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
     );
 
     if (confirmed != true) return;
-    await _updateOrderStatus('rejected', reason: reason);
+    final updated = await _updateOrderStatus('rejected', reason: reason);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order rejected')),
-      );
+      if (updated) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Order rejected')));
+      }
     }
   }
 
@@ -223,8 +279,10 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
             Expanded(
               child: _loading
                   ? Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.of(context).primary))
+                      child: CircularProgressIndicator(
+                        color: AppColors.of(context).primary,
+                      ),
+                    )
                   : ListView(
                       controller: scrollController,
                       padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
@@ -283,7 +341,9 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.of(context).primary),
+                strokeWidth: 2,
+                color: AppColors.of(context).primary,
+              ),
             ),
           ],
         ],
@@ -318,7 +378,9 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
                   Text(
                     widget.phoneNumber,
                     style: TextStyle(
-                        fontSize: 14, color: AppColors.of(context).mutedForeground),
+                      fontSize: 14,
+                      color: AppColors.of(context).mutedForeground,
+                    ),
                   ),
                 ],
               ),
@@ -330,11 +392,13 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           const SizedBox(height: 16),
           _buildCard([
             if (_customer!.barangay.isNotEmpty)
-              _detailRow(Icons.location_on_outlined, 'Area',
-                  _customer!.barangay),
-            if (_customer!.address?.isNotEmpty == true)
               _detailRow(
-                  Icons.home_outlined, 'Address', _customer!.address!),
+                Icons.location_on_outlined,
+                'Area',
+                _customer!.barangay,
+              ),
+            if (_customer!.address?.isNotEmpty == true)
+              _detailRow(Icons.home_outlined, 'Address', _customer!.address!),
             if (_customer!.deliveryZone.isNotEmpty)
               _detailRow(Icons.map_outlined, 'Zone', _customer!.deliveryZone),
             _detailRow(
@@ -448,30 +512,34 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
                   _orderTypeLabel(order.type) +
                       (order.isPreBook ? ' • Pre-booked' : ''),
                   style: TextStyle(
-                      fontSize: 13, color: AppColors.of(context).mutedForeground),
+                    fontSize: 13,
+                    color: AppColors.of(context).mutedForeground,
+                  ),
                 ),
                 if (order.deliveryDay != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     'Scheduled for ${order.deliveryDay}',
                     style: TextStyle(
-                        fontSize: 13, color: AppColors.of(context).mutedForeground),
+                      fontSize: 13,
+                      color: AppColors.of(context).mutedForeground,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 6),
                 Text(
                   'Placed ${_formatDate(order.createdAt)}',
                   style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.of(context).mutedForeground),
+                    fontSize: 12,
+                    color: AppColors.of(context).mutedForeground,
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: statusBgColor,
               borderRadius: BorderRadius.circular(20),
@@ -495,12 +563,17 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
   Widget _buildQuickActionsSection() {
     final order = _activeOrder;
 
-    final canConfirm = order?.status == OrderStatus.pending;
-    final canDeliver = order != null &&
-        (order.status == OrderStatus.confirmed ||
-            order.status == OrderStatus.inTransit ||
-            order.status == OrderStatus.pending);
-    final canReject = order != null &&
+    final canConfirm =
+        order?.status == OrderStatus.pending &&
+        order?.type != OrderType.unrecognized;
+    final canStartDelivery =
+        order?.status == OrderStatus.confirmed &&
+        order?.type != OrderType.unrecognized;
+    final canCompleteDelivery =
+        order?.status == OrderStatus.inTransit &&
+        order?.type != OrderType.unrecognized;
+    final canReject =
+        order != null &&
         (order.status == OrderStatus.pending ||
             order.status == OrderStatus.confirmed);
 
@@ -512,12 +585,19 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           color: AppColors.of(context).statusOperating,
           onTap: _confirmOrder,
         ),
-      if (canDeliver)
+      if (canStartDelivery)
         _listAction(
           icon: Icons.local_shipping_outlined,
-          label: 'Mark as Delivered',
+          label: 'Start Delivery',
           color: AppColors.of(context).primary,
-          onTap: _markDelivered,
+          onTap: _startDelivery,
+        ),
+      if (canCompleteDelivery)
+        _listAction(
+          icon: Icons.check_circle_outline,
+          label: 'Complete Delivery',
+          color: AppColors.of(context).statusOperating,
+          onTap: _completeDelivery,
         ),
       if (canReject)
         _listAction(
@@ -588,8 +668,7 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
                 Navigator.pop(context);
                 messenger.showSnackBar(
                   const SnackBar(
-                    content:
-                        Text('Go to the Customers tab to register'),
+                    content: Text('Go to the Customers tab to register'),
                   ),
                 );
               },
@@ -598,9 +677,9 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
             icon: Icons.volume_off_outlined,
             label: 'Mute Messages',
             color: AppColors.of(context).mutedForeground,
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Mute — coming soon')),
-            ),
+            onTap: () => ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Mute — coming soon'))),
           ),
           _listAction(
             icon: Icons.block_outlined,
@@ -614,9 +693,9 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
             icon: Icons.report_outlined,
             label: 'Mark as Spam',
             color: AppColors.of(context).statusAway,
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Spam — coming soon')),
-            ),
+            onTap: () => ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Spam — coming soon'))),
           ),
         ]),
       ],
@@ -660,15 +739,22 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 11, color: AppColors.of(context).mutedForeground)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.of(context).mutedForeground,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(value,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.of(context).foreground)),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.of(context).foreground,
+                  ),
+                ),
               ],
             ),
           ),
@@ -695,13 +781,17 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
               child: Text(
                 label,
                 style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: color),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
               ),
             ),
-            Icon(Icons.chevron_right,
-                size: 18, color: AppColors.of(context).mutedForeground),
+            Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: AppColors.of(context).mutedForeground,
+            ),
           ],
         ),
       ),
@@ -730,9 +820,10 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
               Text(
                 label,
                 style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: color),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
               ),
             ],
           ),
@@ -802,8 +893,18 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
 
   String _formatDate(DateTime dt) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
@@ -883,7 +984,10 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
           Padding(
             padding: const EdgeInsets.all(40),
             child: Center(
-                child: CircularProgressIndicator(color: AppColors.of(context).primary)),
+              child: CircularProgressIndicator(
+                color: AppColors.of(context).primary,
+              ),
+            ),
           )
         else if (_orders.isEmpty)
           Padding(
@@ -935,16 +1039,25 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
     final typeLabel = order.type == OrderType.deliver
         ? 'Deliver'
         : order.type == OrderType.drop
-            ? 'Drop'
-            : 'Unknown';
+        ? 'Drop'
+        : 'Unknown';
 
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final dt = order.createdAt;
-    final dateLabel =
-        '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+    final dateLabel = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -970,20 +1083,23 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                 Text(
                   dateLabel,
                   style: TextStyle(
-                      fontSize: 12, color: AppColors.of(context).mutedForeground),
+                    fontSize: 12,
+                    color: AppColors.of(context).mutedForeground,
+                  ),
                 ),
                 if (order.deliveryDay != null)
                   Text(
                     'Scheduled: ${order.deliveryDay}',
                     style: TextStyle(
-                        fontSize: 12, color: AppColors.of(context).mutedForeground),
+                      fontSize: 12,
+                      color: AppColors.of(context).mutedForeground,
+                    ),
                   ),
               ],
             ),
           ),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: statusBg,
               borderRadius: BorderRadius.circular(12),
@@ -991,9 +1107,10 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
             child: Text(
               order.status.displayLabel,
               style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: statusColor),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
             ),
           ),
         ],

@@ -148,6 +148,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'status': 'sending',
       'sent_at': DateTime.now().toIso8601String(),
     });
+    AppEventBus().notifyMessageReceived();
     await _loadMessages(isNewMessage: true);
     await _sendExistingMessage(messageId, message, showSuccess: true);
   }
@@ -162,6 +163,7 @@ class _ChatScreenState extends State<ChatScreen> {
       await _loadMessages(isNewMessage: true);
       await NativeSmsSender.sendSms(to: widget.phoneNumber, message: message);
       await _smsRepo.updateSmsMessageStatus(messageId, 'sent');
+      AppEventBus().notifyMessageReceived();
       await _loadMessages(isNewMessage: true);
       if (mounted && showSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -173,6 +175,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       await _smsRepo.updateSmsMessageStatus(messageId, 'failed');
+      AppEventBus().notifyMessageReceived();
       await _loadMessages(isNewMessage: true);
       if (mounted) {
         ScaffoldMessenger.of(
@@ -193,6 +196,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final id = message['id'] as int?;
     if (id == null) return;
     await _smsRepo.deleteSmsMessage(id);
+    AppEventBus().notifyMessageReceived();
     await _loadMessages();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

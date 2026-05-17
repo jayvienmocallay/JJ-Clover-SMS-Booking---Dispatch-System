@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../data/models/order_model.dart';
 import '../../data/repositories/barangay_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
+import '../../data/services/command_handlers/sms_handler_utils.dart';
 import '../../data/services/supabase_sync_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/complete_order_sheet.dart';
 import '../widgets/shared/app_page_header.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/loading_state.dart';
@@ -1530,16 +1533,14 @@ class _DeliveryManifestSheet extends StatelessWidget {
                                       order: o,
                                       customerName: customerName,
                                       onStart: o['status'] == 'confirmed'
-                                          ? () => orderProv.updateStatus(
-                                              o['id'] as int,
-                                              'in_transit',
+                                          ? () => _startDelivery(
+                                              context,
+                                              o,
+                                              orderProv,
                                             )
                                           : null,
                                       onComplete: o['status'] == 'in_transit'
-                                          ? () => orderProv.updateStatus(
-                                              o['id'] as int,
-                                              'completed',
-                                            )
+                                          ? () => _completeDelivery(context, o)
                                           : null,
                                     );
                                   }),
@@ -1556,6 +1557,91 @@ class _DeliveryManifestSheet extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _startDelivery(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+    OrderProvider orderProvider,
+  ) async {
+    final order = Order.fromMap(orderData);
+    final orderId = order.id;
+    if (orderId == null) return;
+
+    final smsMessage = _deliveryStartedSms(order);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final palette = AppColors.of(ctx);
+        return AlertDialog(
+          backgroundColor: palette.card,
+          title: Text(
+            'Start Delivery?',
+            style: Theme.of(ctx).textTheme.headlineSmall,
+          ),
+          content: Text(
+            'This will move the order to In Transit and notify the customer by SMS.',
+            style: Theme.of(
+              ctx,
+            ).textTheme.bodyMedium?.copyWith(color: palette.mutedForeground),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: palette.statusBusy,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Start Delivery'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+
+    await orderProvider.updateStatus(orderId, 'in_transit');
+    if (!context.mounted) return;
+    if (orderProvider.error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProvider.error!)));
+      return;
+    }
+
+    await SmsHandlerUtils.sendReply(order.phoneNumber, smsMessage);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Delivery started. Customer SMS notification queued.'),
+      ),
+    );
+  }
+
+  Future<void> _completeDelivery(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+  ) async {
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => CompleteOrderSheet(order: Order.fromMap(orderData)),
+    );
+  }
+
+  String _deliveryStartedSms(Order order) {
+    final quantity = order.quantity > 0
+        ? ' (${order.quantity} gallon${order.quantity == 1 ? '' : 's'})'
+        : '';
+    return 'JJ Clover: Your water order$quantity is on the way. '
+        'Please prepare to receive it. Thank you!';
   }
 }
 

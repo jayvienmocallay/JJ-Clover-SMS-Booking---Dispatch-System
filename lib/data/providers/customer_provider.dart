@@ -18,11 +18,16 @@ class CustomerProvider extends ChangeNotifier {
   int get count => _customers.length;
   String? get error => _error;
 
+  void _notifyIfActive() {
+    if (!_disposed) notifyListeners();
+  }
+
   /// Loads all customers with barangay info and notifies listeners
   Future<void> loadCustomers() async {
+    if (_disposed) return;
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    _notifyIfActive();
 
     try {
       _customers = await _repository.getCustomersWithBarangay();
@@ -31,8 +36,9 @@ class CustomerProvider extends ChangeNotifier {
       _error = e.toString();
     }
 
+    if (_disposed) return;
     _isLoading = false;
-    notifyListeners();
+    _notifyIfActive();
   }
 
   /// Inserts a new customer and refreshes the list
@@ -43,7 +49,7 @@ class CustomerProvider extends ChangeNotifier {
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
-      if (!_disposed) notifyListeners();
+      _notifyIfActive();
     }
   }
 
@@ -55,7 +61,7 @@ class CustomerProvider extends ChangeNotifier {
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
-      if (!_disposed) notifyListeners();
+      _notifyIfActive();
     }
   }
 
@@ -70,7 +76,7 @@ class CustomerProvider extends ChangeNotifier {
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
-      if (!_disposed) notifyListeners();
+      _notifyIfActive();
       rethrow;
     }
   }
@@ -86,7 +92,7 @@ class CustomerProvider extends ChangeNotifier {
 
   void clearError() {
     _error = null;
-    notifyListeners();
+    _notifyIfActive();
   }
 
   @override

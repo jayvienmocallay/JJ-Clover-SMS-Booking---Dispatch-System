@@ -171,7 +171,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return _barangays.where((b) {
       final zone = b['delivery_zone'] as String? ?? '';
       final name = b['name'] as String? ?? '';
-      final days = ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
+      final dbDeliveryDay = b['delivery_day'] as String?;
+      final days = dbDeliveryDay != null && dbDeliveryDay.trim().isNotEmpty
+          ? dbDeliveryDay
+                .split(',')
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toList()
+          : ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
       return days.contains(day);
     }).toList();
   }
