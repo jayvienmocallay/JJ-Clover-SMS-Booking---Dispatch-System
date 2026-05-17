@@ -267,18 +267,19 @@ class SmsBackgroundService {
         sender: sender,
       );
 
+      final parsed = SmsParser.parse(message);
+
       await _modeManager.loadPersistedMode();
 
       final handledByFirstContact = await _handleFirstContactIfNeeded(
         sender: sender,
+        parsed: parsed,
         sourceMessageId: effectiveSourceMessageId,
       );
       if (handledByFirstContact) {
         await _receipts.complete(effectiveSourceMessageId);
         return;
       }
-
-      final parsed = SmsParser.parse(message);
 
       final handledByPrivacyFlow = await _registrationHandler.handle(
         sender: sender,
@@ -454,6 +455,7 @@ class SmsBackgroundService {
 
   Future<bool> _handleFirstContactIfNeeded({
     required String sender,
+    required ParsedSms parsed,
     String? sourceMessageId,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
@@ -479,6 +481,11 @@ class SmsBackgroundService {
 
     await DatabaseHelper.instance.markFirstContactNotified(normalizedSender);
     debugPrint('First-contact automated reply sent to $normalizedSender');
+
+    if (parsed.command == SmsCommand.drop) {
+      return false;
+    }
+
     return true;
   }
 }
