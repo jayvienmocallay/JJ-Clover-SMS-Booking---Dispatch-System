@@ -49,8 +49,8 @@ class SmsRegistrationCopy {
     required String address,
   }) =>
                                                 'Nakarehistro na! $name | $barangay | $address\n'
-            'Gikolekta ang datos sumala sa RA 10173. I-text ang MYDATA para makita o '
-            'DELETEDATA para tangtangon ang imong datos bisan kanusa.\n'
+            'Gikolekta ang data sumala sa RA 10173. I-text ang MYDATA para makita o '
+            'DELETEDATA para tangtangon ang imong data bisan kanusa.\n'
                         'Pwede na ka mo-text ug DELIVER [qty] o DROP [qty] para mo-order.';
 
   /// Sent when REGISTER is missing required fields.
@@ -74,13 +74,13 @@ class SmsRegistrationCopy {
   /// Sent when the barangay is not recognized.
   static String invalidBarangay(String input) =>
       'Wala makita ang barangay "$input".\n'
-      'Balidong barangay: $validBarangaysText.\n'
+      'Valid nga barangay: $validBarangaysText.\n'
       'Palihug sulayi pag-usab.';
 
   /// Sent when a known number sends REGISTER.
   static const String alreadyRegistered =
       'Nakarehistro na ka. I-text ang DELIVER [qty] o DROP [qty] para mo-order, '
-      'MYDATA para makita ang imong datos, o DELETEDATA para tangtangon kini.';
+      'MYDATA para makita ang imong data, o DELETEDATA para tangtangon kini.';
 
     /// Sent when REGISTER arrives without required parts.
     static const String registerHelp = registerMissingFields;
@@ -96,7 +96,7 @@ class SmsRegistrationCopy {
       'DELIVER [qty] - pananglitan DELIVER 5\n'
       'DELIVER [qty] NEW - para sa bag-ong galon\n'
       'DROP [qty] - para sa walk-in pickup\n'
-      'STATUS - para masusi ang status sa estasyon\n\n'
+      'STATUS - para mahibal-an ang status sa estasyon\n\n'
       'Ang imong mensahe awtomatikong iproseso.';
 
   /// Sent with [firstContactWelcome] when the first-time sender is not yet in
@@ -120,36 +120,36 @@ class SmsRegistrationCopy {
     final addressLine = (address != null && address.trim().isNotEmpty)
         ? '\nAdres: $address'
         : '';
-    return 'Ang imong datos sa rekord:\n'
+    return 'Ang imong data sa rekord:\n'
         'Ngalan: $name\n'
         'Telepono: $phone\n'
         'Barangay: $barangay'
         '$addressLine\n'
-        'Tubaga ang DELETEDATA para permanenteng tangtangon ang imong datos.';
+        'Tubaga ang DELETEDATA para permanenteng tangtangon ang imong data.';
   }
 
   /// Sent when MYDATA / DELETEDATA / OPTOUT comes from a number with no record.
   static const String noDataOnFile =
-      'Walay datos para niini nga numero. Tubaga og REGISTER [imong tibuok '
+      'Walay data para niini nga numero. Tubaga og REGISTER [imong tibuok '
       'ngalan] para marehistro.';
 
   /// Confirmation prompt that warns deletion is permanent (RA 10173 right to erasure).
   static const String deleteWarning =
-      'PASIDAAN: Kini magpermanente nga mopapas sa imong customer profile, mga '
-      'schedule, ug historya sa mensahe. DILI NI MAUNDO. Tubaga og CONFIRM '
+      'PASIDAAN: Kini magpermanente nga delete sa imong customer profile, mga '
+      'schedule, ug historya sa mensahe. DILI NI MABALIK. Tubaga og CONFIRM '
       'DELETE sulod sa 30 minutos para ipadayon, o bisan unsang lain nga text '
       'para kanselar.';
 
   /// Sent when the customer cancels the deletion (anything except CONFIRM DELETE).
   static const String deleteCancelled =
-      'Gikanselar ang pagtangtang. Wala giusab ang imong datos.';
+      'Gikanselar ang pagtangtang. Wala giusab ang imong data.';
 
   /// Sent after the customer record (and related personal data) is removed.
   static const String deleteComplete =
-      'Permanente nang natangtang ang imong datos. Salamat sa paggamit sa JJ Clover.';
+      'Permanente nang natangtang ang imong data. Salamat sa paggamit sa JJ Clover.';
 
   /// Sent when CONFIRM DELETE arrives without a pending delete request.
   static const String confirmDeleteWithoutRequest =
       'Walay pending nga request sa pagtangtang. Tubaga una og DELETEDATA kung '
-      'gusto nimo tangtangon ang imong datos.';
+      'gusto nimo tangtangon ang imong data.';
 }

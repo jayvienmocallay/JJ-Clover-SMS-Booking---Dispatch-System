@@ -231,13 +231,31 @@ class SmsHandlerUtils {
     );
     final orderId = await _orders.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
+    final displayStatus = _displayStatus(status);
     await PushNotificationService.showMessageNotification(
-      title: 'Unrecognized Message',
-      body: '$status from $sender',
+      title: 'Dili Mailhan nga Mensahe',
+      body: '$displayStatus gikan $sender',
       sender: sender,
     );
     debugPrint('Saved unrecognized message from $normalizedSender: $status');
     return orderId;
+  }
+
+  static String _displayStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'rejected':
+        return 'Gireject';
+      case 'unregistered':
+        return 'Wala pa nakarehistro';
+      case 'incomplete':
+        return 'Kulang';
+      case 'prebook':
+        return 'Pre-book';
+      case 'unrecognized':
+        return 'Dili mailhan';
+      default:
+        return status;
+    }
   }
 }
 

@@ -20,7 +20,7 @@ class YesCommandHandler {
     if (context == null) {
       await SmsHandlerUtils.sendReply(
         sender,
-        'No pending pre-book found. Please send a DELIVER command first.',
+        'Walay pending nga pre-book. Palihug mag-send una ug DELIVER.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -31,7 +31,7 @@ class YesCommandHandler {
       await _preBookStore.remove(normalizedSender);
       await SmsHandlerUtils.sendReply(
         sender,
-        'Pre-book offer has expired. Please send a new DELIVER command.',
+        'Na expire na ang pre-book offer. Palihug mag-send ug bag-ong DELIVER.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -74,7 +74,7 @@ class YesCommandHandler {
       await _preBookStore.remove(normalizedSender);
       await SmsHandlerUtils.sendReply(
         sender,
-        'This pre-book was already confirmed. Reply CANCEL to cancel it, or send a new DELIVER command later.',
+        'Nakumpirma na kining pre-book. Tubaga ug CANCEL para ma kansel, o mag-send ug bag-ong DELIVER unya.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -83,9 +83,9 @@ class YesCommandHandler {
 
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
-      title: 'Pre-book Confirmed',
+      title: 'Nakumpirma ang Pre-book',
       body:
-          '${context.quantity} gallon(s) from $sender – ${context.deliveryDay}',
+          '${context.quantity} galon gikan $sender - ${context.deliveryDay}',
       sender: sender,
     );
 
@@ -93,8 +93,8 @@ class YesCommandHandler {
 
     await SmsHandlerUtils.sendReply(
       sender,
-      'Pre-book confirmed! Your order of ${context.quantity} gallon(s) '
-      'is scheduled for ${context.deliveryDay}.',
+      'Nakumpirma ang pre-book! Ang imong order nga ${context.quantity} ka galon '
+      'naka-iskedyul para sa ${context.deliveryDay}.',
       sourceMessageId: sourceMessageId,
     );
   }

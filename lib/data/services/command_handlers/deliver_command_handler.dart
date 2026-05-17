@@ -86,7 +86,7 @@ class DeliverCommandHandler {
       );
       await SmsHandlerUtils.sendReply(
         sender,
-        'Customer profile is incomplete. Please call the station.',
+        'Kulang ang profile sa customer. Palihug tawagi ang estasyon.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -178,7 +178,7 @@ class DeliverCommandHandler {
 
       await SmsHandlerUtils.sendReply(
         sender,
-        'No active delivery schedule found for your account. Please call the station.',
+        'Walay aktibong schedule sa delivery para sa imong account. Palihug tawagi ang estasyon.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -207,7 +207,7 @@ class DeliverCommandHandler {
     if (orderId == 0) {
       await SmsHandlerUtils.sendReply(
         sender,
-        'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
+        'Nadawat na kining order. Tubaga ug CANCEL para ma kansel, o hulat ug 1 ka oras para mo-order pag-usab.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -216,8 +216,8 @@ class DeliverCommandHandler {
 
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
-      title: 'New Delivery Order',
-      body: '${parsed.quantity} gallon(s) from $sender – $deliveryDay',
+      title: 'Bag-ong Delivery Order',
+      body: '${parsed.quantity} galon gikan $sender - $deliveryDay',
       sender: sender,
     );
 
@@ -240,7 +240,7 @@ class DeliverCommandHandler {
     } else {
       await SmsHandlerUtils.sendReply(
         sender,
-        'Order received. Past today\'s cutoff time. Your order has been queued for $deliveryDay.',
+        'Nadawat ang order. Lapas na sa cutoff time karon. Gi-queue ang imong order para sa $deliveryDay.',
 
         sourceMessageId: sourceMessageId,
       );

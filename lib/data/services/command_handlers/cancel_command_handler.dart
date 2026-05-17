@@ -43,7 +43,7 @@ class CancelCommandHandler {
         AppEventBus().notifyOrderReceived();
         await SmsHandlerUtils.sendReply(
           sender,
-          'Pending pre-book cancelled. No active order remains.',
+          'Gikanselar ang pending pre-book. Wala nay aktibong order nga nabilin.',
 
           sourceMessageId: sourceMessageId,
         );
@@ -52,7 +52,7 @@ class CancelCommandHandler {
 
       await SmsHandlerUtils.sendReply(
         sender,
-        'No active order found to cancel.',
+        'Walay aktibong order nga makansel.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -64,7 +64,7 @@ class CancelCommandHandler {
     if (latestStatus == 'in_transit') {
       await SmsHandlerUtils.sendReply(
         sender,
-        'Your latest order is already in transit. Please call the station to cancel.',
+        'Ang imong pinakabag-ong order naa na sa transit. Palihug tawagi ang estasyon para sa pag kansel.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -75,7 +75,7 @@ class CancelCommandHandler {
     if (orderId == null) {
       await SmsHandlerUtils.sendReply(
         sender,
-        'We could not find an active order to cancel.',
+        'Wala mi nakakita ug aktibong order nga makansel.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -91,7 +91,7 @@ class CancelCommandHandler {
     if (updated == 0) {
       await SmsHandlerUtils.sendReply(
         sender,
-        'We could not find an active order to cancel.',
+        'Wala mi nakakita ug aktibong order nga makansel.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -100,17 +100,17 @@ class CancelCommandHandler {
 
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
-      title: 'Order Cancelled',
-      body: 'Customer cancelled order #$orderId from $sender',
+      title: 'Order Gikansel',
+      body: 'Gikansel sa customer ang order #$orderId gikan $sender',
       sender: sender,
     );
 
     final preBookNote = clearedPreBook
-        ? ' Any pending pre-book offer was also cleared.'
+        ? ' Ang pending nga pre-book offer natangal sad.'
         : '';
     await SmsHandlerUtils.sendReply(
       sender,
-      'Order #$orderId has been cancelled.$preBookNote',
+      'Gikansel na ang order #$orderId.$preBookNote',
       sourceMessageId: sourceMessageId,
     );
   }
