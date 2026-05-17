@@ -13,7 +13,8 @@ import '../widgets/shared/status_badge.dart';
 import '../widgets/shared/empty_state.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final void Function(int tabIndex)? onNavigateToTab;
+  final void Function(int tabIndex, {int? ordersFilterIndex})?
+  onNavigateToTab;
 
   const DashboardScreen({super.key, this.onNavigateToTab});
 
@@ -478,6 +479,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               'Total Orders',
               palette.primary,
               'View all',
+              ordersFilterIndex: 0,
             ),
             _overviewCard(
               context,
@@ -485,6 +487,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               'Pending',
               palette.statusAway,
               'View',
+              ordersFilterIndex: 1,
             ),
             _overviewCard(
               context,
@@ -492,6 +495,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               'Confirmed',
               palette.statusOperating,
               'View',
+              ordersFilterIndex: 2,
             ),
             _overviewCard(
               context,
@@ -499,6 +503,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               'In Transit',
               palette.statusBusy,
               'View',
+              ordersFilterIndex: 3,
             ),
           ],
         ),
@@ -511,7 +516,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String value,
     String label,
     Color color,
-    String actionLabel,
+    String actionLabel, {
+    int? ordersFilterIndex,
+  }
   ) {
     return Container(
       padding: const EdgeInsets.all(kCardPadding),
@@ -541,7 +548,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               GestureDetector(
-                onTap: () => widget.onNavigateToTab?.call(1),
+                onTap: () => widget.onNavigateToTab?.call(
+                  1,
+                  ordersFilterIndex: ordersFilterIndex,
+                ),
                 child: Text(
                   actionLabel,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -820,7 +830,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               InkWell(
-                onTap: () => widget.onNavigateToTab?.call(1),
+                onTap: () => widget.onNavigateToTab?.call(
+                  1,
+                  ordersFilterIndex: 0,
+                ),
                 borderRadius: BorderRadius.circular(6),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
