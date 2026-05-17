@@ -100,6 +100,7 @@ class DeliverCommandHandler {
     final schedules = schedulesData.map((s) => Schedule.fromMap(s)).toList();
     final today = DeliveryDays.getToday();
     final requestTime = DateTime.now();
+    final isStaffAway = _modeManager.currentMode == SystemMode.staffAway;
 
     final validation = ZoneValidator.validate(
       customer: customer,
@@ -136,7 +137,9 @@ class DeliverCommandHandler {
 
       await SmsHandlerUtils.sendReply(
         sender,
-        validation.message!,
+        isStaffAway
+            ? _staffAwayPreBookReply(validation.message)
+            : validation.message!,
 
         sourceMessageId: sourceMessageId,
       );
@@ -152,7 +155,6 @@ class DeliverCommandHandler {
 
     String? deliveryDay;
     OrderStatus orderStatus;
-    final isStaffAway = _modeManager.currentMode == SystemMode.staffAway;
 
     if (isStaffAway) {
       deliveryDay = isBeforeCutoff
@@ -245,6 +247,16 @@ class DeliverCommandHandler {
         sourceMessageId: sourceMessageId,
       );
     }
+  }
+
+  String _staffAwayPreBookReply(String? scheduleMessage) {
+    const staffAwayNotice =
+        'Nadawat ang imong mensahe. Ang staff naa pa sa delivery. '
+        'Iproseso namo pagbalik.';
+    if (scheduleMessage == null || scheduleMessage.isEmpty) {
+      return staffAwayNotice;
+    }
+    return '$staffAwayNotice $scheduleMessage';
   }
 
   DateTime _scheduledDateForDay(String deliveryDay, {required DateTime from}) {
