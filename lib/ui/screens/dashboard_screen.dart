@@ -8,13 +8,14 @@ import '../../data/repositories/barangay_repository.dart';
 import '../../data/services/system_mode_manager.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/app_card.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/status_badge.dart';
 import '../widgets/shared/empty_state.dart';
+import '../widgets/shared/section_header.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final void Function(int tabIndex, {int? ordersFilterIndex})?
-  onNavigateToTab;
+  final void Function(int tabIndex, {int? ordersFilterIndex})? onNavigateToTab;
 
   const DashboardScreen({super.key, this.onNavigateToTab});
 
@@ -454,15 +455,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "Today's Overview",
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            Text(timeLabel, style: Theme.of(context).textTheme.labelSmall),
-          ],
+        SectionHeader(
+          title: "Today's Overview",
+          trailing: Text(
+            timeLabel,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
         ),
         const SizedBox(height: 12),
         GridView.count(
@@ -518,15 +516,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color color,
     String actionLabel, {
     int? ordersFilterIndex,
-  }
-  ) {
-    return Container(
+  }) {
+    return AppCard(
+      onTap: () =>
+          widget.onNavigateToTab?.call(1, ordersFilterIndex: ordersFilterIndex),
       padding: const EdgeInsets.all(kCardPadding),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).card,
-        borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: AppColors.of(context).border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -547,18 +541,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              GestureDetector(
-                onTap: () => widget.onNavigateToTab?.call(
-                  1,
-                  ordersFilterIndex: ordersFilterIndex,
-                ),
-                child: Text(
-                  actionLabel,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w600,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    actionLabel,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 2),
+                  Icon(Icons.arrow_forward, size: 12, color: color),
+                ],
               ),
             ],
           ),
@@ -570,49 +565,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildTodayZones(BuildContext context) {
     final palette = AppColors.of(context);
     final today = DeliveryDays.getToday();
-    return Container(
+    return AppCard(
       padding: const EdgeInsets.all(kCardPadding + 4),
-      decoration: BoxDecoration(
-        color: palette.card,
-        borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: palette.border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Today's Zones ($today)",
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              InkWell(
-                onTap: () => _showScheduleSheet(context),
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        'View schedule',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(color: palette.primary),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.arrow_forward,
-                        size: 12,
-                        color: palette.primary,
-                      ),
-                    ],
-                  ),
+          SectionHeader(
+            title: "Today's Zones ($today)",
+            trailing: InkWell(
+              onTap: () => _showScheduleSheet(context),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  children: [
+                    Text(
+                      'View schedule',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: palette.primary),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(Icons.arrow_forward, size: 12, color: palette.primary),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
           if (_todayBarangays.isEmpty)
@@ -812,52 +790,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .take(5)
         .toList();
 
-    return Container(
+    return AppCard(
       padding: const EdgeInsets.all(kCardPadding + 4),
-      decoration: BoxDecoration(
-        color: palette.card,
-        borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: palette.border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Recent Orders',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              InkWell(
-                onTap: () => widget.onNavigateToTab?.call(
-                  1,
-                  ordersFilterIndex: 0,
-                ),
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        'View all',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(color: palette.primary),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.arrow_forward,
-                        size: 12,
-                        color: palette.primary,
-                      ),
-                    ],
-                  ),
+          SectionHeader(
+            title: 'Recent Orders',
+            trailing: InkWell(
+              onTap: () =>
+                  widget.onNavigateToTab?.call(1, ordersFilterIndex: 0),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  children: [
+                    Text(
+                      'View all',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: palette.primary),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(Icons.arrow_forward, size: 12, color: palette.primary),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 16),
           if (recentOrders.isEmpty)
@@ -956,32 +915,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final palette = AppColors.of(context);
     Color color;
     Color bgColor;
+    IconData icon;
     switch (status) {
       case 'confirmed':
         color = palette.statusOperating;
         bgColor = palette.statusOperatingLight;
+        icon = Icons.check_circle;
         break;
       case 'pending':
         color = palette.statusAway;
         bgColor = palette.statusAwayLight;
+        icon = Icons.hourglass_top;
         break;
       case 'in_transit':
         color = palette.statusBusy;
         bgColor = palette.statusBusyLight;
+        icon = Icons.local_shipping;
         break;
       case 'cancelled':
       case 'rejected':
         color = palette.statusMaintenance;
         bgColor = palette.statusMaintenanceLight;
+        icon = Icons.cancel;
         break;
       default:
         color = palette.statusOperating;
         bgColor = palette.statusOperatingLight;
+        icon = Icons.done_all;
     }
     return StatusBadge(
       label: _statusDisplayLabel(status),
       color: color,
       bgColor: bgColor,
+      icon: icon,
     );
   }
 }

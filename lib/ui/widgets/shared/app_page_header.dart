@@ -24,9 +24,11 @@ class AppPageHeader extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                  fontSize: 26,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.displayLarge?.copyWith(fontSize: 26),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),
@@ -35,6 +37,8 @@ class AppPageHeader extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: AppColors.of(context).mutedForeground,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ],

@@ -5,6 +5,7 @@ class StatusBadge extends StatelessWidget {
   final Color color;
   final Color bgColor;
   final IconData? icon;
+  final bool outlined;
 
   const StatusBadge({
     super.key,
@@ -12,6 +13,7 @@ class StatusBadge extends StatelessWidget {
     required this.color,
     required this.bgColor,
     this.icon,
+    this.outlined = true,
   });
 
   @override
@@ -21,6 +23,9 @@ class StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(100),
+        border: outlined
+            ? Border.all(color: color.withValues(alpha: 0.25))
+            : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -35,6 +40,8 @@ class StatusBadge extends StatelessWidget {
               color: color,
               fontWeight: FontWeight.w600,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

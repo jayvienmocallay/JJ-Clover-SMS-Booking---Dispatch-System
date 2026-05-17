@@ -12,8 +12,11 @@ import '../../data/repositories/customer_repository.dart';
 import '../../data/services/sms_registration_copy.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/app_card.dart';
 import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/customer_avatar.dart';
 import '../widgets/shared/empty_state.dart';
+import '../widgets/shared/search_field.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
@@ -119,6 +122,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     GestureDetector(
                       onTap: _showAddCustomerSheet,
                       child: Container(
+                        constraints: const BoxConstraints(minHeight: 44),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 10,
@@ -153,30 +157,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
               ),
               const SizedBox(height: 20),
 
-              // --- Search bar ---
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.of(context).card,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.of(context).border),
-                ),
-                child: TextField(
-                  onChanged: (val) => setState(() => _search = val),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.of(context).foreground,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Search by name, phone, or barangay...',
-                    prefixIcon: Icon(
-                      Icons.search,
-                      size: 18,
-                      color: AppColors.of(context).mutedForeground,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
+              SearchField(
+                hintText: 'Search name, phone, or barangay...',
+                initialValue: _search,
+                onChanged: (val) => setState(() => _search = val),
               ),
               const SizedBox(height: 16),
 
@@ -197,40 +181,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   final name = c['name'] as String? ?? '';
                   final phone = c['contact_number'] as String? ?? '';
                   final barangay = c['barangay'] as String? ?? '';
-                  final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: Container(
+                    child: AppCard(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.of(context).card,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.of(context).border),
-                      ),
                       child: Row(
                         children: [
-                          // Avatar with initial
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: AppColors.of(context).primaryLight,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                initial,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  color: AppColors.of(context).primary,
-                                ),
-                              ),
-                            ),
-                          ),
+                          CustomerAvatar(name: name),
                           const SizedBox(width: 16),
-                          // Name + phone + barangay
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,73 +204,41 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
-                                Row(
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 4,
                                   children: [
-                                    Icon(
-                                      Icons.phone,
-                                      size: 12,
-                                      color: AppColors.of(
-                                        context,
-                                      ).mutedForeground,
+                                    _CustomerMeta(
+                                      icon: Icons.phone,
+                                      label: phone,
                                     ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      phone,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.of(
-                                          context,
-                                        ).mutedForeground,
+                                    if (barangay.isNotEmpty)
+                                      _CustomerMeta(
+                                        icon: Icons.location_on,
+                                        label: barangay,
                                       ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Icon(
-                                      Icons.location_on,
-                                      size: 12,
-                                      color: AppColors.of(
-                                        context,
-                                      ).mutedForeground,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Flexible(
-                                      child: Text(
-                                        barangay,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.of(
-                                            context,
-                                          ).mutedForeground,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ],
                             ),
                           ),
-                          // Edit button
-                          GestureDetector(
-                            onTap: () => _editCustomer(c),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              child: Icon(
-                                Icons.edit,
-                                size: 20,
-                                color: AppColors.of(context).primary,
-                              ),
+                          IconButton(
+                            tooltip: 'Edit customer',
+                            onPressed: () => _editCustomer(c),
+                            icon: Icon(
+                              Icons.edit,
+                              size: 20,
+                              color: AppColors.of(context).primary,
                             ),
                           ),
-                          // Delete button
-                          GestureDetector(
-                            onTap: () => _deleteCustomer(c['id'] as int, name),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              child: Icon(
-                                Icons.delete_outline,
-                                size: 20,
-                                color: AppColors.of(context).statusMaintenance,
-                              ),
+                          IconButton(
+                            tooltip: 'Delete customer',
+                            onPressed: () =>
+                                _deleteCustomer(c['id'] as int, name),
+                            icon: Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: AppColors.of(context).statusMaintenance,
                             ),
                           ),
                         ],
@@ -604,6 +531,32 @@ class _CustomersScreenState extends State<CustomersScreen> {
 /// Add Customer bottom sheet — 2-step flow:
 /// Step 1: Data Privacy Consent (RA 10173)
 /// Step 2: Customer details form
+class _CustomerMeta extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _CustomerMeta({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: palette.mutedForeground),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: palette.mutedForeground),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
 class _AddCustomerForm extends StatefulWidget {
   const _AddCustomerForm();
 

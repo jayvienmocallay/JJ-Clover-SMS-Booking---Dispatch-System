@@ -308,33 +308,40 @@ class OrderCard extends StatelessWidget {
   Widget _buildStatusBadge(AppPalette palette) {
     Color color;
     Color bgColor;
+    IconData icon;
     switch (order.status) {
       case OrderStatus.pending:
         color = palette.statusAway;
         bgColor = palette.statusAwayLight;
+        icon = Icons.hourglass_top;
         break;
       case OrderStatus.confirmed:
         color = palette.statusOperating;
         bgColor = palette.statusOperatingLight;
+        icon = Icons.check_circle;
         break;
       case OrderStatus.inTransit:
         color = palette.statusBusy;
         bgColor = palette.statusBusyLight;
+        icon = Icons.local_shipping;
         break;
       case OrderStatus.cancelled:
       case OrderStatus.rejected:
         color = palette.statusMaintenance;
         bgColor = palette.statusMaintenanceLight;
+        icon = Icons.cancel;
         break;
       case OrderStatus.completed:
         color = palette.statusOperating;
         bgColor = palette.statusOperatingLight;
+        icon = Icons.done_all;
         break;
     }
     return StatusBadge(
       label: order.status.displayLabel,
       color: color,
       bgColor: bgColor,
+      icon: icon,
     );
   }
 
@@ -493,20 +500,27 @@ class _ActionButton extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         splashColor: Colors.white.withValues(alpha: 0.15),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 16, color: Colors.white),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: Colors.white),
-              ),
-            ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 16, color: Colors.white),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelLarge?.copyWith(color: Colors.white),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
