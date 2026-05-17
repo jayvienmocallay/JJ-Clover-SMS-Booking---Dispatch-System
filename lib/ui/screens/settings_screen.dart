@@ -27,14 +27,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _barangayController = TextEditingController();
   List<Map<String, dynamic>> _barangays = [];
-  final Set<String> _selectedDays = {
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-  };
+  final Set<String> _selectedDays = {};
 
   int _cutoffHour = AppConstants.orderCutOffHour;
   int _cutoffMinute = AppConstants.orderCutOffMinute;
@@ -154,9 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     _barangayController.clear();
     setState(
-      () => _selectedDays
-        ..clear()
-        ..addAll(_allWeekdays),
+      () => _selectedDays.clear(),
     );
     if (mounted) {
       ScaffoldMessenger.of(
