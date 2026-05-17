@@ -48,22 +48,28 @@ class SmsRegistrationCopy {
     required String barangay,
     required String address,
   }) =>
-            '\u2705 Registered! $name | $barangay | $address\n'
+                        'Registered! $name | $barangay | $address\n'
       'Data collected per RA 10173. Text MYDATA to view or DELETEDATA to remove '
       'your data anytime.\n'
-      'You can now text DELIVER [qty] to order.';
+            'You can now text DELIVER [qty] or DROP [qty] to order.';
 
   /// Sent when REGISTER is missing required fields.
   static const String registerMissingFields =
       'Incomplete info. Please text:\n'
       'REGISTER [name], [barangay], [address]\n'
-      'Example: REGISTER Juan, Katipunan, Purok 1-A';
+      'Example: REGISTER Juan, Katipunan, Purok 1-A\n'
+      'We collect your name, phone number, barangay, and address for order '
+      'processing. By registering, you agree to the app\'s Data Privacy Act '
+      'notice.';
 
   /// Sent when REGISTER is not used.
   static const String registerWrongFormat =
       'To register, text:\n'
       'REGISTER [name], [barangay], [address]\n'
-      'Example: REGISTER Juan, Katipunan, Purok 1-A';
+      'Example: REGISTER Juan, Katipunan, Purok 1-A\n'
+      'We collect your name, phone number, barangay, and address for order '
+      'processing. By registering, you agree to the app\'s Data Privacy Act '
+      'notice.';
 
   /// Sent when the barangay is not recognized.
   static String invalidBarangay(String input) =>
@@ -73,7 +79,7 @@ class SmsRegistrationCopy {
 
   /// Sent when a known number sends REGISTER.
   static const String alreadyRegistered =
-      'You are already registered. Text DELIVER [qty] to order, MYDATA to view '
+      'You are already registered. Text DELIVER [qty] or DROP [qty] to order, MYDATA to view '
       'your data, or DELETEDATA to remove it.';
 
     /// Sent when REGISTER arrives without required parts.
@@ -96,7 +102,9 @@ class SmsRegistrationCopy {
   /// Sent with [firstContactWelcome] when the first-time sender is not yet in
   /// the customer database.
   static const String firstContactPrivacyNotice =
-      'You are not yet registered in our system. To register, text: '
+      'You are not yet registered in our system. We collect your name, phone '
+      'number, barangay, and address for order processing. By registering, '
+      'you agree to the app\'s Data Privacy Act notice. To register, text: '
       'REGISTER [name], [barangay], [address].';
 
   // --- Data subject rights (MYDATA / DELETEDATA / OPTOUT) ---
