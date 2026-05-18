@@ -9,6 +9,7 @@ import '../../data/providers/customer_provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/repositories/barangay_repository.dart';
 import '../../data/repositories/customer_repository.dart';
+import '../../data/repositories/order_repository.dart';
 import '../../data/services/order_creation_service.dart';
 import '../theme/app_theme.dart';
 import 'shared/bottom_sheet_handle.dart';
@@ -24,9 +25,9 @@ class AddOrderForm extends StatefulWidget {
 }
 
 class _AddOrderFormState extends State<AddOrderForm> {
-  final _orderCreation = OrderCreationService();
-  final _customerRepository = CustomerRepository();
-  final _barangayRepository = BarangayRepository();
+  late final OrderCreationService _orderCreation;
+  late final CustomerRepository _customerRepository;
+  late final BarangayRepository _barangayRepository;
 
   int? _selectedCustomerId;
   int? _selectedBarangayId;
@@ -48,6 +49,11 @@ class _AddOrderFormState extends State<AddOrderForm> {
   @override
   void initState() {
     super.initState();
+    _customerRepository = context.read<CustomerRepository>();
+    _barangayRepository = context.read<BarangayRepository>();
+    _orderCreation = OrderCreationService(
+      orderRepository: context.read<OrderRepository>(),
+    );
     _loadBarangays();
     if (widget.prefilledPhone != null) {
       _phoneController.text = PhoneNumberUtils.normalize(

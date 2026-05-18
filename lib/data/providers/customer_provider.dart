@@ -45,7 +45,8 @@ class CustomerProvider extends ChangeNotifier {
   Future<void> addCustomer(Map<String, dynamic> customerData) async {
     _error = null;
     try {
-      await _repository.insertCustomer(customerData);
+      final insertedId = await _repository.insertCustomer(customerData);
+      _ensureRowsChanged(insertedId, 'Customer was not created.');
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
@@ -57,7 +58,8 @@ class CustomerProvider extends ChangeNotifier {
   Future<void> deleteCustomer(int customerId) async {
     _error = null;
     try {
-      await _repository.deleteCustomer(customerId);
+      final deleted = await _repository.deleteCustomer(customerId);
+      _ensureRowsChanged(deleted, 'No customer was deleted.');
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
@@ -72,7 +74,11 @@ class CustomerProvider extends ChangeNotifier {
   ) async {
     _error = null;
     try {
-      await _repository.updateCustomer(customerId, customerData);
+      final updated = await _repository.updateCustomer(
+        customerId,
+        customerData,
+      );
+      _ensureRowsChanged(updated, 'No customer was updated.');
       await loadCustomers();
     } catch (e) {
       _error = e.toString();
@@ -99,5 +105,11 @@ class CustomerProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     super.dispose();
+  }
+
+  void _ensureRowsChanged(int result, String message) {
+    if (result == 0) {
+      throw StateError(message);
+    }
   }
 }

@@ -235,12 +235,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  Future<void> _confirmOrder(Order order, OrderProvider orderProv) async {
+  Future<bool> _confirmOrder(Order order, OrderProvider orderProv) async {
     await orderProv.updateStatus(order.id!, 'confirmed');
-    if (!mounted) return;
+    if (!mounted) return false;
+    if (orderProv.error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProv.error!)));
+      return false;
+    }
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Order confirmed ✓')));
+    return true;
   }
 
   Future<bool> _startDelivery(Order order, OrderProvider orderProv) async {
@@ -660,9 +667,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  void _showRejectDialog(int orderId, OrderProvider orderProv) {
+  Future<bool> _showRejectDialog(int orderId, OrderProvider orderProv) async {
     String? reason;
-    showDialog(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.of(ctx).card,
@@ -705,23 +712,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.of(ctx).statusMaintenance,
             ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await orderProv.updateStatus(
-                orderId,
-                'rejected',
-                reason: reason?.trim(),
-              );
-              if (!mounted) return;
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Order rejected ✓')));
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Reject'),
           ),
         ],
       ),
     );
+    if (confirmed != true || !mounted) return false;
+
+    await orderProv.updateStatus(orderId, 'rejected', reason: reason?.trim());
+    if (!mounted) return false;
+    if (orderProv.error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProv.error!)));
+      return false;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Order rejected ✓')));
+    return true;
   }
 }
 

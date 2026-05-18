@@ -92,12 +92,13 @@ class OrderProvider extends ChangeNotifier {
   }) async {
     _error = null;
     try {
-      await _repository.updateOrderStatus(
+      final updated = await _repository.updateOrderStatus(
         orderId,
         newStatus,
         reason: reason,
         notes: notes,
       );
+      _ensureRowsChanged(updated, 'No order was updated.');
       await loadOrders();
     } catch (e) {
       _error = e.toString();
@@ -108,7 +109,8 @@ class OrderProvider extends ChangeNotifier {
   Future<void> assignStaffToOrder(int orderId, int staffId) async {
     _error = null;
     try {
-      await _repository.assignStaffToOrder(orderId, staffId);
+      final updated = await _repository.assignStaffToOrder(orderId, staffId);
+      _ensureRowsChanged(updated, 'No order was updated.');
       await loadOrders();
     } catch (e) {
       _error = e.toString();
@@ -123,11 +125,12 @@ class OrderProvider extends ChangeNotifier {
   }) async {
     _error = null;
     try {
-      await _repository.recordDeliveryIssue(
+      final updated = await _repository.recordDeliveryIssue(
         orderId,
         note: note,
         keepForRedispatch: keepForRedispatch,
       );
+      _ensureRowsChanged(updated, 'No order was updated.');
       await loadOrders();
     } catch (e) {
       _error = e.toString();
@@ -145,7 +148,7 @@ class OrderProvider extends ChangeNotifier {
   }) async {
     _error = null;
     try {
-      await _repository.completeOrder(
+      final updated = await _repository.completeOrder(
         orderId,
         quantityDelivered: quantityDelivered,
         returnedContainers: returnedContainers,
@@ -153,6 +156,7 @@ class OrderProvider extends ChangeNotifier {
         notes: notes,
         staffId: staffId,
       );
+      _ensureRowsChanged(updated, 'No order was updated.');
       await loadOrders();
     } catch (e) {
       _error = e.toString();
@@ -164,7 +168,8 @@ class OrderProvider extends ChangeNotifier {
   Future<void> addOrder(Map<String, dynamic> orderData) async {
     _error = null;
     try {
-      await _repository.insertOrder(orderData);
+      final insertedId = await _repository.insertOrder(orderData);
+      _ensureRowsChanged(insertedId, 'Order was not created.');
       await loadOrders();
     } catch (e) {
       _error = e.toString();
@@ -175,5 +180,11 @@ class OrderProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     _notifyIfActive();
+  }
+
+  void _ensureRowsChanged(int result, String message) {
+    if (result == 0) {
+      throw StateError(message);
+    }
   }
 }

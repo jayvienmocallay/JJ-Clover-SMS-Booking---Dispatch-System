@@ -261,7 +261,8 @@ class _ChatScreenState extends State<ChatScreen> {
     DateTime? lastDate;
 
     for (final msg in messages) {
-      final dt = DateTime.parse(msg['sent_at'] as String? ?? '');
+      final dt =
+          DateTime.tryParse(msg['sent_at'] as String? ?? '') ?? DateTime.now();
       final msgDate = DateTime(dt.year, dt.month, dt.day);
 
       if (lastDate == null || msgDate != lastDate) {

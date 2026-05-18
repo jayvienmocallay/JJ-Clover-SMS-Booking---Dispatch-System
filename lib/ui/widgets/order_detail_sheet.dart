@@ -16,8 +16,8 @@ class OrderDetailSheet extends StatefulWidget {
   final String? phone;
   final String? barangay;
   final String? address;
-  final VoidCallback? onConfirm;
-  final VoidCallback? onReject;
+  final Future<bool> Function()? onConfirm;
+  final Future<bool> Function()? onReject;
   final Future<bool> Function()? onStartDelivery;
   final VoidCallback? onCompleted;
 
@@ -150,6 +150,20 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
   Future<void> _handleStartDelivery() async {
     final started = await widget.onStartDelivery?.call() ?? false;
     if (started && mounted) {
+      Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _handleConfirm() async {
+    final confirmed = await widget.onConfirm?.call() ?? false;
+    if (confirmed && mounted) {
+      Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _handleReject() async {
+    final rejected = await widget.onReject?.call() ?? false;
+    if (rejected && mounted) {
       Navigator.pop(context, true);
     }
   }
@@ -470,7 +484,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                 if (canCancel)
                   Expanded(
                     child: GestureDetector(
-                      onTap: widget.onReject,
+                      onTap: _handleReject,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
@@ -494,10 +508,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                 if (canConfirm)
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        widget.onConfirm!();
-                        Navigator.pop(context, true);
-                      },
+                      onTap: _handleConfirm,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
@@ -648,13 +659,9 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     final order = widget.order;
     return [
       if (order.status == OrderStatus.pending && widget.onConfirm != null)
-        _actionRow(
-          Icons.check_circle_outline,
-          'Confirm order',
-          widget.onConfirm!,
-        ),
+        _actionRow(Icons.check_circle_outline, 'Confirm order', _handleConfirm),
       if (order.status == OrderStatus.pending && widget.onReject != null)
-        _actionRow(Icons.cancel_outlined, 'Reject order', widget.onReject!),
+        _actionRow(Icons.cancel_outlined, 'Reject order', _handleReject),
       if ((order.status == OrderStatus.confirmed ||
               order.status == OrderStatus.inTransit) &&
           order.type != OrderType.unrecognized)
@@ -740,7 +747,9 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
             label != 'Complete delivery' &&
             label != 'Assign staff' &&
             label != 'Start delivery' &&
-            label != 'Record delivery issue') {
+            label != 'Record delivery issue' &&
+            label != 'Confirm order' &&
+            label != 'Reject order') {
           Navigator.pop(context, true);
         }
       },

@@ -25,6 +25,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   bool _isLoading = true;
   bool _isRefreshing = false;
   bool _refreshPending = false;
+  String? _error;
   List<Map<String, dynamic>> _smsMessages = [];
   Map<String, String> _phoneToName = {};
   StreamSubscription? _messageSub;
@@ -70,10 +71,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
       setState(() {
         _smsMessages = results[0];
         _phoneToName = phoneToName;
+        _error = null;
         _isLoading = false;
       });
-    } catch (_) {
-      if (mounted && !silent) setState(() => _isLoading = false);
+    } catch (e) {
+      if (mounted && !silent) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     } finally {
       _isRefreshing = false;
       if (_refreshPending && mounted) {
@@ -128,7 +135,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          if (uniquePhones.isEmpty)
+          if (_error != null)
+            EmptyState(
+              icon: Icons.error_outline,
+              mascot: MascotPose.checklist,
+              title: 'Messages could not load',
+              message: _error!,
+            )
+          else if (uniquePhones.isEmpty)
             const EmptyState(
               icon: Icons.forum_outlined,
               mascot: MascotPose.smsConfirm,

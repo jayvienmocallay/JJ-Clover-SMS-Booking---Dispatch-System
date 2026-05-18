@@ -70,11 +70,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
 
     if (confirmed == true && mounted) {
-      await context.read<CustomerProvider>().deleteCustomer(customerId);
+      final customerProvider = context.read<CustomerProvider>();
+      await customerProvider.deleteCustomer(customerId);
       if (mounted) {
+        final error = customerProvider.error;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('$name deleted')));
+        ).showSnackBar(SnackBar(content: Text(error ?? '$name deleted')));
       }
     }
   }
@@ -460,6 +462,22 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               ),
                             );
                             return;
+                          } catch (_) {
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  customerProvider.error ??
+                                      'Failed to update customer',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+                          if (customerProvider.error != null) {
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(content: Text(customerProvider.error!)),
+                            );
+                            return;
                           }
 
                           if (ctx.mounted) Navigator.pop(ctx);
@@ -665,6 +683,12 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
     // ignore: use_build_context_synchronously
     await customerProv.addCustomer(customerData);
     if (!mounted) return;
+    if (customerProv.error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(customerProv.error!)));
+      return;
+    }
     navigator.pop();
     ScaffoldMessenger.of(context).showSnackBar(successSnack);
   }
