@@ -1,9 +1,13 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/models/order_model.dart';
 import '../../data/providers/order_provider.dart';
+import '../../data/repositories/audit_log_repository.dart';
 import '../../data/services/command_handlers/sms_handler_utils.dart';
+import '../security/admin_gate.dart';
 import '../theme/app_theme.dart';
 import 'shared/bottom_sheet_handle.dart';
 import 'shared/primary_action_button.dart';
@@ -47,6 +51,22 @@ class _CompleteOrderSheetState extends State<CompleteOrderSheet> {
       return;
     }
 
+    final needsAdminOverride =
+        _quantityDelivered != widget.order.quantity ||
+        !_cashCollected ||
+        (_returnedContainers != null && _returnedContainers! < 0) ||
+        (_returnedContainers != null &&
+            _returnedContainers! > widget.order.quantity);
+
+    if (needsAdminOverride) {
+      if (!await requireAdminPassword(
+        context,
+        reason:
+            'Admin password required to complete a delivery with quantity, '
+            'payment, or container discrepancies.',
+      )) return;
+    }
+
     final smsMessage = _deliveryCompletedSms();
     final confirmed = await _confirmCompleteDelivery(smsMessage);
     if (!confirmed || !mounted) return;
@@ -70,6 +90,21 @@ class _CompleteOrderSheetState extends State<CompleteOrderSheet> {
         SnackBar(content: Text(provider.error ?? 'Order was not completed.')),
       );
       return;
+    }
+
+    if (needsAdminOverride) {
+      unawaited(context.read<AuditLogRepository>().record(
+        action: 'delivery_completed_with_override',
+        entityType: 'order',
+        entityId: widget.order.id.toString(),
+        metadata: {
+          'ordered_quantity': widget.order.quantity,
+          'delivered_quantity': _quantityDelivered,
+          'returned_containers': _returnedContainers,
+          'cash_collected': _cashCollected,
+          'has_notes': _notesController.text.trim().isNotEmpty,
+        },
+      ));
     }
 
     await SmsHandlerUtils.sendReply(widget.order.phoneNumber, smsMessage);
