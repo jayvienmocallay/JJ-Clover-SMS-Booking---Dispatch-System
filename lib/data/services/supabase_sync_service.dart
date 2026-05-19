@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/utils/phone_number_utils.dart';
+import '../repositories/deletion_retry_queue_repository.dart';
+import '../repositories/retention_policy_repository.dart';
 import '../repositories/settings_repository.dart';
 import '../repositories/supabase_local_sync_repository.dart';
 
@@ -24,6 +26,10 @@ class SupabaseSyncService extends ChangeNotifier {
   StreamSubscription? _connectivitySub;
   final SettingsRepository _settings = SettingsRepository();
   final SupabaseLocalSyncRepository _localSync = SupabaseLocalSyncRepository();
+  final DeletionRetryQueueRepository _deletionRetries =
+      DeletionRetryQueueRepository();
+  final RetentionPolicyRepository _retentionPolicy =
+      RetentionPolicyRepository();
 
   bool get initialized => _initialized;
   bool get autoSyncEnabled => _autoSyncEnabled;
@@ -43,10 +49,10 @@ class SupabaseSyncService extends ChangeNotifier {
   ///   device's SMS receiver. Syncing would cause other devices to silently
   ///   drop messages they never saw.
   static const List<String> _syncTables = [
-    'barangays',     // no dependencies
-    'customers',     // depends on barangays
-    'orders',        // depends on customers
-    'sms_messages',  // no dependencies
+    'barangays', // no dependencies
+    'customers', // depends on barangays
+    'orders', // depends on customers
+    'sms_messages', // no dependencies
   ];
 
   Future<void> initialize() async {
@@ -91,7 +97,9 @@ class SupabaseSyncService extends ChangeNotifier {
 
   void _startAutoSync() {
     _connectivitySub?.cancel();
-    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) async {
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) async {
       if (_shouldSync(results)) {
         // Delay lets Android DNS resolver finish configuring after interface comes up.
         await Future.delayed(const Duration(seconds: 3));
@@ -147,9 +155,11 @@ class SupabaseSyncService extends ChangeNotifier {
         }
 
         final supabase = Supabase.instance.client;
+        await _processDeletionRetryQueue(supabase);
         for (final table in _syncTables) {
           await _syncTable(supabase, table);
         }
+        await _retentionPolicy.applyDefaultPolicy();
 
         _lastSyncedAt = DateTime.now();
         _status = SyncStatus.success;
@@ -193,6 +203,20 @@ class SupabaseSyncService extends ChangeNotifier {
     debugPrint('Synced ${rows.length} rows from $tableName');
   }
 
+  Future<void> _processDeletionRetryQueue(SupabaseClient client) async {
+    final dueRetries = await _deletionRetries.dueCustomerErasures();
+    for (final retry in dueRetries) {
+      final id = retry['id'] as int;
+      final phoneNumber = retry['phone_number'] as String;
+      try {
+        await _deleteCustomerFromSupabaseClient(client, phoneNumber);
+        await _deletionRetries.markSucceeded(id);
+      } on Exception catch (e) {
+        await _deletionRetries.markFailed(id, e);
+      }
+    }
+  }
+
   /// RA 10173 right-to-erasure cascade on Supabase.
   ///
   /// Called after the local customer deletion succeeds.
@@ -205,11 +229,24 @@ class SupabaseSyncService extends ChangeNotifier {
     final normalized = PhoneNumberUtils.normalize(phoneNumber);
     final client = Supabase.instance.client;
 
+    try {
+      await _deleteCustomerFromSupabaseClient(client, normalized);
+    } on Exception catch (e) {
+      await _deletionRetries.enqueueCustomerErasure(
+        phoneNumber: normalized,
+        lastError: e,
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> _deleteCustomerFromSupabaseClient(
+    SupabaseClient client,
+    String phoneNumber,
+  ) async {
+    final normalized = PhoneNumberUtils.normalize(phoneNumber);
     // Remove SMS history (contains message bodies with personal identifiers).
-    await client
-        .from('sms_messages')
-        .delete()
-        .eq('phone_number', normalized);
+    await client.from('sms_messages').delete().eq('phone_number', normalized);
 
     // Anonymize orders — strip phone and address, keep aggregate stats.
     await client
@@ -218,10 +255,7 @@ class SupabaseSyncService extends ChangeNotifier {
         .eq('phone_number', normalized);
 
     // Remove the customer record (Supabase FK cascade removes schedules/logs).
-    await client
-        .from('customers')
-        .delete()
-        .eq('contact_number', normalized);
+    await client.from('customers').delete().eq('contact_number', normalized);
   }
 
   Future<void> _updatePendingCount() async {

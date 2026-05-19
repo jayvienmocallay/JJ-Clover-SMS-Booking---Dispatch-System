@@ -21,10 +21,14 @@ import 'package:jj_clover_sms/data/repositories/sms_message_repository.dart';
 import 'package:jj_clover_sms/data/repositories/settings_repository.dart';
 import 'package:jj_clover_sms/data/repositories/delivery_log_repository.dart';
 import 'package:jj_clover_sms/data/repositories/database_runtime_repository.dart';
+import 'package:jj_clover_sms/core/security/admin_auth_service.dart';
+import 'package:jj_clover_sms/data/repositories/admin_credential_repository.dart';
+import 'package:jj_clover_sms/data/repositories/audit_log_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jj_clover_sms/data/providers/customer_provider.dart';
 import 'package:jj_clover_sms/ui/theme/app_theme.dart';
 import 'package:jj_clover_sms/ui/screens/app_shell.dart';
+import 'package:jj_clover_sms/ui/widgets/shared/brand_mascot.dart';
 
 /// Global theme mode — toggled from Settings screen.
 final themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
@@ -36,7 +40,9 @@ Future<void> loadPersistedThemeMode() async {
   if (kIsWeb) return;
 
   try {
-    final savedMode = await SettingsRepository().getSetting(_themeModeSettingKey);
+    final savedMode = await SettingsRepository().getSetting(
+      _themeModeSettingKey,
+    );
     themeNotifier.value = _parseThemeMode(savedMode);
   } catch (e) {
     debugPrint('Failed to load theme mode: $e');
@@ -93,8 +99,8 @@ Future<void> main() async {
     }
 
     // Initialize Supabase cloud sync — only when real credentials are set.
-    if (SupabaseConfig.url != 'YOUR_SUPABASE_URL' &&
-        SupabaseConfig.anonKey != 'YOUR_SUPABASE_ANON_KEY') {
+    if (SupabaseConfig.url != 'https://vkvrmcazvqrwlzrtigbk.supabase.co' &&
+        SupabaseConfig.anonKey != 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZrdnJtY2F6dnFyd2x6cnRpZ2JrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0ODczODYsImV4cCI6MjA5MzA2MzM4Nn0.FBqaJDh_FoMk8PJDsiV92FgIvZ7-F5iHYa3PS2Bd6fA') {
       try {
         await Supabase.initialize(
           url: SupabaseConfig.url,
@@ -137,6 +143,13 @@ class MyApp extends StatelessWidget {
         Provider(create: (_) => SmsMessageRepository()),
         Provider(create: (_) => SettingsRepository()),
         Provider(create: (_) => DeliveryLogRepository()),
+        Provider(create: (_) => AdminCredentialRepository()),
+        Provider<AdminAuthService>(
+          create: (ctx) => DefaultAdminAuthService(
+            credentialRepository: ctx.read<AdminCredentialRepository>(),
+          ),
+        ),
+        Provider(create: (_) => AuditLogRepository()),
         // Task 011 — OrderProvider: reactive order state for dashboard + order screens
         ChangeNotifierProvider(
           create: (ctx) => OrderProvider(ctx.read<OrderRepository>()),
@@ -249,7 +262,8 @@ class _PermissionGateState extends State<PermissionGate>
 
     // Step 3: Check if SMS and notification permissions were granted
     final smsGranted = statuses[Permission.sms]?.isGranted ?? false;
-    final notificationGranted = statuses[Permission.notification]?.isGranted ?? false;
+    final notificationGranted =
+        statuses[Permission.notification]?.isGranted ?? false;
 
     // Step 4: Request battery optimization exemption.
     // This shows a separate system dialog asking the user to allow
@@ -328,14 +342,18 @@ class _PermissionGateState extends State<PermissionGate>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              const MascotBadge(pose: MascotPose.smsConfirm, size: 96),
+              const SizedBox(height: 20),
               // Spinning indicator while permissions are being requested
               CircularProgressIndicator(
-                  color: Theme.of(context).colorScheme.primary),
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(height: 16),
               Text(
                 'Requesting permissions...',
                 style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyMedium?.color),
+                  color: Theme.of(context).textTheme.bodyMedium?.color,
+                ),
               ),
             ],
           ),
@@ -353,11 +371,11 @@ class _PermissionGateState extends State<PermissionGate>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Warning icon to draw attention
-                const Icon(
-                  Icons.sms_failed,
-                  size: 64,
-                  color: AppColors.statusAway,
+                MascotImage(
+                  pose: _isDefaultSmsApp
+                      ? MascotPose.smsConfirm
+                      : MascotPose.checklist,
+                  size: 136,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -380,7 +398,8 @@ class _PermissionGateState extends State<PermissionGate>
                             'deliver customer order messages to it.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      color: Theme.of(context).textTheme.bodySmall?.color),
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 // Retry button — re-requests all permissions
@@ -399,7 +418,8 @@ class _PermissionGateState extends State<PermissionGate>
                   child: Text(
                     'Open App Settings',
                     style: TextStyle(
-                        color: Theme.of(context).colorScheme.primary),
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ),
               ],

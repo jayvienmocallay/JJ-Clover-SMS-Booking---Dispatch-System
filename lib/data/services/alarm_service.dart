@@ -23,7 +23,7 @@ class AlarmService extends ChangeNotifier {
   static const String _activeAlertSettingKey = 'active_drop_alarm';
   static const String _uiAlarmPortName = 'jj_clover_drop_alarm_port';
 
-  final AudioPlayer _player = AudioPlayer();
+  AudioPlayer? _player;
   final _settings = SettingsRepository();
   ReceivePort? _uiAlarmPort;
   bool _isPlaying = false;
@@ -32,21 +32,28 @@ class AlarmService extends ChangeNotifier {
   String? _customerPhone;
   int? _quantity;
   DateTime? _triggeredAt;
+  String? _replyMessage;
 
   bool get isPlaying => _isPlaying;
   String? get customerPhone => _customerPhone;
   int? get quantity => _quantity;
   DateTime? get triggeredAt => _triggeredAt;
+  String? get replyMessage => _replyMessage;
 
   /// Triggers the alarm for a DROP order.
   ///
   /// [phone] is the customer's phone number.
   /// [qty] is the number of gallons in the DROP order.
-  Future<void> trigger({required String phone, required int qty}) async {
+  Future<void> trigger({
+    required String phone,
+    required int qty,
+    String? replyMessage,
+  }) async {
     final alert = _DropAlarmAlert(
       phone: phone,
       quantity: qty,
       triggeredAt: DateTime.now(),
+      replyMessage: replyMessage,
     );
 
     await _persistAlert(alert);
@@ -125,15 +132,17 @@ class AlarmService extends ChangeNotifier {
     _customerPhone = alert.phone;
     _quantity = alert.quantity;
     _triggeredAt = alert.triggeredAt;
+    _replyMessage = alert.replyMessage;
     _isPlaying = true;
     notifyListeners();
 
     if (alreadyPlaying) return;
 
     try {
-      await _player.setVolume(1.0);
-      await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.play(AssetSource('audio/alarm.wav'));
+      final player = _player ??= AudioPlayer();
+      await player.setVolume(1.0);
+      await player.setReleaseMode(ReleaseMode.loop);
+      await player.play(AssetSource('audio/alarm.wav'));
       debugPrint(
         'AlarmService: Alarm triggered for DROP from '
         '${alert.phone} (${alert.quantity} gal)',
@@ -149,10 +158,14 @@ class AlarmService extends ChangeNotifier {
     await _clearPersistedAlert();
 
     _isPlaying = false;
+    _customerPhone = null;
+    _quantity = null;
+    _triggeredAt = null;
+    _replyMessage = null;
     notifyListeners();
 
     try {
-      await _player.stop();
+      await _player?.stop();
       debugPrint('AlarmService: Alarm acknowledged');
     } catch (e) {
       debugPrint('AlarmService: Error stopping alarm - $e');
@@ -209,14 +222,16 @@ class AlarmService extends ChangeNotifier {
   bool _isSameAlert(_DropAlarmAlert alert) {
     return _customerPhone == alert.phone &&
         _quantity == alert.quantity &&
-        _triggeredAt?.toIso8601String() == alert.triggeredAt.toIso8601String();
+        _triggeredAt?.toIso8601String() ==
+            alert.triggeredAt.toIso8601String() &&
+        _replyMessage == alert.replyMessage;
   }
 
   /// Disposes the audio player (call on app shutdown).
   @override
   void dispose() {
     stopUiSync();
-    _player.dispose();
+    _player?.dispose();
     super.dispose();
   }
 }
@@ -226,17 +241,20 @@ class _DropAlarmAlert {
     required this.phone,
     required this.quantity,
     required this.triggeredAt,
+    this.replyMessage,
   });
 
   final String phone;
   final int quantity;
   final DateTime triggeredAt;
+  final String? replyMessage;
 
   Map<String, dynamic> toJson() {
     return {
       'phone': phone,
       'quantity': quantity,
       'triggeredAt': triggeredAt.toIso8601String(),
+      'replyMessage': replyMessage,
     };
   }
 
@@ -277,6 +295,7 @@ class _DropAlarmAlert {
       phone: phone,
       quantity: quantity is int ? quantity : int.tryParse('$quantity') ?? 0,
       triggeredAt: triggeredAt,
+      replyMessage: json['replyMessage'] as String?,
     );
   }
 }

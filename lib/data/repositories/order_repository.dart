@@ -18,6 +18,10 @@ class OrderRepository {
     return DatabaseHelper.instance.getTodayOrders();
   }
 
+  Future<List<Map<String, dynamic>>> getUpcomingPreBookOrders() {
+    return DatabaseHelper.instance.getUpcomingPreBookOrders();
+  }
+
   Future<List<Map<String, dynamic>>> getOrderHistory({
     DateTime? startDate,
     DateTime? endDate,
@@ -60,6 +64,16 @@ class OrderRepository {
 
   Future<int> insertOrder(Map<String, dynamic> orderData) {
     return DatabaseHelper.instance.insertOrder(orderData);
+  }
+
+  Future<int> promotePendingUnrecognizedOrder(
+    int id,
+    Map<String, dynamic> orderData,
+  ) {
+    return DatabaseHelper.instance.promotePendingUnrecognizedOrder(
+      id,
+      orderData,
+    );
   }
 
   Future<int> updateOrderStatus(

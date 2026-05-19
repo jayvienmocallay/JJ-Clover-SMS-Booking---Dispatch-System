@@ -18,11 +18,16 @@ class CustomerProvider extends ChangeNotifier {
   int get count => _customers.length;
   String? get error => _error;
 
+  void _notifyIfActive() {
+    if (!_disposed) notifyListeners();
+  }
+
   /// Loads all customers with barangay info and notifies listeners
   Future<void> loadCustomers() async {
+    if (_disposed) return;
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    _notifyIfActive();
 
     try {
       _customers = await _repository.getCustomersWithBarangay();
@@ -31,47 +36,84 @@ class CustomerProvider extends ChangeNotifier {
       _error = e.toString();
     }
 
+    if (_disposed) return;
     _isLoading = false;
-    notifyListeners();
+    _notifyIfActive();
   }
 
   /// Inserts a new customer and refreshes the list
-  Future<void> addCustomer(Map<String, dynamic> customerData) async {
+  Future<bool> addCustomer(Map<String, dynamic> customerData) async {
     _error = null;
     try {
-      await _repository.insertCustomer(customerData);
+      final insertedId = await _repository.insertCustomer(customerData);
+      _ensureRowsChanged(insertedId, 'Customer was not created.');
       await loadCustomers();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
-      if (!_disposed) notifyListeners();
+      _error = _errorMessage(e);
+      _notifyIfActive();
+      return false;
     }
   }
 
   /// Deletes a customer by ID
-  Future<void> deleteCustomer(int customerId) async {
+  Future<bool> deleteCustomer(int customerId) async {
     _error = null;
     try {
-      await _repository.deleteCustomer(customerId);
+      final deleted = await _repository.deleteCustomer(customerId);
+      _ensureRowsChanged(deleted, 'No customer was deleted.');
       await loadCustomers();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
-      if (!_disposed) notifyListeners();
+      _error = _errorMessage(e);
+      _notifyIfActive();
+      return false;
     }
   }
 
   /// Updates customer information
-  Future<void> updateCustomer(
+  Future<bool> updateCustomer(
     int customerId,
     Map<String, dynamic> customerData,
   ) async {
     _error = null;
     try {
-      await _repository.updateCustomer(customerId, customerData);
+      final updated = await _repository.updateCustomer(
+        customerId,
+        customerData,
+      );
+      _ensureRowsChanged(updated, 'No customer was updated.');
       await loadCustomers();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
-      if (!_disposed) notifyListeners();
-      rethrow;
+      _error = _errorMessage(e);
+      _notifyIfActive();
+      return false;
+    }
+  }
+
+  /// Updates mute/block/spam contact flags without touching schedules.
+  Future<bool> updateContactFlags(
+    int customerId, {
+    bool? isMuted,
+    bool? isBlocked,
+    bool? isSpam,
+  }) async {
+    _error = null;
+    try {
+      final updated = await _repository.updateCustomerContactFlags(
+        customerId,
+        isMuted: isMuted,
+        isBlocked: isBlocked,
+        isSpam: isSpam,
+      );
+      _ensureRowsChanged(updated, 'No customer was updated.');
+      await loadCustomers();
+      return _error == null;
+    } catch (e) {
+      _error = _errorMessage(e);
+      _notifyIfActive();
+      return false;
     }
   }
 
@@ -86,12 +128,23 @@ class CustomerProvider extends ChangeNotifier {
 
   void clearError() {
     _error = null;
-    notifyListeners();
+    _notifyIfActive();
   }
 
   @override
   void dispose() {
     _disposed = true;
     super.dispose();
+  }
+
+  void _ensureRowsChanged(int result, String message) {
+    if (result == 0) {
+      throw StateError(message);
+    }
+  }
+
+  String _errorMessage(Object error) {
+    if (error is StateError) return error.message;
+    return error.toString();
   }
 }

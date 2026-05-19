@@ -61,7 +61,7 @@ class ParsedSms {
 /// - `YES` — confirms a pre-booking offer
 /// - `CANCEL` - cancels the latest pending/confirmed order or pre-book offer
 /// - `STATUS` — returns current system mode
-/// - `REGISTER [name]` — starts self-registration (RA 10173 consent flow)
+/// - `REGISTER [name], [barangay], [address]` — single-step registration
 /// - `AGREE` / `STOP` — consent / cancel during registration
 /// - `BARANGAY [name]` — provides barangay during registration
 /// - `ADDRESS [text]` — provides delivery address during registration
@@ -69,6 +69,13 @@ class ParsedSms {
 /// - `DELETEDATA` / `OPTOUT` — request deletion (RA 10173 right to erasure)
 /// - `CONFIRM DELETE` — confirms a pending deletion request
 class SmsParser {
+  static final RegExp _whitespaceRegex = RegExp(r'[\s\u00A0]+');
+  static final RegExp _commandSeparatorRegex = RegExp(
+    r'^\s*([A-Z]+)\s*[:\-,]\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _trailingPunctuationRegex = RegExp(r'[.!?,;:]+$');
+
   /// Matches: DELIVER [qty] [optional: address]
   /// Group 1 = quantity (required digits, max 4 digits for safety)
   /// Group 2 = address (optional: remaining text)
@@ -94,9 +101,10 @@ class SmsParser {
   /// Matches: STATUS (exact, no extra text)
   static final RegExp _statusRegex = RegExp(r'^STATUS$', caseSensitive: false);
 
-  /// Matches: REGISTER [name]. Group 1 = full name (rest of the message).
+  /// Matches: REGISTER [name], [barangay], [address].
+  /// Group 1 = raw payload (may be null if no payload provided).
   static final RegExp _registerRegex = RegExp(
-    r'^REGISTER\s+([\s\S]+)$',
+    r'^REGISTER(?:\s+([\s\S]+))?$',
     caseSensitive: false,
   );
 
@@ -150,9 +158,22 @@ class SmsParser {
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
+  static String _normalizeForParsing(String message) {
+    final commandSeparated = message.replaceFirstMapped(
+      _commandSeparatorRegex,
+      (match) => '${match.group(1)} ',
+    );
+    return commandSeparated
+        .replaceAll('\u00A0', ' ')
+        .replaceAll(_whitespaceRegex, ' ')
+        .trim()
+        .replaceFirst(_trailingPunctuationRegex, '')
+        .trim();
+  }
+
   /// Parses an incoming SMS message into a [ParsedSms] command object.
   static ParsedSms parse(String message) {
-    final trimmed = message.trim();
+    final trimmed = _normalizeForParsing(message);
 
     final deliverMatch = _deliverRegex.firstMatch(trimmed);
     if (deliverMatch != null) {
@@ -251,7 +272,7 @@ class SmsParser {
   /// Tries to parse only DELIVER or DROP commands.
   /// Returns null if message doesn't match either pattern.
   static ParsedSms? tryParseDeliverOrDrop(String message) {
-    final trimmed = message.trim();
+    final trimmed = _normalizeForParsing(message);
 
     final deliverMatch = _deliverRegex.firstMatch(trimmed);
     if (deliverMatch != null) {
@@ -281,7 +302,7 @@ class SmsParser {
   /// Returns the help message sent when an unrecognized command is received
   /// from a registered customer.
   static String getUnknownCommandReply() {
-    return 'Invalid. Use DELIVER [${AppConstants.minQuantity}-${AppConstants.maxQuantity}] or DROP [${AppConstants.minQuantity}-${AppConstants.maxQuantity}]. '
-        'Reply CANCEL to cancel an active order. Text MYDATA / DELETEDATA for privacy rights.';
+    return 'Gamita ang DELIVER [${AppConstants.minQuantity}-${AppConstants.maxQuantity}] o DROP [${AppConstants.minQuantity}-${AppConstants.maxQuantity}]. '
+        'Tubaga ug CANCEL para kanselar ang aktibong order. I-text ang MYDATA / DELETEDATA para sa katungod sa data privacy.';
   }
 }

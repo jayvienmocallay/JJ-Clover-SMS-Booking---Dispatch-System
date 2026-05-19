@@ -6,6 +6,7 @@ import '../../data/models/order_model.dart';
 import '../../data/repositories/order_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/order_detail_sheet.dart';
+import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/empty_state.dart';
 
 class OrderHistoryScreen extends StatefulWidget {
@@ -68,12 +69,12 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
     try {
       final range = _dateRange(_dateFilter);
       final rows = await context.read<OrderRepository>().getOrderHistory(
-            startDate: range?.$1,
-            endDate: range?.$2,
-            status: _statusFilter,
-            type: _typeFilter,
-            search: _searchController.text,
-          );
+        startDate: range?.$1,
+        endDate: range?.$2,
+        status: _statusFilter,
+        type: _typeFilter,
+        search: _searchController.text,
+      );
       if (!mounted) return;
       setState(() => _orders = rows);
     } catch (e, st) {
@@ -81,7 +82,11 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
       debugPrintStack(stackTrace: st);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load orders. Please restart or check logs.')),
+          const SnackBar(
+            content: Text(
+              'Failed to load orders. Please restart or check logs.',
+            ),
+          ),
         );
       }
     } finally {
@@ -99,9 +104,15 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
         final yesterday = today.subtract(const Duration(days: 1));
         return (yesterday, today);
       case 'week':
-        return (today.subtract(const Duration(days: 7)), today.add(const Duration(days: 1)));
+        return (
+          today.subtract(const Duration(days: 7)),
+          today.add(const Duration(days: 1)),
+        );
       case 'month':
-        return (DateTime(now.year, now.month, 1), today.add(const Duration(days: 1)));
+        return (
+          DateTime(now.year, now.month, 1),
+          today.add(const Duration(days: 1)),
+        );
       default:
         return null;
     }
@@ -156,7 +167,10 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
         ),
         title: Text(
           'Order History',
-          style: TextStyle(color: palette.foreground, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: palette.foreground,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         actions: [
           IconButton(
@@ -176,9 +190,11 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
               onSearchChanged: _onSearchChanged,
               onSearchSubmit: _loadOrders,
               filtersOpen: _filtersOpen,
-              onToggleFilters: () => setState(() => _filtersOpen = !_filtersOpen),
+              onToggleFilters: () =>
+                  setState(() => _filtersOpen = !_filtersOpen),
               activeFilterCount: _activeFilterCount,
-              summary: '${_label(_dateOptions, _dateFilter)} / ${_label(_statusOptions, _statusFilter)} / ${_label(_typeOptions, _typeFilter)}',
+              summary:
+                  '${_label(_dateOptions, _dateFilter)} / ${_label(_statusOptions, _statusFilter)} / ${_label(_typeOptions, _typeFilter)}',
               dateOptions: _dateOptions,
               statusOptions: _statusOptions,
               typeOptions: _typeOptions,
@@ -198,7 +214,9 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    _loading ? 'Loading orders...' : '${_orders.length} ${_orders.length == 1 ? 'order' : 'orders'} found',
+                    _loading
+                        ? 'Loading orders...'
+                        : '${_orders.length} ${_orders.length == 1 ? 'order' : 'orders'} found',
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
                 ),
@@ -207,7 +225,9 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                     onPressed: _clearFilters,
                     icon: const Icon(Icons.close, size: 16),
                     label: const Text('Clear'),
-                    style: TextButton.styleFrom(foregroundColor: palette.primary),
+                    style: TextButton.styleFrom(
+                      foregroundColor: palette.primary,
+                    ),
                   ),
               ],
             ),
@@ -215,12 +235,21 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
             if (_loading)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 56),
-                child: Center(child: CircularProgressIndicator(color: palette.primary)),
+                child: Center(
+                  child: CircularProgressIndicator(color: palette.primary),
+                ),
               )
             else if (_orders.isEmpty)
-              const EmptyState(icon: Icons.history, message: 'No matching orders found.')
+              const EmptyState(
+                icon: Icons.history,
+                mascot: MascotPose.checklist,
+                title: 'No matching records',
+                message: 'No matching orders found.',
+              )
             else
-              ..._orders.map((row) => _HistoryCard(row: row, onChanged: _loadOrders)),
+              ..._orders.map(
+                (row) => _HistoryCard(row: row, onChanged: _loadOrders),
+              ),
           ],
         ),
       ),
@@ -288,8 +317,14 @@ class _FilterPanel extends StatelessWidget {
               hintText: 'Search name, phone, or order ID',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: searchController.text.trim().isEmpty
-                  ? IconButton(icon: const Icon(Icons.arrow_forward), onPressed: onSearchSubmit)
-                  : IconButton(icon: const Icon(Icons.close), onPressed: onClearSearch),
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_forward),
+                      onPressed: onSearchSubmit,
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: onClearSearch,
+                    ),
               filled: true,
               fillColor: palette.background,
               border: OutlineInputBorder(
@@ -313,7 +348,10 @@ class _FilterPanel extends StatelessWidget {
                 onTap: onToggleFilters,
                 borderRadius: BorderRadius.circular(kButtonRadius),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: palette.muted,
                     borderRadius: BorderRadius.circular(kButtonRadius),
@@ -325,14 +363,21 @@ class _FilterPanel extends StatelessWidget {
                       Icon(Icons.tune, size: 16, color: palette.primary),
                       const SizedBox(width: 6),
                       Text(
-                        activeFilterCount == 0 ? 'Filters' : 'Filters ($activeFilterCount)',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        activeFilterCount == 0
+                            ? 'Filters'
+                            : 'Filters ($activeFilterCount)',
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
                               color: palette.primary,
                               fontWeight: FontWeight.w700,
                             ),
                       ),
                       const SizedBox(width: 4),
-                      Icon(filtersOpen ? Icons.expand_less : Icons.expand_more, size: 16, color: palette.primary),
+                      Icon(
+                        filtersOpen ? Icons.expand_less : Icons.expand_more,
+                        size: 16,
+                        color: palette.primary,
+                      ),
                     ],
                   ),
                 ),
@@ -346,15 +391,32 @@ class _FilterPanel extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _FilterSection(title: 'Date range', options: dateOptions, selected: dateFilter, onChanged: onDateChanged),
+                  _FilterSection(
+                    title: 'Date range',
+                    options: dateOptions,
+                    selected: dateFilter,
+                    onChanged: onDateChanged,
+                  ),
                   const SizedBox(height: 12),
-                  _FilterSection(title: 'Order status', options: statusOptions, selected: statusFilter, onChanged: onStatusChanged),
+                  _FilterSection(
+                    title: 'Order status',
+                    options: statusOptions,
+                    selected: statusFilter,
+                    onChanged: onStatusChanged,
+                  ),
                   const SizedBox(height: 12),
-                  _FilterSection(title: 'Order type', options: typeOptions, selected: typeFilter, onChanged: onTypeChanged),
+                  _FilterSection(
+                    title: 'Order type',
+                    options: typeOptions,
+                    selected: typeFilter,
+                    onChanged: onTypeChanged,
+                  ),
                 ],
               ),
             ),
-            crossFadeState: filtersOpen ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            crossFadeState: filtersOpen
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 180),
           ),
         ],
@@ -369,7 +431,12 @@ class _FilterSection extends StatelessWidget {
   final String selected;
   final ValueChanged<String> onChanged;
 
-  const _FilterSection({required this.title, required this.options, required this.selected, required this.onChanged});
+  const _FilterSection({
+    required this.title,
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -377,7 +444,13 @@ class _FilterSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title.toUpperCase(), style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700)),
+        Text(
+          title.toUpperCase(),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            letterSpacing: 0.8,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -390,11 +463,13 @@ class _FilterSection extends StatelessWidget {
               onSelected: (_) => onChanged(option.value),
               selectedColor: palette.primaryLight,
               backgroundColor: palette.muted,
-              side: BorderSide(color: isSelected ? palette.primary : palette.border),
+              side: BorderSide(
+                color: isSelected ? palette.primary : palette.border,
+              ),
               labelStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: isSelected ? palette.primary : palette.mutedForeground,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  ),
+                color: isSelected ? palette.primary : palette.mutedForeground,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              ),
             );
           }).toList(),
         ),
@@ -418,7 +493,8 @@ class _HistoryCard extends StatelessWidget {
     final address = order.address ?? row['customer_address'] as String?;
     final typeColor = _typeColor(context, order.type);
     return GestureDetector(
-      onTap: () => _showDetails(context, order, customerName, barangay, address),
+      onTap: () =>
+          _showDetails(context, order, customerName, barangay, address),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
@@ -433,7 +509,10 @@ class _HistoryCard extends StatelessWidget {
             Container(
               width: 38,
               height: 38,
-              decoration: BoxDecoration(color: typeColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: typeColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Icon(_typeIcon(order.type), size: 18, color: typeColor),
             ),
             const SizedBox(width: 12),
@@ -442,19 +521,34 @@ class _HistoryCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    customerName ?? (order.phoneNumber.isEmpty ? 'Unknown customer' : order.phoneNumber),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    customerName ??
+                        (order.phoneNumber.isEmpty
+                            ? 'Unknown customer'
+                            : order.phoneNumber),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 2),
-                  Text('#${order.id} / ${order.quantity} gal / ${_typeLabel(order.type)}', style: Theme.of(context).textTheme.bodySmall),
-                  if (barangay?.isNotEmpty == true || address?.isNotEmpty == true)
+                  Text(
+                    '#${order.id} / ${order.quantity} gal / ${_typeLabel(order.type)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (barangay?.isNotEmpty == true ||
+                      address?.isNotEmpty == true)
                     Text(
-                      [address, barangay].whereType<String>().where((v) => v.isNotEmpty).join(' / '),
+                      [address, barangay]
+                          .whereType<String>()
+                          .where((v) => v.isNotEmpty)
+                          .join(' / '),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  Text(_formatDateTime(order.createdAt), style: Theme.of(context).textTheme.labelSmall),
+                  Text(
+                    _formatDateTime(order.createdAt),
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
                 ],
               ),
             ),
@@ -466,12 +560,20 @@ class _HistoryCard extends StatelessWidget {
     );
   }
 
-  Future<void> _showDetails(BuildContext context, Order order, String? customerName, String? barangay, String? address) async {
+  Future<void> _showDetails(
+    BuildContext context,
+    Order order,
+    String? customerName,
+    String? barangay,
+    String? address,
+  ) async {
     await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.of(context).card,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => OrderDetailSheet(
         order: order,
         customerName: customerName,
@@ -541,7 +643,10 @@ class _StatusPill extends StatelessWidget {
       ),
       child: Text(
         status.displayLabel,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

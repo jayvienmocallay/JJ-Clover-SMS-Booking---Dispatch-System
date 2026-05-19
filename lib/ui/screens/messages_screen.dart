@@ -6,6 +6,12 @@ import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/app_card.dart';
+import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/empty_state.dart';
+import '../widgets/shared/loading_state.dart';
+import '../widgets/shared/status_badge.dart';
 import './chat_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
@@ -19,6 +25,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   bool _isLoading = true;
   bool _isRefreshing = false;
   bool _refreshPending = false;
+  String? _error;
   List<Map<String, dynamic>> _smsMessages = [];
   Map<String, String> _phoneToName = {};
   StreamSubscription? _messageSub;
@@ -49,6 +56,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
       return;
     }
     _isRefreshing = true;
+    if (!silent) {
+      setState(() {
+        _error = null;
+        if (_smsMessages.isEmpty) _isLoading = true;
+      });
+    }
     try {
       final results = await Future.wait([
         _smsRepo.getAllSmsMessages(),
@@ -64,10 +77,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
       setState(() {
         _smsMessages = results[0];
         _phoneToName = phoneToName;
+        _error = null;
         _isLoading = false;
       });
     } catch (_) {
-      if (mounted && !silent) setState(() => _isLoading = false);
+      if (mounted && (!silent || _smsMessages.isEmpty)) {
+        setState(() {
+          _error = 'Unable to load messages. Please try again.';
+          _isLoading = false;
+        });
+      }
     } finally {
       _isRefreshing = false;
       if (_refreshPending && mounted) {
@@ -78,14 +97,20 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   List<String> _getUniquePhones() {
-    return _smsMessages.map((m) => m['phone_number'] as String).toSet().toList();
+    return _smsMessages
+        .map((m) => m['phone_number'] as String? ?? '')
+        .where((phone) => phone.isNotEmpty)
+        .toSet()
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: AppColors.of(context).primary),
+      return const LoadingState(
+        title: 'Loading messages',
+        message: 'Collecting recent SMS conversations...',
+        mascot: MascotPose.smsConfirm,
       );
     }
 
@@ -96,33 +121,46 @@ class _MessagesScreenState extends State<MessagesScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Messages',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.of(context).foreground,
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.refresh, color: AppColors.of(context).primary),
-                onPressed: _loadMessages,
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            uniquePhones.isEmpty
+          AppPageHeader(
+            title: 'Messages',
+            subtitle: uniquePhones.isEmpty
                 ? 'No conversations'
                 : '${uniquePhones.length} ${uniquePhones.length == 1 ? 'conversation' : 'conversations'}',
-            style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground),
+            action: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const MascotBadge(pose: MascotPose.smsConfirm, size: 44),
+                const SizedBox(width: 6),
+                IconButton(
+                  icon: Icon(
+                    Icons.refresh,
+                    color: AppColors.of(context).primary,
+                  ),
+                  onPressed: _loadMessages,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
-          if (uniquePhones.isEmpty)
-            _EmptyConversations()
+          if (_error != null)
+            EmptyState(
+              icon: Icons.error_outline,
+              mascot: MascotPose.checklist,
+              title: 'Messages could not load',
+              message: _error!,
+              action: ElevatedButton.icon(
+                onPressed: _loadMessages,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            )
+          else if (uniquePhones.isEmpty)
+            const EmptyState(
+              icon: Icons.forum_outlined,
+              mascot: MascotPose.smsConfirm,
+              title: 'Inbox is quiet',
+              message: 'No SMS conversations yet',
+            )
           else
             ...uniquePhones.map(_conversationTile),
         ],
@@ -131,15 +169,22 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   Widget _conversationTile(String phone) {
-    final phoneMsgs = _smsMessages.where((m) => m['phone_number'] == phone).toList();
+    final phoneMsgs =
+        _smsMessages
+            .asMap()
+            .entries
+            .where((entry) => entry.value['phone_number'] == phone)
+            .toList()
+          ..sort((a, b) {
+            final timeCompare = _messageSortDate(
+              b.value,
+            ).compareTo(_messageSortDate(a.value));
+            if (timeCompare != 0) return timeCompare;
+            return a.key.compareTo(b.key);
+          });
     if (phoneMsgs.isEmpty) return const SizedBox.shrink();
-    phoneMsgs.sort((a, b) {
-      final timeA = DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime.now();
-      final timeB = DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime.now();
-      return timeB.compareTo(timeA);
-    });
 
-    final lastMsg = phoneMsgs.first;
+    final lastMsg = phoneMsgs.first.value;
     final displayName = _phoneToName[phone];
     final message = lastMsg['message'] as String? ?? '';
     final direction = lastMsg['direction'] as String? ?? 'incoming';
@@ -147,81 +192,67 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final isIncoming = direction == 'incoming';
     final title = displayName ?? phone;
 
-    return GestureDetector(
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ChatScreen(phoneNumber: phone, contactName: displayName),
+            builder: (_) =>
+                ChatScreen(phoneNumber: phone, contactName: displayName),
           ),
         );
       },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.of(context).card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: AppColors.of(context).border.withValues(alpha: 0.3),
-            width: 0.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            _Avatar(label: title),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.of(context).foreground,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    message,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.of(context).mutedForeground.withValues(alpha: 0.8),
-                      height: 1.3,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+      child: Row(
+        children: [
+          _Avatar(label: title),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _formatTimeShort(sentAt),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.of(context).mutedForeground.withValues(alpha: 0.6),
-                  ),
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Icon(
-                  isIncoming ? Icons.call_received : Icons.call_made,
-                  size: 14,
-                  color: isIncoming
-                      ? AppColors.of(context).primary
-                      : AppColors.of(context).statusOperating,
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.of(context).mutedForeground,
+                    height: 1.3,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _formatTimeShort(sentAt),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              const SizedBox(height: 6),
+              StatusBadge(
+                label: isIncoming ? 'Incoming' : 'Outgoing',
+                icon: isIncoming ? Icons.call_received : Icons.call_made,
+                color: isIncoming
+                    ? AppColors.of(context).primary
+                    : AppColors.of(context).statusOperating,
+                bgColor: isIncoming
+                    ? AppColors.of(context).primaryLight
+                    : AppColors.of(context).statusOperatingLight,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -238,6 +269,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
     } catch (_) {
       return '';
     }
+  }
+
+  DateTime _messageSortDate(Map<String, dynamic> message) {
+    return DateTime.tryParse(message['sent_at'] as String? ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
   }
 }
 
@@ -264,29 +300,6 @@ class _Avatar extends StatelessWidget {
             color: AppColors.of(context).primary,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _EmptyConversations extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Column(
-        children: [
-          Icon(
-            Icons.forum_outlined,
-            size: 48,
-            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'No SMS conversations yet',
-            style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground),
-          ),
-        ],
       ),
     );
   }

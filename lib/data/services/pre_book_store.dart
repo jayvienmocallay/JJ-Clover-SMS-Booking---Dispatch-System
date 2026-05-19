@@ -41,6 +41,7 @@ class PreBookStore {
                 DateTime.tryParse(v['scheduledFor'] as String? ?? '') ??
                 createdAt,
             createdAt: createdAt,
+            pendingOrderId: v['pendingOrderId'] as int?,
           );
         }
       }
@@ -62,6 +63,7 @@ class PreBookStore {
           'address': c.address,
           'deliveryDay': c.deliveryDay,
           'scheduledFor': c.scheduledFor.toIso8601String(),
+          'pendingOrderId': c.pendingOrderId,
           'timestamp': c.createdAt.millisecondsSinceEpoch,
         };
       }

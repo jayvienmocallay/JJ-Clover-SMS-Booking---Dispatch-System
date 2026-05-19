@@ -8,11 +8,14 @@ import '../../data/repositories/barangay_repository.dart';
 import '../../data/services/system_mode_manager.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/app_card.dart';
+import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/status_badge.dart';
 import '../widgets/shared/empty_state.dart';
+import '../widgets/shared/section_header.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final void Function(int tabIndex)? onNavigateToTab;
+  final void Function(int tabIndex, {int? ordersFilterIndex})? onNavigateToTab;
 
   const DashboardScreen({super.key, this.onNavigateToTab});
 
@@ -22,6 +25,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _todayBarangays = [];
+  List<Map<String, dynamic>> _barangays = [];
   late final BarangayRepository _barangayRepo;
 
   @override
@@ -38,22 +42,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final todayBarangays = <String>[];
 
     for (final brgy in barangays) {
-      final zone = brgy['delivery_zone'] as String;
       final name = brgy['name'] as String;
-      final dbDeliveryDay = brgy['delivery_day'] as String?;
-
-      List<String> days;
-      if (zone == 'Zone C' && dbDeliveryDay != null) {
-        days = dbDeliveryDay.split(',').map((d) => d.trim()).toList();
-      } else {
-        days = ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
-      }
+      final days = _deliveryDaysForBarangay(brgy);
       if (days.contains(today)) {
         todayBarangays.add(name);
       }
     }
 
-    if (mounted) setState(() => _todayBarangays = todayBarangays);
+    if (mounted) {
+      setState(() {
+        _barangays = barangays;
+        _todayBarangays = todayBarangays;
+      });
+    }
+  }
+
+  List<String> _deliveryDaysForBarangay(Map<String, dynamic> barangay) {
+    final zone = barangay['delivery_zone'] as String? ?? '';
+    final name = barangay['name'] as String? ?? '';
+    final dbDeliveryDay = barangay['delivery_day'] as String?;
+    if (dbDeliveryDay != null && dbDeliveryDay.trim().isNotEmpty) {
+      return dbDeliveryDay
+          .split(',')
+          .map((day) => day.trim())
+          .where((day) => day.isNotEmpty)
+          .toList();
+    }
+    return ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
   }
 
   Future<void> _refresh() async {
@@ -87,6 +102,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     title: _getGreeting(),
                     subtitle: "Here's what's happening at JJ Clover today.",
                   ),
+                  const SizedBox(height: 12),
+                  _buildDispatchMascotCallout(context, orderProv),
                   const SizedBox(height: kSectionGap),
 
                   _buildStatusBanner(context, modeManager),
@@ -102,7 +119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 16),
 
                   Text(
-                    'Auto-refresh: 15s',
+                    'Auto-refresh: ${AppConstants.autoRefreshSeconds}s',
                     style: Theme.of(context).textTheme.labelSmall,
                     textAlign: TextAlign.center,
                   ),
@@ -117,7 +134,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildStatusBanner(
-      BuildContext context, SystemModeManager modeManager) {
+    BuildContext context,
+    SystemModeManager modeManager,
+  ) {
     final palette = AppColors.of(context);
     final mode = modeManager.currentMode;
     Color accentColor;
@@ -166,11 +185,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         splashColor: accentColor.withValues(alpha: 0.12),
         highlightColor: accentColor.withValues(alpha: 0.06),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: kCardPadding, vertical: 16),
+          padding: const EdgeInsets.symmetric(
+            horizontal: kCardPadding,
+            vertical: 16,
+          ),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(kCardRadius),
-            border: Border.all(color: accentColor.withValues(alpha: 0.6), width: 1.5),
+            border: Border.all(
+              color: accentColor.withValues(alpha: 0.6),
+              width: 1.5,
+            ),
           ),
           child: Row(
             children: [
@@ -216,11 +241,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: accentColor.withValues(alpha: 0.8), size: 22),
+              Icon(
+                Icons.chevron_right,
+                color: accentColor.withValues(alpha: 0.8),
+                size: 22,
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDispatchMascotCallout(
+    BuildContext context,
+    OrderProvider orderProv,
+  ) {
+    final inTransitCount = orderProv.todayOrders
+        .where((order) => order['status'] == 'in_transit')
+        .length;
+    final totalOrders = orderProv.todayOrders
+        .where((order) => order['type'] != 'unrecognized')
+        .length;
+    final hasOrders = totalOrders > 0;
+
+    return MascotCallout(
+      pose: MascotPose.deliveryTruck,
+      eyebrow: 'Today',
+      title: hasOrders
+          ? 'Dispatch board is live'
+          : 'Ready for the first booking',
+      subtitle: hasOrders
+          ? '${orderProv.pendingCount} pending, ${orderProv.confirmedCount} confirmed, $inTransitCount on the road.'
+          : 'New SMS and walk-in requests will appear here for quick action.',
     );
   }
 
@@ -235,10 +288,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (ctx) => Consumer<SystemModeManager>(
         builder: (ctx, mgr, _) {
           final modes = [
-            (mode: SystemMode.operating,    label: 'Operating',      subtitle: 'Open & accepting orders',          icon: Icons.verified_user,  color: palette.statusOperating,    bg: palette.statusOperatingLight),
-            (mode: SystemMode.staffAway,    label: 'Staff Away',     subtitle: 'Out delivering, still accepting',  icon: Icons.access_time,    color: palette.statusAway,         bg: palette.statusAwayLight),
-            (mode: SystemMode.full,         label: 'Full / Busy',    subtitle: 'No more deliveries today',         icon: Icons.do_not_disturb, color: palette.statusBusy,         bg: palette.statusBusyLight),
-            (mode: SystemMode.maintenance,  label: 'Maintenance',    subtitle: 'Station closed',                   icon: Icons.build,          color: palette.statusMaintenance,  bg: palette.statusMaintenanceLight),
+            (
+              mode: SystemMode.operating,
+              label: 'Operating',
+              subtitle: 'Open & accepting orders',
+              icon: Icons.verified_user,
+              color: palette.statusOperating,
+              bg: palette.statusOperatingLight,
+            ),
+            (
+              mode: SystemMode.staffAway,
+              label: 'Staff Away',
+              subtitle: 'Out delivering, still accepting',
+              icon: Icons.access_time,
+              color: palette.statusAway,
+              bg: palette.statusAwayLight,
+            ),
+            (
+              mode: SystemMode.full,
+              label: 'Full / Busy',
+              subtitle: 'No more deliveries today',
+              icon: Icons.do_not_disturb,
+              color: palette.statusBusy,
+              bg: palette.statusBusyLight,
+            ),
+            (
+              mode: SystemMode.maintenance,
+              label: 'Maintenance',
+              subtitle: 'Station closed',
+              icon: Icons.build,
+              color: palette.statusMaintenance,
+              bg: palette.statusMaintenanceLight,
+            ),
           ];
 
           return Padding(
@@ -249,14 +330,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Center(
                   child: Container(
-                    width: 40, height: 4,
-                    decoration: BoxDecoration(color: palette.border, borderRadius: BorderRadius.circular(2)),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: palette.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text('Station Status', style: Theme.of(ctx).textTheme.titleMedium),
+                Text(
+                  'Station Status',
+                  style: Theme.of(ctx).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 4),
-                Text('Select current operating mode', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: palette.mutedForeground)),
+                Text(
+                  'Select current operating mode',
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color: palette.mutedForeground,
+                  ),
+                ),
                 const SizedBox(height: 16),
                 ...modes.map((m) {
                   final isActive = mgr.currentMode == m.mode;
@@ -267,43 +360,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         mgr.setMode(m.mode);
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Mode set to ${m.label} ✓'), duration: const Duration(seconds: 2)),
+                          SnackBar(
+                            content: Text('Mode set to ${m.label} ✓'),
+                            duration: const Duration(seconds: 2),
+                          ),
                         );
                       },
                       borderRadius: BorderRadius.circular(14),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                         decoration: BoxDecoration(
                           color: isActive ? m.bg : palette.background,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: isActive ? m.color.withValues(alpha: 0.5) : palette.border,
+                            color: isActive
+                                ? m.color.withValues(alpha: 0.5)
+                                : palette.border,
                             width: isActive ? 2 : 1,
                           ),
                         ),
                         child: Row(
                           children: [
                             Container(
-                              width: 36, height: 36,
+                              width: 36,
+                              height: 36,
                               decoration: BoxDecoration(
-                                color: isActive ? m.color.withValues(alpha: 0.2) : palette.muted,
+                                color: isActive
+                                    ? m.color.withValues(alpha: 0.2)
+                                    : palette.muted,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: Icon(m.icon, size: 18, color: isActive ? m.color : palette.mutedForeground),
+                              child: Icon(
+                                m.icon,
+                                size: 18,
+                                color: isActive
+                                    ? m.color
+                                    : palette.mutedForeground,
+                              ),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(m.label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isActive ? m.color : palette.foreground)),
-                                  Text(m.subtitle, style: TextStyle(fontSize: 12, color: palette.mutedForeground)),
+                                  Text(
+                                    m.label,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: isActive
+                                          ? m.color
+                                          : palette.foreground,
+                                    ),
+                                  ),
+                                  Text(
+                                    m.subtitle,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: palette.mutedForeground,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
                             if (isActive)
-                              Icon(Icons.check_circle, color: m.color, size: 20),
+                              Icon(
+                                Icons.check_circle,
+                                color: m.color,
+                                size: 20,
+                              ),
                           ],
                         ),
                       ),
@@ -321,7 +450,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildTodayOverview(BuildContext context, OrderProvider orderProv) {
     final palette = AppColors.of(context);
     final now = DateTime.now();
-    final hour = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
+    final hour = now.hour > 12
+        ? now.hour - 12
+        : (now.hour == 0 ? 12 : now.hour);
     final amPm = now.hour >= 12 ? 'PM' : 'AM';
     final min = now.minute.toString().padLeft(2, '0');
     final timeLabel = 'Updated $hour:$min $amPm';
@@ -336,12 +467,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Today Overview', style: Theme.of(context).textTheme.titleMedium),
-            Text(timeLabel, style: Theme.of(context).textTheme.labelSmall),
-          ],
+        SectionHeader(
+          title: "Today's Overview",
+          trailing: Text(
+            timeLabel,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
         ),
         const SizedBox(height: 12),
         GridView.count(
@@ -352,31 +483,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisSpacing: 12,
           childAspectRatio: 1.55,
           children: [
-            _overviewCard(context, '$totalOrders', 'Total Orders', palette.primary, 'View all'),
-            _overviewCard(context, '${orderProv.pendingCount}', 'Pending', palette.statusAway, 'View'),
-            _overviewCard(context, '${orderProv.confirmedCount}', 'Confirmed', palette.statusOperating, 'View'),
-            _overviewCard(context, '$inTransitCount', 'In Transit', palette.statusBusy, 'View'),
+            _overviewCard(
+              context,
+              '$totalOrders',
+              'Total Orders',
+              palette.primary,
+              'View all',
+              ordersFilterIndex: 0,
+            ),
+            _overviewCard(
+              context,
+              '${orderProv.pendingCount}',
+              'Pending',
+              palette.statusAway,
+              'View',
+              ordersFilterIndex: 1,
+            ),
+            _overviewCard(
+              context,
+              '${orderProv.confirmedCount}',
+              'Confirmed',
+              palette.statusOperating,
+              'View',
+              ordersFilterIndex: 2,
+            ),
+            _overviewCard(
+              context,
+              '$inTransitCount',
+              'In Transit',
+              palette.statusBusy,
+              'View',
+              ordersFilterIndex: 3,
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _overviewCard(BuildContext context, String value, String label, Color color, String actionLabel) {
-    return Container(
+  Widget _overviewCard(
+    BuildContext context,
+    String value,
+    String label,
+    Color color,
+    String actionLabel, {
+    int? ordersFilterIndex,
+  }) {
+    return AppCard(
+      onTap: () =>
+          widget.onNavigateToTab?.call(1, ordersFilterIndex: ordersFilterIndex),
       padding: const EdgeInsets.all(kCardPadding),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).card,
-        borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: AppColors.of(context).border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             value,
-            style: Theme.of(context).textTheme.headlineLarge?.copyWith(color: color),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineLarge?.copyWith(color: color),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -388,15 +553,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              GestureDetector(
-                onTap: () => widget.onNavigateToTab?.call(1),
-                child: Text(
-                  actionLabel,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w600,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    actionLabel,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 2),
+                  Icon(Icons.arrow_forward, size: 12, color: color),
+                ],
               ),
             ],
           ),
@@ -408,78 +577,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildTodayZones(BuildContext context) {
     final palette = AppColors.of(context);
     final today = DeliveryDays.getToday();
-    return Container(
+    return AppCard(
       padding: const EdgeInsets.all(kCardPadding + 4),
-      decoration: BoxDecoration(
-        color: palette.card,
-        borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: palette.border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Today's Zones ($today)",
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              InkWell(
-                onTap: () => _showScheduleSheet(context),
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 4, vertical: 2),
-                  child: Row(
-                    children: [
-                      Text(
-                        'View schedule',
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelMedium
-                            ?.copyWith(color: palette.primary),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(Icons.arrow_forward,
-                          size: 12, color: palette.primary),
-                    ],
-                  ),
+          SectionHeader(
+            title: "Today's Zones ($today)",
+            trailing: InkWell(
+              onTap: () => _showScheduleSheet(context),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  children: [
+                    Text(
+                      'View schedule',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: palette.primary),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(Icons.arrow_forward, size: 12, color: palette.primary),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
           if (_todayBarangays.isEmpty)
             Text(
               'No deliveries scheduled today.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.mutedForeground,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: palette.mutedForeground),
             )
           else
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: _todayBarangays
-                  .map((brgy) => Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: palette.primaryLight,
-                          borderRadius: BorderRadius.circular(20),
+                  .map(
+                    (brgy) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.primaryLight,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        brgy,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: palette.primary,
+                          fontWeight: FontWeight.w500,
                         ),
-                        child: Text(
-                          brgy,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                color: palette.primary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                        ),
-                      ))
+                      ),
+                    ),
+                  )
                   .toList(),
             ),
         ],
@@ -544,9 +700,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             Text(
                               day,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
+                              style: Theme.of(context).textTheme.titleSmall
                                   ?.copyWith(
                                     color: isToday
                                         ? palette.primary
@@ -557,16 +711,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: palette.primaryLight,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
                                   'Today',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
+                                  style: Theme.of(context).textTheme.labelSmall
                                       ?.copyWith(color: palette.primary),
                                 ),
                               ),
@@ -584,24 +738,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             spacing: 6,
                             runSpacing: 6,
                             children: barangays
-                                .map((b) => Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: palette.primaryLight,
-                                        borderRadius:
-                                            BorderRadius.circular(16),
-                                      ),
-                                      child: Text(
-                                        b,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color: palette.primary,
-                                            ),
-                                      ),
-                                    ))
+                                .map(
+                                  (b) => Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: palette.primaryLight,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      b,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(color: palette.primary),
+                                    ),
+                                  ),
+                                )
                                 .toList(),
                           ),
                       ],
@@ -617,21 +772,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   List<String> _getBarangaysForDay(String day) {
-    final result = <String>[];
-    if (ZoneScheduleMap.zoneADays.contains(day)) {
-      result.addAll(['San Isidro', 'San Jose']);
-    }
-    if (ZoneScheduleMap.zoneBDays.contains(day)) {
-      result.addAll(['Poblacion', 'Santa Rosa']);
-    }
-    ZoneScheduleMap.zoneCBarangayDays.forEach((brgy, brgyDay) {
-      if (brgyDay == day) result.add(brgy);
-    });
-    return result;
+    return _barangays
+        .where((barangay) => _deliveryDaysForBarangay(barangay).contains(day))
+        .map((barangay) => barangay['name'] as String? ?? 'Unknown')
+        .toList();
   }
 
-  Widget _buildRecentOrders(BuildContext context, OrderProvider orderProv,
-      CustomerProvider customerProv) {
+  Widget _buildRecentOrders(
+    BuildContext context,
+    OrderProvider orderProv,
+    CustomerProvider customerProv,
+  ) {
     final palette = AppColors.of(context);
     final customerCache = <int, Map<String, dynamic>>{};
     for (final c in customerProv.customers) {
@@ -644,51 +795,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .take(5)
         .toList();
 
-    return Container(
+    return AppCard(
       padding: const EdgeInsets.all(kCardPadding + 4),
-      decoration: BoxDecoration(
-        color: palette.card,
-        borderRadius: BorderRadius.circular(kCardRadius),
-        border: Border.all(color: palette.border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Recent Orders',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              InkWell(
-                onTap: () => widget.onNavigateToTab?.call(1),
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 4, vertical: 2),
-                  child: Row(
-                    children: [
-                      Text(
-                        'View all',
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelMedium
-                            ?.copyWith(color: palette.primary),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(Icons.arrow_forward,
-                          size: 12, color: palette.primary),
-                    ],
-                  ),
+          SectionHeader(
+            title: 'Recent Orders',
+            trailing: InkWell(
+              onTap: () =>
+                  widget.onNavigateToTab?.call(1, ordersFilterIndex: 0),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  children: [
+                    Text(
+                      'View all',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: palette.primary),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(Icons.arrow_forward, size: 12, color: palette.primary),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 16),
           if (recentOrders.isEmpty)
             const EmptyState(
               icon: Icons.local_shipping,
+              mascot: MascotPose.deliveryTruck,
+              title: 'Queue is clear',
               message: 'No orders today yet.',
             )
           else
@@ -727,9 +867,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Icon(
                         isDeliver ? Icons.local_shipping : Icons.water_drop,
                         size: 16,
-                        color: isDeliver
-                            ? palette.primary
-                            : palette.statusAway,
+                        color: isDeliver ? palette.primary : palette.statusAway,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -739,9 +877,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           Text(
                             customerName ?? phone,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(fontWeight: FontWeight.w500),
                           ),
                           Text(
@@ -784,28 +920,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final palette = AppColors.of(context);
     Color color;
     Color bgColor;
+    IconData icon;
     switch (status) {
       case 'confirmed':
         color = palette.statusOperating;
         bgColor = palette.statusOperatingLight;
+        icon = Icons.check_circle;
         break;
       case 'pending':
         color = palette.statusAway;
         bgColor = palette.statusAwayLight;
+        icon = Icons.hourglass_top;
         break;
       case 'in_transit':
         color = palette.statusBusy;
         bgColor = palette.statusBusyLight;
+        icon = Icons.local_shipping;
         break;
       case 'cancelled':
       case 'rejected':
         color = palette.statusMaintenance;
         bgColor = palette.statusMaintenanceLight;
+        icon = Icons.cancel;
         break;
       default:
         color = palette.statusOperating;
         bgColor = palette.statusOperatingLight;
+        icon = Icons.done_all;
     }
-    return StatusBadge(label: _statusDisplayLabel(status), color: color, bgColor: bgColor);
+    return StatusBadge(
+      label: _statusDisplayLabel(status),
+      color: color,
+      bgColor: bgColor,
+      icon: icon,
+    );
   }
 }

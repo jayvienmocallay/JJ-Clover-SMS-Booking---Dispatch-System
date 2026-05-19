@@ -3,15 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/phone_number_utils.dart';
 import '../../data/models/order_model.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/repositories/barangay_repository.dart';
 import '../../data/repositories/customer_repository.dart';
+import '../../data/repositories/order_repository.dart';
 import '../../data/services/order_creation_service.dart';
 import '../theme/app_theme.dart';
 import 'shared/bottom_sheet_handle.dart';
-import 'shared/customer_avatar.dart';
 import 'shared/primary_action_button.dart';
 
 class AddOrderForm extends StatefulWidget {
@@ -24,17 +25,21 @@ class AddOrderForm extends StatefulWidget {
 }
 
 class _AddOrderFormState extends State<AddOrderForm> {
-  final _orderCreation = OrderCreationService();
-  final _customerRepository = CustomerRepository();
-  final _barangayRepository = BarangayRepository();
+  late final OrderCreationService _orderCreation;
+  late final CustomerRepository _customerRepository;
+  late final BarangayRepository _barangayRepository;
 
-  String _customerMode = 'existing';
-  String _customerSearch = '';
   int? _selectedCustomerId;
   int? _selectedBarangayId;
-  bool _consentGiven = false;
+  bool _saveCustomerForFutureOrders = false;
   bool _isSubmitting = false;
+  bool _isLoadingBarangays = false;
   List<Map<String, dynamic>> _barangays = [];
+  String? _barangayLoadError;
+  int _phoneLookupSerial = 0;
+  String? _autofilledName;
+  String? _autofilledAddress;
+  int? _autofilledBarangayId;
 
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -46,24 +51,19 @@ class _AddOrderFormState extends State<AddOrderForm> {
   @override
   void initState() {
     super.initState();
+    _customerRepository = context.read<CustomerRepository>();
+    _barangayRepository = context.read<BarangayRepository>();
+    _orderCreation = OrderCreationService(
+      orderRepository: context.read<OrderRepository>(),
+    );
     _loadBarangays();
     if (widget.prefilledPhone != null) {
-      _customerSearch = widget.prefilledPhone!;
-      // Auto-select customer matching this phone after first frame
-      WidgetsBinding.instance.addPostFrameCallback((_) => _autoSelectCustomer());
-    }
-  }
-
-  void _autoSelectCustomer() {
-    if (!mounted || widget.prefilledPhone == null) return;
-    final customers = context.read<CustomerProvider>().customers;
-    final phone = widget.prefilledPhone!;
-    for (final c in customers) {
-      final cPhone = (c['contact_number'] as String? ?? '');
-      if (cPhone == phone || cPhone.endsWith(phone) || phone.endsWith(cPhone)) {
-        setState(() => _selectedCustomerId = c['id'] as int?);
-        break;
-      }
+      _phoneController.text = PhoneNumberUtils.normalize(
+        widget.prefilledPhone!,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _lookupCustomerByPhone(_phoneController.text);
+      });
     }
   }
 
@@ -76,9 +76,26 @@ class _AddOrderFormState extends State<AddOrderForm> {
   }
 
   Future<void> _loadBarangays() async {
-    final rows = await _barangayRepository.getBarangays();
-    if (!mounted) return;
-    setState(() => _barangays = rows);
+    if (_isLoadingBarangays) return;
+    setState(() {
+      _isLoadingBarangays = true;
+      _barangayLoadError = null;
+    });
+    try {
+      final rows = await _barangayRepository.getBarangays();
+      if (!mounted) return;
+      setState(() => _barangays = rows);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _barangays = [];
+        _barangayLoadError = 'Unable to load barangays. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingBarangays = false);
+      }
+    }
   }
 
   Future<void> _submit() async {
@@ -91,40 +108,54 @@ class _AddOrderFormState extends State<AddOrderForm> {
     try {
       final type = _type == 'deliver' ? OrderType.deliver : OrderType.drop;
 
-      int? customerId;
-      String phone = _phoneController.text.trim();
-      String? address = _addressController.text.trim().isEmpty
-          ? null
-          : _addressController.text.trim();
+      int? customerId = _selectedCustomerId;
+      final name = _nameController.text.trim();
+      final phone = PhoneNumberUtils.normalize(_phoneController.text);
+      String? address = _blankToNull(_addressController.text);
 
-      if (_customerMode == 'existing') {
-        if (_selectedCustomerId == null) {
-          throw const OrderCreationException('Please select a customer.');
+      if (type == OrderType.deliver && phone.isEmpty) {
+        throw const OrderCreationException(
+          'Delivery orders require a phone number.',
+        );
+      }
+      if (phone.isNotEmpty && !PhoneNumberUtils.isValidMobileNumber(phone)) {
+        throw const OrderCreationException(
+          'Invalid phone format. Use 09XXXXXXXXX',
+        );
+      }
+
+      if (phone.isNotEmpty) {
+        final existingCustomer = await _customerRepository
+            .getCustomerWithBarangayByPhone(phone);
+        if (existingCustomer != null) {
+          customerId = existingCustomer['id'] as int?;
+          address ??= _blankToNull(existingCustomer['address'] as String?);
         }
-        final customer = _selectedCustomer();
-        customerId = _selectedCustomerId;
-        phone = customer?['contact_number'] as String? ?? '';
-        address = customer?['address'] as String?;
-      } else if (_customerMode == 'create') {
-        final name = _nameController.text.trim();
+      }
+
+      if (type == OrderType.deliver && address == null) {
+        throw const OrderCreationException(
+          'Please enter the delivery address.',
+        );
+      }
+
+      if (_saveCustomerForFutureOrders && customerId == null) {
         if (name.isEmpty) {
           throw const OrderCreationException('Please enter the customer name.');
         }
         if (phone.isEmpty) {
           throw const OrderCreationException('Please enter the phone number.');
         }
-        if (address == null) {
+        if (_isLoadingBarangays) {
           throw const OrderCreationException(
-            'Please enter the delivery address.',
+            'Please wait for barangays to load.',
           );
+        }
+        if (_barangayLoadError != null) {
+          throw OrderCreationException(_barangayLoadError!);
         }
         if (_selectedBarangayId == null) {
           throw const OrderCreationException('Please select a barangay.');
-        }
-        if (!_consentGiven) {
-          throw const OrderCreationException(
-            'Please confirm customer consent.',
-          );
         }
 
         customerId = await _customerRepository.insertCustomer({
@@ -137,24 +168,38 @@ class _AddOrderFormState extends State<AddOrderForm> {
           'consent_channel': 'manual',
           'consent_version': 'manual-v1',
         });
+        if (customerId == 0) {
+          throw const OrderCreationException('Customer was not created.');
+        }
       }
 
-      await _orderCreation.createManualOrder(
+      final orderId = await _orderCreation.createManualOrder(
         customerId: customerId,
         phoneNumber: phone,
         type: type,
         quantity: _quantity,
         address: address,
       );
+      if (orderId == 0) {
+        throw const OrderCreationException('Order was not created.');
+      }
 
       if (!mounted) return;
       await orderProvider.loadOrders();
       await customerProvider.loadCustomers();
       if (!mounted) return;
+      final refreshError = orderProvider.error ?? customerProvider.error;
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Order created ✓')));
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            refreshError == null
+                ? 'Order created'
+                : 'Order created, but refresh failed: $refreshError',
+          ),
+        ),
+      );
     } on OrderCreationException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -170,19 +215,14 @@ class _AddOrderFormState extends State<AddOrderForm> {
     }
   }
 
-  Map<String, dynamic>? _selectedCustomer() {
-    final customers = context.read<CustomerProvider>().customers;
-    for (final customer in customers) {
-      if (customer['id'] == _selectedCustomerId) return customer;
-    }
-    return null;
+  String? _blankToNull(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   @override
   Widget build(BuildContext context) {
-    final customers = context.watch<CustomerProvider>().customers;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final filteredCustomers = _filteredCustomers(customers);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
@@ -193,22 +233,7 @@ class _AddOrderFormState extends State<AddOrderForm> {
           children: [
             const BottomSheetHandle(title: 'New Order'),
             const SizedBox(height: 20),
-            Text('Customer', style: Theme.of(context).textTheme.labelMedium),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _buildModeOption('existing', 'Existing', Icons.people),
-                const SizedBox(width: 8),
-                _buildModeOption('guest', 'Guest', Icons.person_outline),
-                const SizedBox(width: 8),
-                _buildModeOption('create', 'Create', Icons.person_add),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (_customerMode == 'existing')
-              _buildExistingCustomerPicker(filteredCustomers),
-            if (_customerMode == 'guest') _buildGuestFields(),
-            if (_customerMode == 'create') _buildCreateCustomerFields(),
+            _buildCustomerInformationSection(),
             const SizedBox(height: 16),
             Text('Order Type', style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 6),
@@ -247,7 +272,6 @@ class _AddOrderFormState extends State<AddOrderForm> {
                 }),
               ],
             ),
-
             const SizedBox(height: 24),
             PrimaryActionButton(
               label: _isSubmitting ? 'Creating...' : 'Create Order',
@@ -259,227 +283,118 @@ class _AddOrderFormState extends State<AddOrderForm> {
     );
   }
 
-  List<Map<String, dynamic>> _filteredCustomers(
-    List<Map<String, dynamic>> customers,
-  ) {
-    if (_customerSearch.isEmpty) return customers;
-    return customers.where((c) {
-      final name = (c['name'] as String? ?? '').toLowerCase();
-      final phone = (c['contact_number'] as String? ?? '').toLowerCase();
-      final query = _customerSearch.toLowerCase();
-      return name.contains(query) || phone.contains(query);
-    }).toList();
-  }
-
-  Widget _buildExistingCustomerPicker(
-    List<Map<String, dynamic>> filteredCustomers,
-  ) {
-    final palette = AppColors.of(context);
+  Widget _buildCustomerInformationSection() {
+    final savedCustomerFound = _selectedCustomerId != null;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _textField(
-          onChanged: (v) => setState(() => _customerSearch = v),
-          hint: 'Search customer...',
-          icon: Icons.search,
+        Text(
+          'Customer Information',
+          style: Theme.of(context).textTheme.labelMedium,
         ),
         const SizedBox(height: 8),
-        Container(
-          constraints: const BoxConstraints(maxHeight: 150),
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: filteredCustomers.length,
-            itemBuilder: (_, i) {
-              final customer = filteredCustomers[i];
-              final id = customer['id'] as int;
-              final name = customer['name'] as String? ?? '';
-              final isSelected = _selectedCustomerId == id;
-              return GestureDetector(
-                onTap: () => setState(() {
-                  _selectedCustomerId = id;
-                  _phoneController.text =
-                      customer['contact_number'] as String? ?? '';
-                  _addressController.text =
-                      customer['address'] as String? ?? '';
-                }),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  margin: const EdgeInsets.only(bottom: 4),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? palette.primaryLight
-                        : palette.background,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isSelected ? palette.primary : palette.border,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      CustomerAvatar(name: name, size: 32),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '$name — ${customer['contact_number']}',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: isSelected
-                                    ? palette.primary
-                                    : palette.foreground,
-                              ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (isSelected)
-                        Icon(
-                          Icons.check_circle,
-                          size: 16,
-                          color: palette.primary,
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildGuestFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
         Text('Phone Number', style: Theme.of(context).textTheme.labelMedium),
         const SizedBox(height: 6),
         _textField(
           controller: _phoneController,
-          hint: _type == 'drop'
-              ? 'Optional for walk-in'
-              : 'Required for delivery',
+          onChanged: _handlePhoneChanged,
+          hint: _type == 'drop' ? 'Optional for walk-in' : 'Required',
           keyboardType: TextInputType.phone,
           digitsOnly: true,
         ),
-        if (_type == 'deliver') ...[
-          const SizedBox(height: 12),
-          Text(
-            'Delivery Address',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-          const SizedBox(height: 6),
-          _textField(
-            controller: _addressController,
-            hint: 'Required for guest delivery',
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildCreateCustomerFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Name', style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 12),
+        Text('Customer Name', style: Theme.of(context).textTheme.labelMedium),
         const SizedBox(height: 6),
         _textField(controller: _nameController, hint: 'Customer name'),
-        const SizedBox(height: 12),
-        Text('Phone Number', style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(height: 6),
-        _textField(
-          controller: _phoneController,
-          hint: 'e.g. 09171234567',
-          keyboardType: TextInputType.phone,
-          digitsOnly: true,
-        ),
         const SizedBox(height: 12),
         Text(
           'Delivery Address',
           style: Theme.of(context).textTheme.labelMedium,
         ),
         const SizedBox(height: 6),
-        _textField(controller: _addressController, hint: 'Full address'),
-        const SizedBox(height: 12),
-        Text('Barangay', style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(height: 6),
-        _barangayDropdown(),
+        _textField(
+          controller: _addressController,
+          hint: _type == 'deliver' ? 'Required for delivery' : 'Optional',
+        ),
         CheckboxListTile(
           contentPadding: EdgeInsets.zero,
-          value: _consentGiven,
-          onChanged: (value) => setState(() => _consentGiven = value ?? false),
+          value: savedCustomerFound || _saveCustomerForFutureOrders,
+          onChanged: savedCustomerFound
+              ? null
+              : (value) {
+                  setState(() => _saveCustomerForFutureOrders = value ?? false);
+                },
           title: Text(
-            'Customer consent confirmed',
+            'Save this customer for future orders',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           controlAffinity: ListTileControlAffinity.leading,
         ),
+        if (_saveCustomerForFutureOrders && !savedCustomerFound) ...[
+          Text('Barangay', style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 6),
+          _barangayDropdown(),
+        ],
       ],
     );
   }
 
   Widget _barangayDropdown() {
     final palette = AppColors.of(context);
+    if (_barangayLoadError != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: palette.background,
+          borderRadius: BorderRadius.circular(kButtonRadius),
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _barangayLoadError!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: palette.mutedForeground,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            TextButton(
+              onPressed: _isLoadingBarangays ? null : _loadBarangays,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return DropdownButtonFormField<int>(
       initialValue: _selectedBarangayId,
       items: _barangays.map((barangay) {
         return DropdownMenuItem<int>(
           value: barangay['id'] as int,
-          child: Text(barangay['name'] as String? ?? ''),
+          child: Text(
+            '${barangay['name']} (${barangay['delivery_zone']})',
+            overflow: TextOverflow.ellipsis,
+          ),
         );
       }).toList(),
-      onChanged: (value) => setState(() => _selectedBarangayId = value),
+      onChanged: _isLoadingBarangays
+          ? null
+          : (value) => setState(() => _selectedBarangayId = value),
       decoration: InputDecoration(
+        hintText: _isLoadingBarangays
+            ? 'Loading barangays...'
+            : _barangays.isEmpty
+            ? 'No barangays. Add them in Settings.'
+            : 'Select barangay',
         filled: true,
         fillColor: palette.background,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(kButtonRadius),
           borderSide: BorderSide(color: palette.border),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModeOption(String value, String label, IconData icon) {
-    final isSelected = _customerMode == value;
-    final palette = AppColors.of(context);
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() {
-          _customerMode = value;
-          _selectedCustomerId = null;
-          _phoneController.clear();
-          _addressController.clear();
-        }),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? palette.primaryLight : palette.background,
-            borderRadius: BorderRadius.circular(kButtonRadius),
-            border: Border.all(
-              color: isSelected ? palette.primary : palette.border,
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: isSelected ? palette.primary : palette.mutedForeground,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: isSelected ? palette.primary : palette.mutedForeground,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -594,5 +509,90 @@ class _AddOrderFormState extends State<AddOrderForm> {
         ),
       ),
     );
+  }
+
+  void _handlePhoneChanged(String value) {
+    _lookupCustomerByPhone(value);
+  }
+
+  Future<void> _lookupCustomerByPhone(String value) async {
+    final normalizedPhone = PhoneNumberUtils.normalize(value);
+    final lookupSerial = ++_phoneLookupSerial;
+
+    if (!PhoneNumberUtils.isValidMobileNumber(normalizedPhone)) {
+      if (!mounted || !_hasAutofilledCustomer) return;
+      setState(_clearAutofilledCustomer);
+      return;
+    }
+
+    final customer = await _customerRepository.getCustomerWithBarangayByPhone(
+      normalizedPhone,
+    );
+    if (!mounted ||
+        lookupSerial != _phoneLookupSerial ||
+        PhoneNumberUtils.normalize(_phoneController.text) != normalizedPhone) {
+      return;
+    }
+
+    setState(() {
+      if (customer == null) {
+        _clearAutofilledCustomer();
+      } else {
+        _applyAutofilledCustomer(customer);
+      }
+    });
+  }
+
+  bool get _hasAutofilledCustomer {
+    return _selectedCustomerId != null ||
+        _autofilledName != null ||
+        _autofilledAddress != null ||
+        _autofilledBarangayId != null;
+  }
+
+  void _applyAutofilledCustomer(Map<String, dynamic> customer) {
+    final name = customer['name'] as String? ?? '';
+    final address = customer['address'] as String? ?? '';
+
+    _selectedCustomerId = customer['id'] as int?;
+    _selectedBarangayId = customer['barangay_id'] as int?;
+    _saveCustomerForFutureOrders = false;
+
+    _nameController.text = name;
+    _addressController.text = address;
+    _autofilledName = name;
+    _autofilledAddress = address;
+    _autofilledBarangayId = _selectedBarangayId;
+  }
+
+  void _clearAutofilledCustomer() {
+    final hadAutofilledCustomer = _hasAutofilledCustomer;
+    _selectedCustomerId = null;
+    if (hadAutofilledCustomer) {
+      _saveCustomerForFutureOrders = false;
+    }
+    _selectedBarangayId = _matchesAutofilledBarangay()
+        ? null
+        : _selectedBarangayId;
+
+    if (_matchesAutofilledValue(_nameController.text, _autofilledName)) {
+      _nameController.clear();
+    }
+    if (_matchesAutofilledValue(_addressController.text, _autofilledAddress)) {
+      _addressController.clear();
+    }
+
+    _autofilledName = null;
+    _autofilledAddress = null;
+    _autofilledBarangayId = null;
+  }
+
+  bool _matchesAutofilledValue(String currentValue, String? autofilledValue) {
+    return autofilledValue != null && currentValue == autofilledValue;
+  }
+
+  bool _matchesAutofilledBarangay() {
+    return _autofilledBarangayId != null &&
+        _selectedBarangayId == _autofilledBarangayId;
   }
 }

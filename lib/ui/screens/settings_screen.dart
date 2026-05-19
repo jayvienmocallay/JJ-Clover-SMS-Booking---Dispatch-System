@@ -2,13 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../data/models/order_model.dart';
 import '../../data/repositories/barangay_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
+import '../../data/services/command_handlers/sms_handler_utils.dart';
 import '../../data/services/supabase_sync_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/complete_order_sheet.dart';
+import '../widgets/shared/app_page_header.dart';
+import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/loading_state.dart';
 import 'package:jj_clover_sms/main.dart' show setThemeMode, themeNotifier;
+import 'dart:async' show unawaited;
+import '../../core/security/admin_auth_service.dart';
+import '../../data/repositories/audit_log_repository.dart';
+import '../security/admin_gate.dart';
 
 // ─────────────────────────────────────────────
 // Main Settings Screen (inline + nav for Data/About)
@@ -26,7 +36,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _barangayController = TextEditingController();
   List<Map<String, dynamic>> _barangays = [];
-  final Set<String> _selectedDays = {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'};
+  final Set<String> _selectedDays = {};
 
   int _cutoffHour = AppConstants.orderCutOffHour;
   int _cutoffMinute = AppConstants.orderCutOffMinute;
@@ -34,12 +44,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _loadError;
   late final BarangayRepository _barangayRepo;
   late final SettingsRepository _settingsRepo;
+  late final AdminAuthService _adminAuth;
+  late final AuditLogRepository _auditRepo;
 
   @override
   void initState() {
     super.initState();
     _barangayRepo = context.read<BarangayRepository>();
     _settingsRepo = context.read<SettingsRepository>();
+    _adminAuth = context.read<AdminAuthService>();
+    _auditRepo = context.read<AuditLogRepository>();
     _loadData();
   }
 
@@ -71,17 +85,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  static const _allWeekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  static const _allWeekdays = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+  ];
   static const _dayAbbr = {
-    'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed',
-    'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat',
+    'Monday': 'Mon',
+    'Tuesday': 'Tue',
+    'Wednesday': 'Wed',
+    'Thursday': 'Thu',
+    'Friday': 'Fri',
+    'Saturday': 'Sat',
   };
 
   // Convert selected days set → zone + delivery_day for DB storage
   static ({String zone, String? deliveryDay}) _daysToZone(Set<String> days) {
     final sorted = _allWeekdays.where(days.contains).toList();
     if (sorted.length == 6) return (zone: 'Zone A', deliveryDay: null);
-    if (sorted.length == 3 && days.containsAll(['Monday', 'Wednesday', 'Friday']) && sorted.length == 3) {
+    if (sorted.length == 3 &&
+        days.containsAll(['Monday', 'Wednesday', 'Friday']) &&
+        sorted.length == 3) {
       return (zone: 'Zone B', deliveryDay: null);
     }
     return (zone: 'Zone C', deliveryDay: sorted.join(','));
@@ -99,7 +126,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _formatDaysLabel(Set<String> days) {
     if (days.length == 6) return 'Every day';
-    final sorted = _allWeekdays.where(days.contains).map((d) => _dayAbbr[d] ?? d);
+    final sorted = _allWeekdays
+        .where(days.contains)
+        .map((d) => _dayAbbr[d] ?? d);
     return sorted.join(', ');
   }
 
@@ -108,7 +137,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (name.isEmpty) return;
     if (_selectedDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one delivery day')),
+        const SnackBar(
+          content: Text('Please select at least one delivery day'),
+        ),
       );
       return;
     }
@@ -121,31 +152,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       return;
     }
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to add a barangay.',
+    )) {
+      return;
+    }
     final zoneData = _daysToZone(_selectedDays);
     await _barangayRepo.insertBarangay({
       'name': name,
       'delivery_zone': zoneData.zone,
       if (zoneData.deliveryDay != null) 'delivery_day': zoneData.deliveryDay,
     });
+    unawaited(_auditRepo.record(
+      action: 'barangay_created',
+      entityType: 'barangay',
+      metadata: {
+        'name': name,
+        'delivery_zone': zoneData.zone,
+        'delivery_day': zoneData.deliveryDay,
+      },
+    ));
     _barangayController.clear();
-    setState(() => _selectedDays
-      ..clear()
-      ..addAll(_allWeekdays));
+    setState(() => _selectedDays.clear());
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name added successfully')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$name added successfully')),
+      );
     }
     await _loadData();
   }
 
   Future<void> _removeBarangay(int id) async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to remove a barangay.',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    final barangay = _barangays.firstWhere(
+      (b) => b['id'] == id,
+      orElse: () => <String, dynamic>{},
+    );
+    final name = barangay['name'] as String? ?? 'this barangay';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.of(context).card,
+        title: Text(
+          'Remove Barangay',
+          style: TextStyle(color: AppColors.of(context).foreground),
+        ),
+        content: Text(
+          'Remove "$name"? This may affect customers and delivery schedules.',
+          style: TextStyle(color: AppColors.of(context).mutedForeground),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.of(context).statusMaintenance,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     await _barangayRepo.deleteBarangay(id);
+    unawaited(_auditRepo.record(
+      action: 'barangay_deleted',
+      entityType: 'barangay',
+      entityId: id.toString(),
+      metadata: {'name': name},
+    ));
     await _loadData();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barangay removed ✓')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Barangay removed')),
+      );
     }
   }
 
   Future<void> _showTimePicker() async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to change the order cut-off time.',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    final oldHour = _cutoffHour;
+    final oldMinute = _cutoffMinute;
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: _cutoffHour, minute: _cutoffMinute),
@@ -168,18 +271,252 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _cutoffHour = picked.hour;
         _cutoffMinute = picked.minute;
       });
+      unawaited(_auditRepo.record(
+        action: 'cutoff_time_changed',
+        entityType: 'setting',
+        entityId: 'cutoff_time',
+        metadata: {
+          'old_hour': oldHour,
+          'old_minute': oldMinute,
+          'new_hour': picked.hour,
+          'new_minute': picked.minute,
+        },
+      ));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cut-off time updated to ${_formatCutoffTime()}')),
+          SnackBar(
+            content: Text('Cut-off time updated to ${_formatCutoffTime()}'),
+          ),
         );
       }
     }
   }
 
   String _formatCutoffTime() {
-    final hour = _cutoffHour > 12 ? _cutoffHour - 12 : (_cutoffHour == 0 ? 12 : _cutoffHour);
+    final hour = _cutoffHour > 12
+        ? _cutoffHour - 12
+        : (_cutoffHour == 0 ? 12 : _cutoffHour);
     final amPm = _cutoffHour >= 12 ? 'PM' : 'AM';
     return '$hour:${_cutoffMinute.toString().padLeft(2, '0')} $amPm';
+  }
+
+  Widget _buildAdminPinSection() {
+    final palette = AppColors.of(context);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: palette.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: palette.primaryLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.admin_panel_settings, size: 20, color: palette.primary),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Admin PIN',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: palette.foreground,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: palette.primaryLight,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Admin',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: palette.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Protect sensitive actions with a PIN.',
+                      style: TextStyle(fontSize: 13, color: palette.mutedForeground),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _changePinFlow,
+                  icon: const Icon(Icons.edit, size: 16),
+                  label: const Text('Change PIN'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _lockAdminSession,
+                  icon: const Icon(Icons.lock, size: 16),
+                  label: const Text('Lock Now'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _changePinFlow() async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to change the admin PIN.',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    await _showChangePinDialog();
+  }
+
+  Future<void> _showChangePinDialog() async {
+    final palette = AppColors.of(context);
+    final newPinController = TextEditingController();
+    final confirmController = TextEditingController();
+    String? dialogError;
+    bool submitting = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: palette.card,
+          title: Text('Set New PIN', style: TextStyle(color: palette.foreground)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: newPinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                enabled: !submitting,
+                decoration: InputDecoration(
+                  labelText: 'New PIN (min 4 digits)',
+                  filled: true,
+                  fillColor: palette.background,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                enabled: !submitting,
+                decoration: InputDecoration(
+                  labelText: 'Confirm new PIN',
+                  filled: true,
+                  fillColor: palette.background,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              if (dialogError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  dialogError!,
+                  style: TextStyle(fontSize: 13, color: palette.statusMaintenance),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: submitting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: submitting
+                  ? null
+                  : () async {
+                      final pin = newPinController.text;
+                      if (pin.length < 4) {
+                        setDialogState(() => dialogError = 'PIN must be at least 4 digits.');
+                        return;
+                      }
+                      if (pin != confirmController.text) {
+                        setDialogState(() => dialogError = 'PINs do not match.');
+                        return;
+                      }
+                      setDialogState(() => submitting = true);
+                      await _adminAuth.setPassword(pin);
+                      unawaited(_auditRepo.record(
+                        action: 'admin_pin_changed',
+                        entityType: 'setting',
+                        entityId: 'admin_pin',
+                      ));
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Admin PIN updated.')),
+                        );
+                      }
+                    },
+              child: submitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    newPinController.dispose();
+    confirmController.dispose();
+  }
+
+  void _lockAdminSession() {
+    _adminAuth.lock();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Admin session locked.')),
+    );
   }
 
   @override
@@ -191,7 +528,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Center(child: CircularProgressIndicator(color: AppColors.of(context).primary));
+      return const LoadingState(
+        title: 'Loading settings',
+        message: 'Preparing station rules and delivery zones...',
+        mascot: MascotPose.waterBottle,
+      );
     }
 
     if (_loadError != null) {
@@ -202,15 +543,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline, size: 48, color: palette.statusMaintenance),
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: palette.statusMaintenance,
+              ),
               const SizedBox(height: 12),
-              Text('Failed to load settings.', style: TextStyle(color: palette.foreground, fontWeight: FontWeight.w600)),
+              Text(
+                'Failed to load settings.',
+                style: TextStyle(
+                  color: palette.foreground,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 8),
-              Text(_loadError!, textAlign: TextAlign.center, style: TextStyle(color: palette.mutedForeground, fontSize: 12)),
+              Text(
+                _loadError!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: palette.mutedForeground, fontSize: 12),
+              ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () {
-                  setState(() { _isLoading = true; _loadError = null; });
+                  setState(() {
+                    _isLoading = true;
+                    _loadError = null;
+                  });
                   _loadData();
                 },
                 child: const Text('Retry'),
@@ -225,35 +583,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Header
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Settings',
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 26),
+        AppPageHeader(
+          title: 'Settings',
+          subtitle: "Configure your station's dispatch rules.",
+          action: ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeNotifier,
+            builder: (context, mode, _) => IconButton(
+              onPressed: () async {
+                final nextMode = mode == ThemeMode.light
+                    ? ThemeMode.dark
+                    : ThemeMode.light;
+                await setThemeMode(nextMode);
+              },
+              icon: Icon(
+                mode == ThemeMode.light ? Icons.light_mode : Icons.dark_mode,
+                color: palette.mutedForeground,
               ),
+              tooltip: mode == ThemeMode.light
+                  ? 'Switch to dark'
+                  : 'Switch to light',
             ),
-            ValueListenableBuilder<ThemeMode>(
-              valueListenable: themeNotifier,
-              builder: (context, mode, _) => IconButton(
-                onPressed: () async {
-                  final nextMode = mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
-                  await setThemeMode(nextMode);
-                },
-                icon: Icon(
-                  mode == ThemeMode.light ? Icons.light_mode : Icons.dark_mode,
-                  color: palette.mutedForeground,
-                ),
-                tooltip: mode == ThemeMode.light ? 'Switch to dark' : 'Switch to light',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "Configure your station's dispatch rules.",
-          style: TextStyle(fontSize: 14, color: palette.mutedForeground),
+          ),
         ),
         const SizedBox(height: 24),
 
@@ -264,7 +614,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           iconBgColor: palette.primaryLight,
           iconColor: palette.primary,
           title: 'Order Cut-off Time',
-          description: "Orders received before this time are added to today's "
+          description:
+              "Orders received before this time are added to today's "
               "dispatch. Orders after will be queued for the next trip.",
           trailing: GestureDetector(
             onTap: _showTimePicker,
@@ -280,7 +631,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Text(
                     _formatCutoffTime(),
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: palette.foreground),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: palette.foreground,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Icon(Icons.edit, size: 14, color: palette.primary),
@@ -298,7 +653,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           iconBgColor: palette.statusAwayLight,
           iconColor: palette.statusAway,
           title: 'Walk-in Alert',
-          description: 'When a customer sends a DROP command, a loud alert '
+          description:
+              'When a customer sends a DROP command, a loud alert '
               'will appear on screen until staff acknowledges it.',
           trailing: GestureDetector(
             onTap: widget.onTestAlert,
@@ -310,7 +666,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               child: const Text(
                 'Test Alert',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -321,6 +681,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _buildBarangaySection(),
         const SizedBox(height: 16),
 
+        // Admin PIN
+        _buildAdminPinSection(),
+        const SizedBox(height: 16),
+
         // Delivery Manifest
         _settingCard(
           context,
@@ -328,7 +692,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           iconBgColor: palette.statusOperatingLight,
           iconColor: palette.statusOperating,
           title: 'Delivery Manifest',
-          description: 'View confirmed orders ready for delivery grouped by day.',
+          description:
+              'View confirmed orders ready for delivery grouped by day.',
           trailing: GestureDetector(
             onTap: _showDeliveryManifest,
             child: Container(
@@ -339,7 +704,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               child: const Text(
                 'View Manifest',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -406,20 +775,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(color: palette.primaryLight, borderRadius: BorderRadius.circular(12)),
-                child: Icon(Icons.location_city, size: 20, color: palette.primary),
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: palette.primaryLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.location_city,
+                  size: 20,
+                  color: palette.primary,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Barangay List', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: palette.foreground)),
+                    Text(
+                      'Barangay List',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: palette.foreground,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       'Manage the barangays available for customer registration and delivery scheduling.',
-                      style: TextStyle(fontSize: 13, color: palette.mutedForeground),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: palette.mutedForeground,
+                      ),
                     ),
                   ],
                 ),
@@ -445,7 +832,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       hintText: 'e.g., Barangay San Miguel',
                       hintStyle: TextStyle(color: palette.mutedForeground),
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -454,9 +844,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               GestureDetector(
                 onTap: _addBarangay,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(color: palette.primary, borderRadius: BorderRadius.circular(12)),
-                  child: const Text('Add', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: palette.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Add',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -478,11 +881,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 160),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: selected ? palette.primary : palette.background,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: selected ? palette.primary : palette.border),
+                    border: Border.all(
+                      color: selected ? palette.primary : palette.border,
+                    ),
                   ),
                   child: Text(
                     _dayAbbr[day] ?? day,
@@ -500,7 +908,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (_barangays.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text('No barangays added yet.', style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
+              child: Text(
+                'No barangays added yet.',
+                style: TextStyle(fontSize: 13, color: palette.mutedForeground),
+              ),
             )
           else
             Wrap(
@@ -516,7 +927,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 return GestureDetector(
                   onTap: () => _showEditBarangaySheet(b),
                   child: Container(
-                    padding: const EdgeInsets.only(left: 12, top: 6, bottom: 6, right: 4),
+                    padding: const EdgeInsets.only(
+                      left: 12,
+                      top: 6,
+                      bottom: 6,
+                      right: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: palette.background,
                       borderRadius: BorderRadius.circular(20),
@@ -525,16 +941,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.edit, size: 12, color: palette.mutedForeground),
+                        Icon(
+                          Icons.edit,
+                          size: 12,
+                          color: palette.mutedForeground,
+                        ),
                         const SizedBox(width: 4),
-                        Text(label, style: TextStyle(fontSize: 12, color: palette.foreground)),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: palette.foreground,
+                          ),
+                        ),
                         const SizedBox(width: 4),
                         GestureDetector(
                           onTap: () => _removeBarangay(id),
                           child: Container(
-                            width: 20, height: 20,
-                            decoration: BoxDecoration(color: palette.muted, shape: BoxShape.circle),
-                            child: Icon(Icons.close, size: 12, color: palette.mutedForeground),
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: palette.muted,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.close,
+                              size: 12,
+                              color: palette.mutedForeground,
+                            ),
                           ),
                         ),
                       ],
@@ -567,21 +1001,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             return Padding(
-              padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom),
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Center(
                     child: Container(
-                      width: 40, height: 4,
-                      decoration: BoxDecoration(color: palette.border, borderRadius: BorderRadius.circular(2)),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: palette.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text('Edit $name', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: palette.foreground)),
+                  Text(
+                    'Edit $name',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: palette.foreground,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text('Select which days this barangay receives deliveries.', style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
+                  Text(
+                    'Select which days this barangay receives deliveries.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: palette.mutedForeground,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   // Day chips
                   Wrap(
@@ -591,22 +1047,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       final selected = editDays.contains(day);
                       return GestureDetector(
                         onTap: () => setSheetState(() {
-                          if (selected) { editDays.remove(day); } else { editDays.add(day); }
+                          if (selected) {
+                            editDays.remove(day);
+                          } else {
+                            editDays.add(day);
+                          }
                         }),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 160),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
-                            color: selected ? palette.primary : palette.background,
+                            color: selected
+                                ? palette.primary
+                                : palette.background,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: selected ? palette.primary : palette.border),
+                            border: Border.all(
+                              color: selected
+                                  ? palette.primary
+                                  : palette.border,
+                            ),
                           ),
                           child: Text(
                             _dayAbbr[day] ?? day,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: selected ? Colors.white : palette.mutedForeground,
+                              color: selected
+                                  ? Colors.white
+                                  : palette.mutedForeground,
                             ),
                           ),
                         ),
@@ -615,35 +1086,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   if (editDays.isEmpty) ...[
                     const SizedBox(height: 8),
-                    Text('Select at least one day', style: TextStyle(fontSize: 12, color: palette.statusMaintenance, fontStyle: FontStyle.italic)),
+                    Text(
+                      'Select at least one day',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: palette.statusMaintenance,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: GestureDetector(
-                      onTap: editDays.isEmpty ? null : () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final zoneData = _daysToZone(editDays);
-                        await _barangayRepo.updateBarangay(id, {
-                          'name': name,
-                          'delivery_zone': zoneData.zone,
-                          'delivery_day': zoneData.deliveryDay,
-                        });
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        await _loadData();
-                        if (!mounted) return;
-                        messenger.showSnackBar(SnackBar(content: Text('$name updated')));
-                      },
+                      onTap: editDays.isEmpty
+                          ? null
+                          : () async {
+                              if (!await requireAdminPassword(
+                                context,
+                                reason: 'Admin password required to change barangay delivery days.',
+                              )) {
+                                return;
+                              }
+                              if (!mounted) return;
+                              final messenger = ScaffoldMessenger.of(context);
+                              final zoneData = _daysToZone(editDays);
+                              await _barangayRepo.updateBarangay(id, {
+                                'name': name,
+                                'delivery_zone': zoneData.zone,
+                                'delivery_day': zoneData.deliveryDay,
+                              });
+                              unawaited(_auditRepo.record(
+                                action: 'barangay_updated',
+                                entityType: 'barangay',
+                                entityId: id.toString(),
+                                metadata: {
+                                  'name': name,
+                                  'delivery_zone': zoneData.zone,
+                                  'delivery_day': zoneData.deliveryDay,
+                                },
+                              ));
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              await _loadData();
+                              if (!mounted) return;
+                              messenger.showSnackBar(
+                                SnackBar(content: Text('$name updated')),
+                              );
+                            },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
-                          color: editDays.isEmpty ? palette.muted : palette.primary,
+                          color: editDays.isEmpty
+                              ? palette.muted
+                              : palette.primary,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           'Save Changes',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: editDays.isEmpty ? palette.mutedForeground : Colors.white),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: editDays.isEmpty
+                                ? palette.mutedForeground
+                                : Colors.white,
+                          ),
                         ),
                       ),
                     ),
@@ -695,7 +1202,8 @@ class _SettingsNavItem extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 44, height: 44,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: iconColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
@@ -707,13 +1215,30 @@ class _SettingsNavItem extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: palette.foreground)),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: palette.foreground,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: palette.mutedForeground,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: palette.mutedForeground, size: 20),
+              Icon(
+                Icons.chevron_right,
+                color: palette.mutedForeground,
+                size: 20,
+              ),
             ],
           ),
         ),
@@ -755,18 +1280,29 @@ class _DataSyncPage extends StatelessWidget {
             iconBgColor: palette.statusOperatingLight,
             iconColor: palette.statusOperating,
             title: 'Data Privacy',
-            description: 'Customer data is stored locally with encryption. '
+            description:
+                'Customer data is stored locally with encryption. '
                 'When Cloud Sync is enabled, data is backed up to Supabase. '
                 'Deletion requests (RA 10173) propagate to cloud.',
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: palette.statusOperatingLight, borderRadius: BorderRadius.circular(20)),
+              decoration: BoxDecoration(
+                color: palette.statusOperatingLight,
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.shield, size: 12, color: palette.statusOperating),
                   const SizedBox(width: 4),
-                  Text('Encrypted & RA 10173', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: palette.statusOperating)),
+                  Text(
+                    'Encrypted & RA 10173',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: palette.statusOperating,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -787,23 +1323,33 @@ class _DataSyncPage extends StatelessWidget {
           IconData statusIcon;
           switch (syncService.status) {
             case SyncStatus.idle:
-              statusText = 'Idle'; statusColor = palette.mutedForeground; statusIcon = Icons.cloud_off;
+              statusText = 'Idle';
+              statusColor = palette.mutedForeground;
+              statusIcon = Icons.cloud_off;
               break;
             case SyncStatus.syncing:
-              statusText = 'Syncing...'; statusColor = palette.primary; statusIcon = Icons.cloud_sync;
+              statusText = 'Syncing...';
+              statusColor = palette.primary;
+              statusIcon = Icons.cloud_sync;
               break;
             case SyncStatus.success:
-              statusText = 'Synced'; statusColor = palette.statusOperating; statusIcon = Icons.cloud_done;
+              statusText = 'Synced';
+              statusColor = palette.statusOperating;
+              statusIcon = Icons.cloud_done;
               break;
             case SyncStatus.error:
-              statusText = 'Error'; statusColor = palette.statusMaintenance; statusIcon = Icons.cloud_off;
+              statusText = 'Error';
+              statusColor = palette.statusMaintenance;
+              statusIcon = Icons.cloud_off;
               break;
           }
 
           String lastSyncLabel = 'Never';
           if (syncService.lastSyncedAt != null) {
             final dt = syncService.lastSyncedAt!;
-            final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+            final hour = dt.hour > 12
+                ? dt.hour - 12
+                : (dt.hour == 0 ? 12 : dt.hour);
             final amPm = dt.hour >= 12 ? 'PM' : 'AM';
             final min = dt.minute.toString().padLeft(2, '0');
             lastSyncLabel = '${dt.month}/${dt.day} $hour:$min $amPm';
@@ -823,27 +1369,88 @@ class _DataSyncPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      width: 40, height: 40,
-                      decoration: BoxDecoration(color: palette.primaryLight, borderRadius: BorderRadius.circular(12)),
-                      child: Icon(Icons.cloud_sync, size: 20, color: palette.primary),
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: palette.primaryLight,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.cloud_sync,
+                        size: 20,
+                        color: palette.primary,
+                      ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Cloud Sync', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: palette.foreground)),
+                          Text(
+                            'Cloud Sync',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: palette.foreground,
+                            ),
+                          ),
                           const SizedBox(height: 4),
-                          Text('Back up your data to Supabase cloud. Data syncs automatically when connected.', style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
+                          Text(
+                            'Back up your data to Supabase cloud. Data syncs automatically when connected.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: palette.mutedForeground,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                _syncToggle(context, Icons.sync, 'Auto Sync', syncService.autoSyncEnabled, syncService.setAutoSync),
+                _syncToggle(
+                  context,
+                  Icons.sync,
+                  'Auto Sync',
+                  syncService.autoSyncEnabled,
+                  (v) async {
+                    if (!await requireAdminPassword(
+                      context,
+                      reason: 'Admin password required to change cloud sync settings.',
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
+                    syncService.setAutoSync(v);
+                    unawaited(context.read<AuditLogRepository>().record(
+                      action: 'cloud_sync_auto_changed',
+                      entityType: 'setting',
+                      metadata: {'enabled': v},
+                    ));
+                  },
+                ),
                 const SizedBox(height: 8),
-                _syncToggle(context, Icons.wifi, 'Sync over Wi-Fi only', syncService.wifiOnly, syncService.setWifiOnly),
+                _syncToggle(
+                  context,
+                  Icons.wifi,
+                  'Sync over Wi-Fi only',
+                  syncService.wifiOnly,
+                  (v) async {
+                    if (!await requireAdminPassword(
+                      context,
+                      reason: 'Admin password required to change cloud sync settings.',
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
+                    syncService.setWifiOnly(v);
+                    unawaited(context.read<AuditLogRepository>().record(
+                      action: 'cloud_sync_wifi_only_changed',
+                      entityType: 'setting',
+                      metadata: {'wifi_only': v},
+                    ));
+                  },
+                ),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -855,24 +1462,60 @@ class _DataSyncPage extends StatelessWidget {
                   child: Row(
                     children: [
                       syncService.status == SyncStatus.syncing
-                          ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: palette.primary))
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: palette.primary,
+                              ),
+                            )
                           : Icon(statusIcon, size: 16, color: statusColor),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(statusText, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: statusColor)),
-                            if (syncService.lastError != null && syncService.status == SyncStatus.error)
-                              Text(syncService.lastError!, style: TextStyle(fontSize: 11, color: palette.statusMaintenance), maxLines: 2, overflow: TextOverflow.ellipsis),
+                            Text(
+                              statusText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: statusColor,
+                              ),
+                            ),
+                            if (syncService.lastError != null &&
+                                syncService.status == SyncStatus.error)
+                              Text(
+                                syncService.lastError!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: palette.statusMaintenance,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                           ],
                         ),
                       ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('Last sync', style: TextStyle(fontSize: 10, color: palette.mutedForeground)),
-                          Text(lastSyncLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: palette.foreground)),
+                          Text(
+                            'Last sync',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: palette.mutedForeground,
+                            ),
+                          ),
+                          Text(
+                            lastSyncLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: palette.foreground,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -883,14 +1526,27 @@ class _DataSyncPage extends StatelessWidget {
                   onTap: syncService.status == SyncStatus.syncing
                       ? null
                       : () async {
+                          if (!await requireAdminPassword(
+                            context,
+                            reason: 'Admin password required to manually sync data.',
+                          )) {
+                            return;
+                          }
+                          if (!context.mounted) return;
+                          unawaited(context.read<AuditLogRepository>().record(
+                            action: 'cloud_sync_manual_started',
+                            entityType: 'setting',
+                          ));
                           await syncService.syncAll();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(
-                                syncService.status == SyncStatus.success
-                                    ? 'Data synced to cloud ✓'
-                                    : 'Sync failed: ${syncService.lastError ?? "Unknown error"}',
-                              )),
+                              SnackBar(
+                                content: Text(
+                                  syncService.status == SyncStatus.success
+                                      ? 'Data synced to cloud ✓'
+                                      : 'Sync failed: ${syncService.lastError ?? "Unknown error"}',
+                                ),
+                              ),
                             );
                           }
                         },
@@ -898,17 +1554,31 @@ class _DataSyncPage extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      color: syncService.status == SyncStatus.syncing ? palette.muted : palette.primary,
+                      color: syncService.status == SyncStatus.syncing
+                          ? palette.muted
+                          : palette.primary,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(syncService.status == SyncStatus.syncing ? Icons.hourglass_top : Icons.cloud_upload, size: 16, color: Colors.white),
+                        Icon(
+                          syncService.status == SyncStatus.syncing
+                              ? Icons.hourglass_top
+                              : Icons.cloud_upload,
+                          size: 16,
+                          color: Colors.white,
+                        ),
                         const SizedBox(width: 8),
                         Text(
-                          syncService.status == SyncStatus.syncing ? 'Syncing...' : 'Sync Now',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                          syncService.status == SyncStatus.syncing
+                              ? 'Syncing...'
+                              : 'Sync Now',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
                         ),
                       ],
                     ),
@@ -922,7 +1592,13 @@ class _DataSyncPage extends StatelessWidget {
     );
   }
 
-  Widget _syncToggle(BuildContext context, IconData icon, String label, bool value, ValueChanged<bool> onChanged) {
+  Widget _syncToggle(
+    BuildContext context,
+    IconData icon,
+    String label,
+    bool value,
+    Future<void> Function(bool) onChanged,
+  ) {
     final palette = AppColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -933,10 +1609,27 @@ class _DataSyncPage extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: value ? palette.primary : palette.mutedForeground),
+          Icon(
+            icon,
+            size: 18,
+            color: value ? palette.primary : palette.mutedForeground,
+          ),
           const SizedBox(width: 10),
-          Expanded(child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: palette.foreground))),
-          Switch(value: value, activeThumbColor: palette.primary, onChanged: onChanged),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: palette.foreground,
+              ),
+            ),
+          ),
+          Switch(
+            value: value,
+            activeThumbColor: palette.primary,
+            onChanged: (v) { onChanged(v); },
+          ),
         ],
       ),
     );
@@ -968,13 +1661,10 @@ class _AboutPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _settingCard(
-            context,
-            icon: Icons.water_drop,
-            iconBgColor: palette.primaryLight,
-            iconColor: palette.primary,
+          const MascotCallout(
+            pose: MascotPose.waterBottle,
             title: 'JJ Clover',
-            description: 'SMS Booking & Dispatch System\nVersion 1.0.0',
+            subtitle: 'SMS Booking & Dispatch System\nVersion 1.0.0',
           ),
           const SizedBox(height: 12),
           _settingCard(
@@ -983,7 +1673,8 @@ class _AboutPage extends StatelessWidget {
             iconBgColor: palette.muted,
             iconColor: palette.mutedForeground,
             title: 'System Info',
-            description: 'Built with Flutter. Powered by Supabase for cloud sync and SQLite for local storage.',
+            description:
+                'Built with Flutter. Powered by Supabase for cloud sync and SQLite for local storage.',
           ),
         ],
       ),
@@ -1016,8 +1707,12 @@ Widget _settingCard(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(color: iconBgColor, borderRadius: BorderRadius.circular(12)),
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: iconBgColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Icon(icon, size: 20, color: iconColor),
         ),
         const SizedBox(width: 16),
@@ -1025,9 +1720,19 @@ Widget _settingCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: palette.foreground)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: palette.foreground,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(description, style: TextStyle(fontSize: 13, color: palette.mutedForeground)),
+              Text(
+                description,
+                style: TextStyle(fontSize: 13, color: palette.mutedForeground),
+              ),
               if (trailing != null) ...[const SizedBox(height: 12), trailing],
             ],
           ),
@@ -1055,7 +1760,9 @@ class _DeliveryManifestSheet extends StatelessWidget {
         }
 
         final confirmed = orderProv.todayOrders
-            .where((o) => o['status'] == 'confirmed' || o['status'] == 'in_transit')
+            .where(
+              (o) => o['status'] == 'confirmed' || o['status'] == 'in_transit',
+            )
             .toList();
 
         final Map<String, List<Map<String, dynamic>>> byDay = {};
@@ -1066,7 +1773,10 @@ class _DeliveryManifestSheet extends StatelessWidget {
         }
 
         final totalOrders = confirmed.length;
-        final totalGallons = confirmed.fold<int>(0, (sum, o) => sum + ((o['quantity'] as int?) ?? 0));
+        final totalGallons = confirmed.fold<int>(
+          0,
+          (sum, o) => sum + ((o['quantity'] as int?) ?? 0),
+        );
 
         return DraggableScrollableSheet(
           initialChildSize: 0.7,
@@ -1076,22 +1786,38 @@ class _DeliveryManifestSheet extends StatelessWidget {
           builder: (context, scrollController) => Container(
             decoration: BoxDecoration(
               color: AppColors.of(context).card,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
             ),
             child: Column(
               children: [
                 const SizedBox(height: 12),
                 Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(color: AppColors.of(context).border, borderRadius: BorderRadius.circular(2)),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Icon(Icons.assignment, color: AppColors.of(context).primary),
+                      Icon(
+                        Icons.assignment,
+                        color: AppColors.of(context).primary,
+                      ),
                       const SizedBox(width: 12),
-                      Text('Delivery Manifest', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.of(context).foreground)),
+                      Text(
+                        'Delivery Manifest',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.of(context).foreground,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1099,9 +1825,17 @@ class _DeliveryManifestSheet extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
-                      _SummaryChip(label: '$totalOrders', sub: 'orders', color: AppColors.of(context).primary),
+                      _SummaryChip(
+                        label: '$totalOrders',
+                        sub: 'orders',
+                        color: AppColors.of(context).primary,
+                      ),
                       const SizedBox(width: 8),
-                      _SummaryChip(label: '$totalGallons', sub: 'gallons', color: AppColors.of(context).statusOperating),
+                      _SummaryChip(
+                        label: '$totalGallons',
+                        sub: 'gallons',
+                        color: AppColors.of(context).statusOperating,
+                      ),
                     ],
                   ),
                 ),
@@ -1112,9 +1846,19 @@ class _DeliveryManifestSheet extends StatelessWidget {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.assignment_outlined, size: 48, color: AppColors.of(context).mutedForeground),
+                              Icon(
+                                Icons.assignment_outlined,
+                                size: 48,
+                                color: AppColors.of(context).mutedForeground,
+                              ),
                               const SizedBox(height: 12),
-                              Text('No confirmed orders yet.', style: TextStyle(fontSize: 14, color: AppColors.of(context).mutedForeground)),
+                              Text(
+                                'No confirmed orders yet.',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.of(context).mutedForeground,
+                                ),
+                              ),
                             ],
                           ),
                         )
@@ -1122,30 +1866,56 @@ class _DeliveryManifestSheet extends StatelessWidget {
                           controller: scrollController,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           children: [
-                            ...byDay.entries.map((entry) => Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(color: AppColors.of(context).primary, borderRadius: BorderRadius.circular(8)),
-                                  child: Text(entry.key, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                                ),
-                                const SizedBox(height: 8),
-                                ...entry.value.asMap().entries.map((e) {
-                                  final o = e.value;
-                                  final cid = o['customer_id'] as int?;
-                                  final customerName = cid != null ? (customerCache[cid]?['name'] as String?) : null;
-                                  return _ManifestItem(
-                                    index: e.key + 1,
-                                    order: o,
-                                    customerName: customerName,
-                                    onStart: o['status'] == 'confirmed' ? () => orderProv.updateStatus(o['id'] as int, 'in_transit') : null,
-                                    onComplete: o['status'] == 'in_transit' ? () => orderProv.updateStatus(o['id'] as int, 'completed') : null,
-                                  );
-                                }),
-                                const SizedBox(height: 16),
-                              ],
-                            )),
+                            ...byDay.entries.map(
+                              (entry) => Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.of(context).primary,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      entry.key,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ...entry.value.asMap().entries.map((e) {
+                                    final o = e.value;
+                                    final cid = o['customer_id'] as int?;
+                                    final customerName = cid != null
+                                        ? (customerCache[cid]?['name']
+                                              as String?)
+                                        : null;
+                                    return _ManifestItem(
+                                      index: e.key + 1,
+                                      order: o,
+                                      customerName: customerName,
+                                      onStart: o['status'] == 'confirmed'
+                                          ? () => _startDelivery(
+                                              context,
+                                              o,
+                                              orderProv,
+                                            )
+                                          : null,
+                                      onComplete: o['status'] == 'in_transit'
+                                          ? () => _completeDelivery(context, o)
+                                          : null,
+                                    );
+                                  }),
+                                  const SizedBox(height: 16),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                 ),
@@ -1156,6 +1926,93 @@ class _DeliveryManifestSheet extends StatelessWidget {
       },
     );
   }
+
+  Future<void> _startDelivery(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+    OrderProvider orderProvider,
+  ) async {
+    final order = Order.fromMap(orderData);
+    final orderId = order.id;
+    if (orderId == null) return;
+
+    final smsMessage = _deliveryStartedSms(order);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final palette = AppColors.of(ctx);
+        return AlertDialog(
+          backgroundColor: palette.card,
+          title: Text(
+            'Start Delivery?',
+            style: Theme.of(ctx).textTheme.headlineSmall,
+          ),
+          content: Text(
+            'This will move the order to In Transit and notify the customer by SMS.',
+            style: Theme.of(
+              ctx,
+            ).textTheme.bodyMedium?.copyWith(color: palette.mutedForeground),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: palette.statusBusy,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Start Delivery'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+
+    final started = await orderProvider.updateStatus(orderId, 'in_transit');
+    if (!context.mounted) return;
+    if (!started) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(orderProvider.error ?? 'Delivery was not started.'),
+        ),
+      );
+      return;
+    }
+
+    await SmsHandlerUtils.sendReply(order.phoneNumber, smsMessage);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Delivery started. Customer SMS notification queued.'),
+      ),
+    );
+  }
+
+  Future<void> _completeDelivery(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+  ) async {
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => CompleteOrderSheet(order: Order.fromMap(orderData)),
+    );
+  }
+
+  String _deliveryStartedSms(Order order) {
+    final quantity = order.quantity > 0
+        ? ' (${order.quantity} gallon${order.quantity == 1 ? '' : 's'})'
+        : '';
+    return 'JJ Clover: Your water order$quantity is on the way. '
+        'Please prepare to receive it. Thank you!';
+  }
 }
 
 class _SummaryChip extends StatelessWidget {
@@ -1163,7 +2020,11 @@ class _SummaryChip extends StatelessWidget {
   final String sub;
   final Color color;
 
-  const _SummaryChip({required this.label, required this.sub, required this.color});
+  const _SummaryChip({
+    required this.label,
+    required this.sub,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1177,7 +2038,14 @@ class _SummaryChip extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Text(label, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: color)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
             Text(sub, style: TextStyle(fontSize: 11, color: color)),
           ],
         ),
@@ -1214,33 +2082,72 @@ class _ManifestItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: palette.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: status == 'in_transit' ? palette.statusBusy : palette.border),
+        border: Border.all(
+          color: status == 'in_transit' ? palette.statusBusy : palette.border,
+        ),
       ),
       child: Row(
         children: [
           Container(
-            width: 28, height: 28,
-            decoration: BoxDecoration(color: palette.muted, shape: BoxShape.circle),
-            child: Center(child: Text('$index', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: palette.muted,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$index',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(customerName ?? phone, style: const TextStyle(fontWeight: FontWeight.w600)),
-                if (customerName != null) Text(phone, style: TextStyle(fontSize: 11, color: palette.mutedForeground)),
-                Text('$qty gallon(s)', style: TextStyle(fontSize: 12, color: palette.mutedForeground)),
+                Text(
+                  customerName ?? phone,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                if (customerName != null)
+                  Text(
+                    phone,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: palette.mutedForeground,
+                    ),
+                  ),
+                Text(
+                  '$qty gallon(s)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: palette.mutedForeground,
+                  ),
+                ),
               ],
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: status == 'in_transit' ? palette.statusBusy : palette.statusOperating,
+              color: status == 'in_transit'
+                  ? palette.statusBusy
+                  : palette.statusOperating,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(status == 'in_transit' ? 'Delivering' : 'Ready', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
+            child: Text(
+              status == 'in_transit' ? 'Delivering' : 'Ready',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
           ),
           if (onStart != null || onComplete != null) ...[
             const SizedBox(width: 8),
@@ -1249,8 +2156,15 @@ class _ManifestItem extends StatelessWidget {
                 onTap: onStart,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: palette.statusBusy, shape: BoxShape.circle),
-                  child: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
+                  decoration: BoxDecoration(
+                    color: palette.statusBusy,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             if (onComplete != null)
@@ -1258,7 +2172,10 @@ class _ManifestItem extends StatelessWidget {
                 onTap: onComplete,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: palette.statusOperating, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: palette.statusOperating,
+                    shape: BoxShape.circle,
+                  ),
                   child: const Icon(Icons.check, size: 16, color: Colors.white),
                 ),
               ),

@@ -32,7 +32,12 @@ class SmsHandlerUtils {
     String message, {
     String? sourceMessageId,
     bool waitForSend = false,
-  }) {
+  }) async {
+    if (await _isMuted(phoneNumber)) {
+      debugPrint('Reply suppressed for muted contact: $phoneNumber');
+      return;
+    }
+
     final completer = Completer<void>();
     final outgoingSourceMessageId = _outgoingSourceMessageId(
       sourceMessageId,
@@ -49,7 +54,12 @@ class SmsHandlerUtils {
     );
 
     unawaited(_drainQueue());
-    return waitForSend ? completer.future : Future<void>.value();
+    if (waitForSend) await completer.future;
+  }
+
+  static Future<bool> _isMuted(String phoneNumber) async {
+    final customer = await _customers.getCustomerByPhone(phoneNumber);
+    return (customer?['is_muted'] as int? ?? 0) == 1;
   }
 
   @visibleForTesting
@@ -86,37 +96,50 @@ class SmsHandlerUtils {
 
   static Future<void> _sendAndRecord(_QueuedReply item) async {
     final normalizedPhone = PhoneNumberUtils.normalize(item.phoneNumber);
+    final messageId = await _insertOutgoingMessage(
+      phoneNumber: normalizedPhone,
+      message: item.message,
+      status: SmsSendStatus.queued.name,
+      sourceMessageId: item.sourceMessageId,
+    );
 
     try {
-      await _doSend(item.phoneNumber, item.message);
-      await _insertOutgoingMessage(
-        phoneNumber: normalizedPhone,
-        message: item.message,
-        status: 'sent',
+      final result = await _doSend(
+        item.phoneNumber,
+        item.message,
         sourceMessageId: item.sourceMessageId,
       );
+      await _updateOutgoingStatus(
+        messageId: messageId,
+        sourceMessageId: item.sourceMessageId,
+        status: result.status.name,
+      );
+      if (result.failed) {
+        debugPrint(
+          'SMS reply send failed: ${result.errorCode} ${result.errorMessage}',
+        );
+      }
     } catch (e, st) {
       debugPrint('SMS reply send failed: $e');
       debugPrintStack(stackTrace: st);
-      await _insertOutgoingMessage(
-        phoneNumber: normalizedPhone,
-        message: item.message,
-        status: 'failed',
+      await _updateOutgoingStatus(
+        messageId: messageId,
         sourceMessageId: item.sourceMessageId,
+        status: SmsSendStatus.failed.name,
       );
     } finally {
       AppEventBus().notifyMessageReceived();
     }
   }
 
-  static Future<void> _insertOutgoingMessage({
+  static Future<int> _insertOutgoingMessage({
     required String phoneNumber,
     required String message,
     required String status,
     required String? sourceMessageId,
   }) async {
     try {
-      await _messages.insertSmsMessage({
+      return await _messages.insertSmsMessage({
         'phone_number': phoneNumber,
         'message': message,
         'direction': 'outgoing',
@@ -126,6 +149,29 @@ class SmsHandlerUtils {
       });
     } catch (e, st) {
       debugPrint('Failed to record outgoing SMS as $status: $e');
+      debugPrintStack(stackTrace: st);
+      return 0;
+    }
+  }
+
+  static Future<void> _updateOutgoingStatus({
+    required int messageId,
+    required String? sourceMessageId,
+    required String status,
+  }) async {
+    try {
+      if (sourceMessageId != null && sourceMessageId.isNotEmpty) {
+        final updated = await _messages.updateSmsMessageStatusBySourceMessageId(
+          sourceMessageId,
+          status,
+        );
+        if (updated > 0) return;
+      }
+      if (messageId > 0) {
+        await _messages.updateSmsMessageStatus(messageId, status);
+      }
+    } catch (e, st) {
+      debugPrint('Failed to update outgoing SMS as $status: $e');
       debugPrintStack(stackTrace: st);
     }
   }
@@ -141,14 +187,43 @@ class SmsHandlerUtils {
     return 'reply|$incomingSourceMessageId|$hash';
   }
 
-  static Future<void> _doSend(String phoneNumber, String message) async {
-    await NativeSmsSender.sendSms(to: phoneNumber, message: message);
-    debugPrint('Reply sent to $phoneNumber');
+  static Future<SmsSendResult> _doSend(
+    String phoneNumber,
+    String message, {
+    required String? sourceMessageId,
+  }) async {
+    final result = await NativeSmsSender.sendTrackedSms(
+      to: phoneNumber,
+      message: message,
+      sourceMessageId: sourceMessageId,
+    );
+    debugPrint('Reply queued to $phoneNumber (${result.status.name})');
+    return result;
+  }
+
+  static Future<void> sendOrderRejectedReply(
+    String phoneNumber, {
+    int? quantity,
+    String? reason,
+  }) {
+    return sendReply(
+      phoneNumber,
+      buildOrderRejectedMessage(quantity: quantity, reason: reason),
+    );
+  }
+
+  static String buildOrderRejectedMessage({int? quantity, String? reason}) {
+    final quantityText = quantity != null && quantity > 0
+        ? ' (${quantity} gallon${quantity == 1 ? '' : 's'})'
+        : '';
+    final reasonText = _formatRejectionReason(reason);
+    return 'JJ Clover: We are sorry, but your water order$quantityText was rejected.'
+        '$reasonText Please reply or contact us if you need help placing a new order. Thank you!';
   }
 
   /// Saves a message that couldn't be processed as a regular order so it
   /// remains visible in the Messages / Unrecognized tab.
-  static Future<void> saveUnrecognized(
+  static Future<int> saveUnrecognized(
     String sender,
     String message,
     String status, {
@@ -184,14 +259,40 @@ class SmsHandlerUtils {
       sourceMessageId: sourceMessageId,
       source: 'sms',
     );
-    await _orders.insertOrder(order.toMap());
+    final orderId = await _orders.insertOrder(order.toMap());
     AppEventBus().notifyOrderReceived();
+    final displayStatus = _displayStatus(status);
     await PushNotificationService.showMessageNotification(
-      title: 'Unrecognized Message',
-      body: '$status from $sender',
+      title: 'Dili Mailhan nga Mensahe',
+      body: '$displayStatus gikan $sender',
       sender: sender,
     );
     debugPrint('Saved unrecognized message from $normalizedSender: $status');
+    return orderId;
+  }
+
+  static String _displayStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'rejected':
+        return 'Gireject';
+      case 'unregistered':
+        return 'Wala pa nakarehistro';
+      case 'incomplete':
+        return 'Kulang';
+      case 'prebook':
+        return 'Pre-book';
+      case 'unrecognized':
+        return 'Dili mailhan';
+      default:
+        return status;
+    }
+  }
+
+  static String _formatRejectionReason(String? reason) {
+    final trimmed = reason?.trim();
+    if (trimmed == null || trimmed.isEmpty) return '';
+    final suffix = RegExp(r'[.!?]$').hasMatch(trimmed) ? '' : '.';
+    return ' Reason: $trimmed$suffix';
   }
 }
 

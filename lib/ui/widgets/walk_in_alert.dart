@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../data/services/alarm_service.dart';
 import '../theme/app_theme.dart';
+import 'shared/brand_mascot.dart';
 import 'shared/info_row.dart';
 import 'shared/primary_action_button.dart';
 
@@ -64,10 +65,7 @@ class WalkInAlert extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      InfoRow(
-                        icon: Icons.phone,
-                        label: phone,
-                      ),
+                      InfoRow(icon: Icons.phone, label: phone),
                       if (qty > 0) ...[
                         const SizedBox(height: 10),
                         InfoRow(
@@ -78,10 +76,7 @@ class WalkInAlert extends StatelessWidget {
                       ],
                       if (timeStr.isNotEmpty) ...[
                         const SizedBox(height: 10),
-                        InfoRow(
-                          icon: Icons.access_time,
-                          label: timeStr,
-                        ),
+                        InfoRow(icon: Icons.access_time, label: timeStr),
                       ],
                     ],
                   ),
@@ -121,9 +116,10 @@ class _PulsingBellState extends State<_PulsingBell>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 0.9, end: 1.1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: 0.9,
+      end: 1.1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -138,17 +134,13 @@ class _PulsingBellState extends State<_PulsingBell>
     return ScaleTransition(
       scale: _animation,
       child: Container(
-        width: 80,
-        height: 80,
+        width: 92,
+        height: 92,
         decoration: BoxDecoration(
           color: palette.statusAwayLight,
           shape: BoxShape.circle,
         ),
-        child: Icon(
-          Icons.notifications_active,
-          size: 40,
-          color: palette.statusAway,
-        ),
+        child: const MascotImage(pose: MascotPose.waterBottle, size: 78),
       ),
     );
   }

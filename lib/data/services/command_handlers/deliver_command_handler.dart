@@ -37,6 +37,9 @@ class DeliverCommandHandler {
     required String sourceMessageId,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
+    final currentMode = _modeManager.currentMode;
+    final isStaffAway = currentMode == SystemMode.staffAway;
+    final isFull = currentMode == SystemMode.full;
 
     if (!_modeManager.canAcceptDelivery()) {
       await SmsHandlerUtils.saveUnrecognized(
@@ -86,7 +89,7 @@ class DeliverCommandHandler {
       );
       await SmsHandlerUtils.sendReply(
         sender,
-        'Customer profile is incomplete. Please call the station.',
+        'Kulang ang profile sa customer. Palihug tawagi ang estasyon.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -108,7 +111,7 @@ class DeliverCommandHandler {
     );
 
     if (validation.result == ValidationResult.invalidDay) {
-      await SmsHandlerUtils.saveUnrecognized(
+      final pendingOrderId = await SmsHandlerUtils.saveUnrecognized(
         sender,
         'DELIVER ${parsed.quantity ?? 0} - Wrong Day (${validation.message})',
         'prebook',
@@ -129,13 +132,16 @@ class DeliverCommandHandler {
               validation.correctDay!,
               from: requestTime,
             ),
+            pendingOrderId: pendingOrderId == 0 ? null : pendingOrderId,
           ),
         );
       }
 
       await SmsHandlerUtils.sendReply(
         sender,
-        validation.message!,
+        isStaffAway
+            ? _staffAwayPreBookReply(validation.message)
+            : validation.message!,
 
         sourceMessageId: sourceMessageId,
       );
@@ -149,24 +155,32 @@ class DeliverCommandHandler {
         now.hour < cutoffHour ||
         (now.hour == cutoffHour && now.minute < cutoffMinute);
 
-    String? deliveryDay;
+    _ScheduledDeliverySlot? scheduledSlot;
     OrderStatus orderStatus;
-    final isStaffAway = _modeManager.currentMode == SystemMode.staffAway;
 
-    if (isStaffAway) {
-      deliveryDay = isBeforeCutoff
-          ? today
-          : _findNextAvailableDay(schedules, today);
+    if (isFull) {
+      scheduledSlot = _findNextAvailableSlot(schedules, from: now);
+      orderStatus = OrderStatus.pending;
+    } else if (isStaffAway) {
+      scheduledSlot = isBeforeCutoff
+          ? _ScheduledDeliverySlot(
+              deliveryDay: today,
+              scheduledFor: _scheduledDateForDay(today, from: now),
+            )
+          : _findNextAvailableSlot(schedules, from: now);
       orderStatus = OrderStatus.pending;
     } else if (isBeforeCutoff) {
-      deliveryDay = today;
+      scheduledSlot = _ScheduledDeliverySlot(
+        deliveryDay: today,
+        scheduledFor: _scheduledDateForDay(today, from: now),
+      );
       orderStatus = OrderStatus.confirmed;
     } else {
-      deliveryDay = _findNextAvailableDay(schedules, today);
+      scheduledSlot = _findNextAvailableSlot(schedules, from: now);
       orderStatus = OrderStatus.pending;
     }
 
-    if (deliveryDay == null) {
+    if (scheduledSlot == null) {
       await SmsHandlerUtils.saveUnrecognized(
         sender,
         'DELIVER ${parsed.quantity ?? 0} - No active delivery schedule',
@@ -177,7 +191,7 @@ class DeliverCommandHandler {
 
       await SmsHandlerUtils.sendReply(
         sender,
-        'No active delivery schedule found for your account. Please call the station.',
+        'Walay aktibong schedule sa delivery para sa imong account. Palihug tawagi ang estasyon.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -192,8 +206,8 @@ class DeliverCommandHandler {
       address: parsed.address,
       status: orderStatus,
       createdAt: now,
-      deliveryDay: deliveryDay,
-      scheduledFor: _scheduledDateForDay(deliveryDay, from: now),
+      deliveryDay: scheduledSlot.deliveryDay,
+      scheduledFor: scheduledSlot.scheduledFor,
       sourceMessageId: sourceMessageId,
       source: 'sms',
     );
@@ -206,7 +220,7 @@ class DeliverCommandHandler {
     if (orderId == 0) {
       await SmsHandlerUtils.sendReply(
         sender,
-        'This order was already received. Reply CANCEL to cancel it, or wait 1 hour to reorder.',
+        'Nadawat na kining order. Tubaga ug CANCEL para ma kansel, o hulat ug 1 ka oras para mo-order pag-usab.',
 
         sourceMessageId: sourceMessageId,
       );
@@ -215,16 +229,26 @@ class DeliverCommandHandler {
 
     AppEventBus().notifyOrderReceived();
     await PushNotificationService.showOrderNotification(
-      title: 'New Delivery Order',
-      body: '${parsed.quantity} gallon(s) from $sender – $deliveryDay',
+      title: 'Bag-ong Delivery Order',
+      body:
+          '${parsed.quantity} galon gikan $sender - ${scheduledSlot.deliveryDay}',
       sender: sender,
     );
 
-    if (isStaffAway) {
+    if (isFull) {
       await SmsHandlerUtils.sendReply(
         sender,
         _modeManager.getDeliveryReply(
-          queuedDeliveryDay: isBeforeCutoff ? null : deliveryDay,
+          queuedDeliveryDay: scheduledSlot.deliveryDay,
+        ),
+
+        sourceMessageId: sourceMessageId,
+      );
+    } else if (isStaffAway) {
+      await SmsHandlerUtils.sendReply(
+        sender,
+        _modeManager.getDeliveryReply(
+          queuedDeliveryDay: isBeforeCutoff ? null : scheduledSlot.deliveryDay,
         ),
 
         sourceMessageId: sourceMessageId,
@@ -239,11 +263,22 @@ class DeliverCommandHandler {
     } else {
       await SmsHandlerUtils.sendReply(
         sender,
-        'Order received. Past today\'s cutoff time. Your order has been queued for $deliveryDay.',
+        'Nadawat ang order. Lapas na sa cutoff time karon. '
+        'Gi-queue ang imong order para sa ${scheduledSlot.deliveryDay}.',
 
         sourceMessageId: sourceMessageId,
       );
     }
+  }
+
+  String _staffAwayPreBookReply(String? scheduleMessage) {
+    const staffAwayNotice =
+        'Nadawat ang imong mensahe. Ang staff naa pa sa delivery. '
+        'Iproseso namo pagbalik.';
+    if (scheduleMessage == null || scheduleMessage.isEmpty) {
+      return staffAwayNotice;
+    }
+    return '$staffAwayNotice $scheduleMessage';
   }
 
   DateTime _scheduledDateForDay(String deliveryDay, {required DateTime from}) {
@@ -258,13 +293,35 @@ class DeliverCommandHandler {
     ).add(Duration(days: offset));
   }
 
-  String? _findNextAvailableDay(List<Schedule> schedules, String currentDay) {
+  _ScheduledDeliverySlot? _findNextAvailableSlot(
+    List<Schedule> schedules, {
+    required DateTime from,
+  }) {
     final allowedDays = schedules.map((s) => s.deliveryDay).toSet();
-    final todayIndex = DeliveryDays.days.indexOf(currentDay);
+    final todayIndex = from.weekday - 1;
     for (int offset = 1; offset <= 7; offset++) {
       final checkDay = DeliveryDays.days[(todayIndex + offset) % 7];
-      if (allowedDays.contains(checkDay)) return checkDay;
+      if (!allowedDays.contains(checkDay)) continue;
+      final scheduledFor = DateTime(
+        from.year,
+        from.month,
+        from.day,
+      ).add(Duration(days: offset));
+      return _ScheduledDeliverySlot(
+        deliveryDay: checkDay,
+        scheduledFor: scheduledFor,
+      );
     }
     return null;
   }
+}
+
+class _ScheduledDeliverySlot {
+  final String deliveryDay;
+  final DateTime scheduledFor;
+
+  const _ScheduledDeliverySlot({
+    required this.deliveryDay,
+    required this.scheduledFor,
+  });
 }

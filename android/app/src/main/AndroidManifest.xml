@@ -18,14 +18,6 @@
          foreground service with a notification, preventing Android from stopping it. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
-    <!-- Task 002 — Wake lock: keeps the CPU active to process incoming SMS even when the
-         screen is off. Ensures the background isolate stays responsive. -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <!-- Task 002 — Exact alarm: allows scheduling precise alarm triggers for the DROP command
-         audio alert (FR-5) and future time-based dispatch reminders. -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-
     <!-- Notification permission: required for displaying walk-in alerts and dispatch notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -88,6 +80,10 @@
                 <data android:mimeType="application/vnd.wap.mms-message" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".SmsStatusReceiver"
+            android:exported="false" />
 
         <service
             android:name=".SmsProcessingService"

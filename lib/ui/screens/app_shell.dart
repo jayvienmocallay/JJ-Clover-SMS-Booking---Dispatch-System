@@ -5,11 +5,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
+import '../../core/constants/app_constants.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/alarm_service.dart';
 import '../../data/services/app_event_bus.dart';
+import '../../data/services/command_handlers/sms_handler_utils.dart';
+import '../../data/services/system_mode_manager.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/loading_state.dart';
 import '../widgets/walk_in_alert.dart';
 import 'dashboard_screen.dart';
 import 'orders_screen.dart';
@@ -28,10 +33,13 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
+  int _ordersFilterIndex = 0;
+  final List<int> _tabHistory = [];
   bool _showWalkInAlert = false;
   bool _isInitialLoading = true;
   bool _isAutoRefreshing = false;
   bool _autoRefreshPending = false;
+  Timer? _autoRefreshTimer;
 
   StreamSubscription? _messageSubscription;
   StreamSubscription? _orderSubscription;
@@ -56,6 +64,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _orderSubscription = AppEventBus().onOrderReceived.listen((_) {
       unawaited(_autoRefresh());
     });
+
+    if (!kIsWeb) {
+      _autoRefreshTimer = Timer.periodic(
+        const Duration(seconds: AppConstants.autoRefreshSeconds),
+        (_) => unawaited(_autoRefresh()),
+      );
+    }
 
     AlarmService.instance.addListener(_onAlarmChanged);
     unawaited(AlarmService.instance.startUiSync());
@@ -111,6 +126,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _messageSubscription?.cancel();
     _orderSubscription?.cancel();
     AlarmService.instance.removeListener(_onAlarmChanged);
@@ -119,8 +135,64 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  void _navigateToTab(int index) {
+  void _navigateToTab(int index, {int? ordersFilterIndex}) {
+    if (ordersFilterIndex != null) {
+      _ordersFilterIndex = ordersFilterIndex;
+    }
+    if (_currentIndex == index) {
+      if (ordersFilterIndex != null) setState(() {});
+      return;
+    }
+    _setTab(index);
+  }
+
+  void _setTab(int index) {
+    if (_currentIndex == index) return;
+    if (_tabHistory.isEmpty || _tabHistory.last != _currentIndex) {
+      _tabHistory.add(_currentIndex);
+    }
     setState(() => _currentIndex = index);
+  }
+
+  bool get _canPopApp => _tabHistory.isEmpty && _currentIndex == 0;
+
+  void _handleBackNavigation() {
+    if (_tabHistory.isNotEmpty) {
+      final lastIndex = _tabHistory.removeLast();
+      setState(() => _currentIndex = lastIndex);
+      return;
+    }
+    if (_currentIndex != 0) {
+      setState(() => _currentIndex = 0);
+    }
+  }
+
+  Future<void> _acknowledgeWalkInAlert() async {
+    final alarm = AlarmService.instance;
+    final phone = alarm.customerPhone;
+    final reply =
+        alarm.replyMessage ?? SystemModeManager.instance.getDropReply();
+
+    if (mounted) {
+      setState(() => _showWalkInAlert = false);
+    }
+    await alarm.acknowledge();
+
+    if (!_canSendWalkInAcknowledgement(phone)) return;
+    await SmsHandlerUtils.sendReply(phone!, reply);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Walk-in acknowledged. Customer SMS notification queued.',
+        ),
+      ),
+    );
+  }
+
+  bool _canSendWalkInAcknowledgement(String? phone) {
+    if (phone == null || phone.trim().isEmpty) return false;
+    return RegExp(r'\d').hasMatch(phone);
   }
 
   static const List<_NavItem> _navItems = [
@@ -136,7 +208,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       case 0:
         return DashboardScreen(onNavigateToTab: _navigateToTab);
       case 1:
-        return const OrdersScreen();
+        return OrdersScreen(
+          initialFilterIndex: _ordersFilterIndex,
+          onFilterChanged: (index) => _ordersFilterIndex = index,
+        );
       case 2:
         return const MessagesScreen();
       case 3:
@@ -156,88 +231,63 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (_isInitialLoading) {
       return Scaffold(
         backgroundColor: AppColors.of(context).background,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: AppColors.of(context).primaryLight,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.of(context).border),
-                ),
-                child: Icon(Icons.water_drop, size: 36, color: AppColors.of(context).primary),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'JJ Clover',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.of(context).foreground,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Loading...',
-                style: TextStyle(fontSize: 13, color: AppColors.of(context).mutedForeground),
-              ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: AppColors.of(context).primary,
-                  strokeWidth: 2.5,
-                ),
-              ),
-            ],
-          ),
+        body: const LoadingState(
+          title: 'JJ Clover',
+          message: "Preparing today's dispatch board...",
+          mascot: MascotPose.waterBottle,
         ),
       );
     }
 
-    return Scaffold(
-      backgroundColor: AppColors.of(context).background,
-      body: Stack(
-        children: [
-          SafeArea(child: _buildScreen()),
-          if (_showWalkInAlert)
-            WalkInAlert(
-              onAcknowledge: () {
-                unawaited(AlarmService.instance.acknowledge());
-                setState(() => _showWalkInAlert = false);
-              },
-            ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.of(context).border)),
+    return PopScope(
+      canPop: _canPopApp,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBackNavigation();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.of(context).background,
+        body: Stack(
+          children: [
+            SafeArea(child: _buildScreen()),
+            if (_showWalkInAlert)
+              WalkInAlert(
+                onAcknowledge: () {
+                  unawaited(_acknowledgeWalkInAlert());
+                },
+              ),
+          ],
         ),
-        child: Theme(
-          data: Theme.of(context).copyWith(
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: AppColors.of(context).border),
+            ),
           ),
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (i) => setState(() => _currentIndex = i),
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: AppColors.of(context).card,
-            selectedItemColor: AppColors.of(context).primary,
-            unselectedItemColor: AppColors.of(context).mutedForeground,
-            selectedFontSize: 11,
-            unselectedFontSize: 11,
-            iconSize: 22,
-            items: _navItems
-                .map((item) => BottomNavigationBarItem(
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+            ),
+            child: BottomNavigationBar(
+              currentIndex: _currentIndex,
+              onTap: _setTab,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: AppColors.of(context).card,
+              selectedItemColor: AppColors.of(context).primary,
+              unselectedItemColor: AppColors.of(context).mutedForeground,
+              selectedFontSize: 11,
+              unselectedFontSize: 11,
+              iconSize: 22,
+              items: _navItems
+                  .map(
+                    (item) => BottomNavigationBarItem(
                       icon: Icon(item.icon),
                       label: item.label,
-                    ))
-                .toList(),
+                    ),
+                  )
+                  .toList(),
+            ),
           ),
         ),
       ),

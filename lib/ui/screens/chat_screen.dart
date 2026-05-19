@@ -7,24 +7,24 @@ import 'package:provider/provider.dart';
 import '../../core/utils/phone_number_utils.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/providers/order_provider.dart';
+import '../../data/repositories/audit_log_repository.dart';
 import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
+import '../security/admin_gate.dart';
 import '../../data/services/native_sms_sender.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_order_form.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/chat_header.dart';
 import '../widgets/message_input.dart';
+import '../widgets/shared/brand_mascot.dart';
+import '../widgets/shared/empty_state.dart';
 
 class ChatScreen extends StatefulWidget {
   final String phoneNumber;
   final String? contactName;
 
-  const ChatScreen({
-    super.key,
-    required this.phoneNumber,
-    this.contactName,
-  });
+  const ChatScreen({super.key, required this.phoneNumber, this.contactName});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -39,13 +39,15 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription? _messageSub;
   bool _isComposing = false;
   int _lastMessageCount = 0;
-  final _expandedTimestamps = <String>{};
+  final _expandedMessageKeys = <String>{};
   late final SmsMessageRepository _smsRepo;
+  late final AuditLogRepository _auditRepo;
 
   @override
   void initState() {
     super.initState();
     _smsRepo = context.read<SmsMessageRepository>();
+    _auditRepo = context.read<AuditLogRepository>();
     _loadMessages(isInitial: true);
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -75,15 +77,18 @@ class _ChatScreenState extends State<ChatScreen> {
     bool isNewMessage = false,
   }) async {
     try {
-      final messages = await _smsRepo.getSmsMessagesForPhone(widget.phoneNumber);
-      final sorted = messages.toList()
+      final messages = await _smsRepo.getSmsMessagesForPhone(
+        widget.phoneNumber,
+      );
+      final indexedMessages = messages.asMap().entries.toList()
         ..sort((a, b) {
-          final timeA =
-              DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime(2000);
-          final timeB =
-              DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime(2000);
-          return timeA.compareTo(timeB);
+          final timeCompare = _messageSortDate(
+            a.value,
+          ).compareTo(_messageSortDate(b.value));
+          if (timeCompare != 0) return timeCompare;
+          return a.key.compareTo(b.key);
         });
+      final sorted = indexedMessages.map((entry) => entry.value).toList();
       if (mounted) {
         final newMessageCount = sorted.length;
         setState(() {
@@ -146,6 +151,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'status': 'sending',
       'sent_at': DateTime.now().toIso8601String(),
     });
+    AppEventBus().notifyMessageReceived();
     await _loadMessages(isNewMessage: true);
     await _sendExistingMessage(messageId, message, showSuccess: true);
   }
@@ -156,10 +162,23 @@ class _ChatScreenState extends State<ChatScreen> {
     bool showSuccess = false,
   }) async {
     try {
-      await _smsRepo.updateSmsMessageStatus(messageId, 'sending');
+      final queued = await _smsRepo.updateSmsMessageStatus(
+        messageId,
+        'sending',
+      );
+      if (queued == 0) {
+        throw StateError('Message was not queued for sending.');
+      }
       await _loadMessages(isNewMessage: true);
       await NativeSmsSender.sendSms(to: widget.phoneNumber, message: message);
-      await _smsRepo.updateSmsMessageStatus(messageId, 'sent');
+      final markedSent = await _smsRepo.updateSmsMessageStatus(
+        messageId,
+        'sent',
+      );
+      if (markedSent == 0) {
+        throw StateError('Message was sent, but local status was not updated.');
+      }
+      AppEventBus().notifyMessageReceived();
       await _loadMessages(isNewMessage: true);
       if (mounted && showSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -171,11 +190,12 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       await _smsRepo.updateSmsMessageStatus(messageId, 'failed');
+      AppEventBus().notifyMessageReceived();
       await _loadMessages(isNewMessage: true);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send SMS: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send SMS: $e')));
       }
     }
   }
@@ -190,7 +210,15 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _deleteMessage(Map<String, dynamic> message) async {
     final id = message['id'] as int?;
     if (id == null) return;
-    await _smsRepo.deleteSmsMessage(id);
+    final deleted = await _smsRepo.deleteSmsMessage(id);
+    if (!mounted) return;
+    if (deleted == 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Message was not deleted.')));
+      return;
+    }
+    AppEventBus().notifyMessageReceived();
     await _loadMessages();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -233,32 +261,58 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _confirmAndDeleteMessage(Map<String, dynamic> message) async {
-    if (await _confirmDeleteMessage(message)) {
-      await _deleteMessage(message);
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to delete local SMS history.',
+    )) {
+      return;
     }
+    if (!await _confirmDeleteMessage(message)) return;
+    final id = message['id'] as int?;
+    if (id == null) return;
+    await _deleteMessage(message);
+    unawaited(_auditRepo.record(
+      action: 'sms_message_deleted',
+      entityType: 'sms_message',
+      entityId: id.toString(),
+      metadata: {
+        'phone_number': PhoneNumberUtils.normalize(widget.phoneNumber),
+        'direction': message['direction'] as String? ?? 'unknown',
+        'sent_at': message['sent_at'] as String?,
+      },
+    ));
   }
 
-  void _toggleTimestamp(String sentAt) {
+  void _toggleExpandedMessage(String messageKey) {
     setState(() {
-      if (_expandedTimestamps.contains(sentAt)) {
-        _expandedTimestamps.remove(sentAt);
+      if (_expandedMessageKeys.contains(messageKey)) {
+        _expandedMessageKeys.remove(messageKey);
       } else {
-        _expandedTimestamps.add(sentAt);
+        _expandedMessageKeys.add(messageKey);
       }
     });
   }
 
-  List<Map<String, dynamic>> _buildDisplayList(List<Map<String, dynamic>> messages) {
+  List<Map<String, dynamic>> _buildDisplayList(
+    List<Map<String, dynamic>> messages,
+  ) {
     final result = <Map<String, dynamic>>[];
-    DateTime? lastDate;
+    String? lastDateKey;
 
     for (final msg in messages) {
-      final dt = DateTime.parse(msg['sent_at'] as String? ?? '');
-      final msgDate = DateTime(dt.year, dt.month, dt.day);
+      final sentAt = msg['sent_at'] as String? ?? '';
+      final dt = DateTime.tryParse(sentAt);
+      final dateKey = dt == null
+          ? 'unknown'
+          : '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 
-      if (lastDate == null || msgDate != lastDate) {
-        result.add({'_isDateDivider': true, 'sent_at': msg['sent_at']});
-        lastDate = msgDate;
+      if (lastDateKey != dateKey) {
+        result.add({
+          '_isDateDivider': true,
+          'sent_at': sentAt,
+          'label': dt == null ? 'Unknown date' : null,
+        });
+        lastDateKey = dateKey;
       }
       result.add(msg);
     }
@@ -272,7 +326,9 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: AppColors.of(context).background,
         appBar: AppBar(backgroundColor: AppColors.of(context).background),
         body: Center(
-          child: CircularProgressIndicator(color: AppColors.of(context).primary),
+          child: CircularProgressIndicator(
+            color: AppColors.of(context).primary,
+          ),
         ),
       );
     }
@@ -293,21 +349,31 @@ class _ChatScreenState extends State<ChatScreen> {
                 ? _EmptyConversation()
                 : ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     itemCount: displayList.length,
                     itemBuilder: (context, index) {
                       final item = displayList[index];
 
                       if (item['_isDateDivider'] == true) {
-                        return _buildDateDivider(item['sent_at'] as String);
+                        return _buildDateDivider(
+                          item['sent_at'] as String? ?? '',
+                          label: item['label'] as String?,
+                        );
                       }
 
                       final message = item['message'] as String? ?? '';
-                      final direction = item['direction'] as String? ?? 'incoming';
+                      final direction =
+                          item['direction'] as String? ?? 'incoming';
                       final sentAt = item['sent_at'] as String? ?? '';
                       final status = item['status'] as String? ?? '';
                       final isIncoming = direction == 'incoming';
-                      final isExpanded = _expandedTimestamps.contains(sentAt);
+                      final messageKey = _messageExpansionKey(item, index);
+                      final isExpanded = _expandedMessageKeys.contains(
+                        messageKey,
+                      );
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -317,14 +383,16 @@ class _ChatScreenState extends State<ChatScreen> {
                               : CrossAxisAlignment.end,
                           children: [
                             GestureDetector(
-                              onTap: () => _toggleTimestamp(sentAt),
+                              onTap: () => _toggleExpandedMessage(messageKey),
                               onLongPress: () => _confirmAndDeleteMessage(item),
                               child: ChatBubble(
                                 message: message,
                                 isIncoming: isIncoming,
                                 timestamp: sentAt,
                                 status: status,
-                                onRetry: !isIncoming && status.toLowerCase() == 'failed'
+                                onRetry:
+                                    !isIncoming &&
+                                        status.toLowerCase() == 'failed'
                                     ? () => _retryMessage(item)
                                     : null,
                               ),
@@ -334,7 +402,11 @@ class _ChatScreenState extends State<ChatScreen> {
                               curve: Curves.easeOut,
                               child: isExpanded
                                   ? Padding(
-                                      padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+                                      padding: const EdgeInsets.only(
+                                        top: 4,
+                                        left: 4,
+                                        right: 4,
+                                      ),
                                       child: Text(
                                         _formatTime(sentAt),
                                         style: TextStyle(
@@ -364,7 +436,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildDateDivider(String sentAt) {
+  Widget _buildDateDivider(String sentAt, {String? label}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Row(
@@ -384,7 +456,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                _formatDateOnly(sentAt),
+                label ?? _formatDateOnly(sentAt),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
@@ -411,7 +483,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final amPm = dt.hour >= 12 ? 'PM' : 'AM';
       return '$hour:${dt.minute.toString().padLeft(2, '0')} $amPm';
     } catch (_) {
-      return '';
+      return 'Unknown time';
     }
   }
 
@@ -427,40 +499,38 @@ class _ChatScreenState extends State<ChatScreen> {
       if (msgDate == yesterday) return 'Yesterday';
       return '${dt.month}/${dt.day}/${dt.year.toString().substring(2)}';
     } catch (_) {
-      return '';
+      return 'Unknown date';
     }
+  }
+
+  DateTime _messageSortDate(Map<String, dynamic> message) {
+    return DateTime.tryParse(message['sent_at'] as String? ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  String _messageExpansionKey(Map<String, dynamic> message, int index) {
+    final id = message['id'];
+    if (id != null) return 'id:$id';
+
+    final sourceMessageId = message['source_message_id'] as String? ?? '';
+    if (sourceMessageId.isNotEmpty) return 'source:$sourceMessageId';
+
+    final sentAt = message['sent_at'] as String? ?? '';
+    final direction = message['direction'] as String? ?? '';
+    final body = message['message'] as String? ?? '';
+    return 'fallback:$index:$sentAt:$direction:$body';
   }
 }
 
 class _EmptyConversation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.forum_outlined,
-            size: 56,
-            color: AppColors.of(context).mutedForeground.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No messages yet',
-            style: TextStyle(
-              fontSize: 16,
-              color: AppColors.of(context).mutedForeground.withValues(alpha: 0.7),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Start a conversation',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.of(context).mutedForeground.withValues(alpha: 0.5),
-            ),
-          ),
-        ],
+    return const Center(
+      child: EmptyState(
+        icon: Icons.forum_outlined,
+        mascot: MascotPose.smsConfirm,
+        title: 'No messages yet',
+        message: 'Start a conversation',
       ),
     );
   }
