@@ -7,8 +7,10 @@ import 'package:provider/provider.dart';
 import '../../core/utils/phone_number_utils.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/providers/order_provider.dart';
+import '../../data/repositories/audit_log_repository.dart';
 import '../../data/repositories/sms_message_repository.dart';
 import '../../data/services/app_event_bus.dart';
+import '../security/admin_gate.dart';
 import '../../data/services/native_sms_sender.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_order_form.dart';
@@ -39,11 +41,13 @@ class _ChatScreenState extends State<ChatScreen> {
   int _lastMessageCount = 0;
   final _expandedMessageKeys = <String>{};
   late final SmsMessageRepository _smsRepo;
+  late final AuditLogRepository _auditRepo;
 
   @override
   void initState() {
     super.initState();
     _smsRepo = context.read<SmsMessageRepository>();
+    _auditRepo = context.read<AuditLogRepository>();
     _loadMessages(isInitial: true);
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -257,9 +261,24 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _confirmAndDeleteMessage(Map<String, dynamic> message) async {
-    if (await _confirmDeleteMessage(message)) {
-      await _deleteMessage(message);
-    }
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to delete local SMS history.',
+    )) return;
+    if (!await _confirmDeleteMessage(message)) return;
+    final id = message['id'] as int?;
+    if (id == null) return;
+    await _deleteMessage(message);
+    unawaited(_auditRepo.record(
+      action: 'sms_message_deleted',
+      entityType: 'sms_message',
+      entityId: id.toString(),
+      metadata: {
+        'phone_number': PhoneNumberUtils.normalize(widget.phoneNumber),
+        'direction': message['direction'] as String? ?? 'unknown',
+        'sent_at': message['sent_at'] as String?,
+      },
+    ));
   }
 
   void _toggleExpandedMessage(String messageKey) {
