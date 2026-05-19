@@ -76,9 +76,17 @@ class _AdminPasswordDialogState extends State<AdminPasswordDialog> {
         _isSubmitting = true;
         _error = null;
       });
-      await widget.auth.setPassword(pin);
-      await widget.auth.unlockFor();
-      if (mounted) Navigator.of(context).pop(true);
+      try {
+        await widget.auth.setPassword(pin);
+        await widget.auth.unlockFor();
+        if (mounted) Navigator.of(context).pop(true);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _isSubmitting = false;
+          _error = 'Failed to save PIN. Try again.';
+        });
+      }
     } else {
       setState(() {
         _isSubmitting = true;
@@ -150,7 +158,9 @@ class _AdminPasswordDialogState extends State<AdminPasswordDialog> {
             obscureText: true,
             enabled: !_isSubmitting,
             keyboardType: TextInputType.number,
-            onSubmitted: _isSetupMode ? null : (_) => _submit(),
+            onSubmitted: _isSetupMode
+                ? (_) => FocusScope.of(context).nextFocus()
+                : (_) => _submit(),
             decoration: InputDecoration(
               labelText: _isSetupMode ? 'New PIN' : 'Admin PIN',
               filled: true,
