@@ -130,6 +130,8 @@ Future<void> createDatabaseSchema(Database db, int version) async {
   await _createAuditLogsTable(db);
   await _createDeletionRetryQueueTable(db);
   await _createSupabaseSyncDeletionsTable(db);
+  await _createSupabaseSyncUpsertsTable(db);
+  await _createSupabaseSyncStateTable(db);
 
   // Task 006 â€” Seed default data in order: barangays first, then customers, then schedules.
   // Order matters because of foreign key dependencies:
@@ -137,6 +139,7 @@ Future<void> createDatabaseSchema(Database db, int version) async {
   await seedBarangays(db);
   await seedCustomers(db);
   await seedSchedules(db);
+  await _seedSupabaseSyncUpserts(db);
 }
 
 // Task 005 â€” Database migration: v1 â†’ current schema upgrade
@@ -298,6 +301,12 @@ Future<void> upgradeDatabaseSchema(
     await _createSupabaseSyncDeletionsTable(db);
   }
 
+  if (oldVersion < 13) {
+    await _createSupabaseSyncUpsertsTable(db);
+    await _createSupabaseSyncStateTable(db);
+    await _seedSupabaseSyncUpserts(db);
+  }
+
   // Create sms_messages table if not exists (for old databases)
   await _createSmsMessagesTable(db);
   await _createIncomingSmsReceiptsTable(db);
@@ -307,6 +316,8 @@ Future<void> upgradeDatabaseSchema(
   await _createAuditLogsTable(db);
   await _createDeletionRetryQueueTable(db);
   await _createSupabaseSyncDeletionsTable(db);
+  await _createSupabaseSyncUpsertsTable(db);
+  await _createSupabaseSyncStateTable(db);
 }
 
 Future<void> _createAppSettingsTable(Database db) async {
@@ -488,6 +499,9 @@ Future<void> ensureDatabaseSchemaIntegrity(Database db) async {
   await _createPendingSmsActionsTable(db);
   await _createAuditLogsTable(db);
   await _createDeletionRetryQueueTable(db);
+  await _createSupabaseSyncDeletionsTable(db);
+  await _createSupabaseSyncUpsertsTable(db);
+  await _createSupabaseSyncStateTable(db);
   await _addColumnIfMissing(
     db,
     'delivery_logs',
@@ -607,6 +621,78 @@ Future<void> _createSupabaseSyncDeletionsTable(Database db) async {
     'ON supabase_sync_deletions(table_name, row_id) '
     "WHERE status IN ('pending', 'failed')",
   );
+}
+
+Future<void> _createSupabaseSyncUpsertsTable(Database db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS supabase_sync_upserts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name TEXT NOT NULL,
+      row_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      next_attempt_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_supabase_sync_upserts_due '
+    'ON supabase_sync_upserts(status, next_attempt_at)',
+  );
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS '
+    'idx_supabase_sync_upserts_active_row '
+    'ON supabase_sync_upserts(table_name, row_id) '
+    "WHERE status IN ('pending', 'failed')",
+  );
+}
+
+Future<void> _createSupabaseSyncStateTable(Database db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS supabase_sync_state (
+      table_name TEXT PRIMARY KEY,
+      last_remote_id INTEGER NOT NULL DEFAULT 0,
+      baseline_uploaded INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    )
+  ''');
+}
+
+Future<void> _seedSupabaseSyncUpserts(Database db) async {
+  const syncTables = ['barangays', 'customers', 'orders', 'sms_messages'];
+  final nowIso = DateTime.now().toIso8601String();
+  for (final table in syncTables) {
+    final exists = await _tableExists(db, table);
+    if (!exists) continue;
+    final rows = await db.query(table, columns: ['id']);
+    for (final row in rows) {
+      final rowId = (row['id'] as num?)?.toInt();
+      if (rowId == null) continue;
+      await db.insert('supabase_sync_upserts', {
+        'table_name': table,
+        'row_id': rowId,
+        'status': 'pending',
+        'attempts': 0,
+        'next_attempt_at': nowIso,
+        'created_at': nowIso,
+        'updated_at': nowIso,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+  }
+}
+
+Future<bool> _tableExists(Database db, String table) async {
+  _assertSafeIdentifier(table);
+  final rows = await db.query(
+    'sqlite_master',
+    columns: ['name'],
+    where: 'type = ? AND name = ?',
+    whereArgs: ['table', table],
+    limit: 1,
+  );
+  return rows.isNotEmpty;
 }
 
 final _safeIdentifier = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$');

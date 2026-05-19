@@ -144,7 +144,9 @@ extension DatabaseSmsOperations on DatabaseHelper {
     if (phoneNumber != null) {
       normalizedData['phone_number'] = PhoneNumberUtils.normalize(phoneNumber);
     }
-    return await db.insert('sms_messages', normalizedData);
+    final id = await db.insert('sms_messages', normalizedData);
+    await enqueueSupabaseSyncUpsert(tableName: 'sms_messages', rowId: id);
+    return id;
   }
 
   /// Get all SMS messages for a phone number

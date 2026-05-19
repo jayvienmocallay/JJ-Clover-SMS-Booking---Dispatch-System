@@ -185,28 +185,44 @@ class SupabaseSyncService extends ChangeNotifier {
 
   Future<void> _syncTable(SupabaseClient client, String tableName) async {
     final pendingDeletedIds = await _localSync.pendingDeletedRowIds(tableName);
-    final remoteRows = await _fetchRemoteRows(client, tableName);
+    final lastRemoteId = await _localSync.lastRemoteId(tableName);
+    final remoteRows = await _fetchRemoteRows(
+      client,
+      tableName,
+      afterId: lastRemoteId,
+    );
     final insertedRemoteRows = await _localSync.mergeRemoteRows(
       tableName,
       remoteRows,
       excludedIds: pendingDeletedIds,
     );
+    final maxRemoteId = _maxRowId(remoteRows);
+    if (maxRemoteId > lastRemoteId) {
+      await _localSync.saveSyncState(tableName, lastRemoteId: maxRemoteId);
+    }
 
-    final rows = await _localSync.getRowsForSync(tableName);
+    final baselineUploaded = await _localSync.isBaselineUploaded(tableName);
+    final rows = baselineUploaded
+        ? await _getDueLocalRows(tableName)
+        : await _localSync.getRowsForSync(tableName);
     if (rows.isEmpty) return;
 
     const batchSize = 50;
     for (int i = 0; i < rows.length; i += batchSize) {
       final batch = rows.skip(i).take(batchSize).toList();
-      final cleanedBatch = batch.map((row) {
-        final cleaned = <String, dynamic>{};
-        for (final entry in row.entries) {
-          cleaned[entry.key] = entry.value;
-        }
-        return cleaned;
-      }).toList();
+      await client.from(tableName).upsert(_cleanRows(batch), onConflict: 'id');
+      if (!baselineUploaded) {
+        await _localSync.markUpsertRowsSucceeded(tableName, _rowIds(batch));
+      }
+    }
 
-      await client.from(tableName).upsert(cleanedBatch, onConflict: 'id');
+    if (baselineUploaded) {
+      final syncedQueueIds = rows
+          .map((row) => (row['_sync_queue_id'] as num?)?.toInt())
+          .whereType<int>();
+      await _localSync.markUpsertsSucceeded(syncedQueueIds);
+    } else {
+      await _localSync.saveSyncState(tableName, baselineUploaded: true);
     }
 
     debugPrint(
@@ -217,15 +233,18 @@ class SupabaseSyncService extends ChangeNotifier {
 
   Future<List<Map<String, dynamic>>> _fetchRemoteRows(
     SupabaseClient client,
-    String tableName,
-  ) async {
+    String tableName, {
+    int afterId = 0,
+  }) async {
     const pageSize = 500;
     final rows = <Map<String, dynamic>>[];
 
     for (int offset = 0; ; offset += pageSize) {
-      final page = await client
-          .from(tableName)
-          .select()
+      var query = client.from(tableName).select();
+      if (afterId > 0) {
+        query = query.gt('id', afterId);
+      }
+      final page = await query
           .order('id', ascending: true)
           .range(offset, offset + pageSize - 1);
       final pageRows = page
@@ -236,6 +255,63 @@ class SupabaseSyncService extends ChangeNotifier {
     }
 
     return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> _getDueLocalRows(String tableName) async {
+    final queueRows = await _localSync.dueUpsertRows(tableName);
+    final idsByRowId = <int, int>{};
+    for (final queueRow in queueRows) {
+      final queueId = (queueRow['id'] as num?)?.toInt();
+      final rowId = (queueRow['row_id'] as num?)?.toInt();
+      if (queueId == null || rowId == null) continue;
+      idsByRowId[rowId] = queueId;
+    }
+    final rows = await _localSync.getRowsByIds(
+      tableName,
+      idsByRowId.keys.toSet(),
+    );
+    final decoratedRows = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      final rowId = (row['id'] as num?)?.toInt();
+      final queueId = rowId == null ? null : idsByRowId[rowId];
+      if (queueId == null) continue;
+      decoratedRows.add({...row, '_sync_queue_id': queueId});
+    }
+
+    final foundRowIds = decoratedRows
+        .map((row) => (row['id'] as num?)?.toInt())
+        .whereType<int>()
+        .toSet();
+    for (final entry in idsByRowId.entries) {
+      if (!foundRowIds.contains(entry.key)) {
+        await _localSync.markUpsertsSucceeded([entry.value]);
+      }
+    }
+    return decoratedRows;
+  }
+
+  List<Map<String, dynamic>> _cleanRows(List<Map<String, dynamic>> rows) {
+    return rows.map((row) {
+      final cleaned = <String, dynamic>{};
+      for (final entry in row.entries) {
+        if (entry.key.startsWith('_sync_')) continue;
+        cleaned[entry.key] = entry.value;
+      }
+      return cleaned;
+    }).toList();
+  }
+
+  Iterable<int> _rowIds(List<Map<String, dynamic>> rows) {
+    return rows.map((row) => (row['id'] as num?)?.toInt()).whereType<int>();
+  }
+
+  int _maxRowId(List<Map<String, dynamic>> rows) {
+    var maxId = 0;
+    for (final row in rows) {
+      final id = (row['id'] as num?)?.toInt();
+      if (id != null && id > maxId) maxId = id;
+    }
+    return maxId;
   }
 
   Future<void> _processSyncedRowDeletions(SupabaseClient client) async {

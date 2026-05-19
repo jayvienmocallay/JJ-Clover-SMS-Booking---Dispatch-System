@@ -20,7 +20,9 @@ extension DatabaseCustomerOperations on DatabaseHelper {
   /// Insert a new barangay
   Future<int> insertBarangay(Map<String, dynamic> barangayData) async {
     final db = await DatabaseHelper.instance.database;
-    return await db.insert('barangays', barangayData);
+    final id = await db.insert('barangays', barangayData);
+    await enqueueSupabaseSyncUpsert(tableName: 'barangays', rowId: id);
+    return id;
   }
 
   /// Delete a barangay by ID
@@ -48,6 +50,9 @@ extension DatabaseCustomerOperations on DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+    if (updated > 0) {
+      await enqueueSupabaseSyncUpsert(tableName: 'barangays', rowId: id);
+    }
 
     // Re-create schedules for all customers in this barangay
     final zone = data['delivery_zone'] as String?;
@@ -157,6 +162,7 @@ extension DatabaseCustomerOperations on DatabaseHelper {
       }
     }
 
+    await enqueueSupabaseSyncUpsert(tableName: 'customers', rowId: customerId);
     return customerId;
   }
 
@@ -264,6 +270,7 @@ extension DatabaseCustomerOperations on DatabaseHelper {
       rethrow;
     }
     if (updated == 0) return 0;
+    await enqueueSupabaseSyncUpsert(tableName: 'customers', rowId: customerId);
 
     // Re-create schedules if barangay changed so zone validation
     // uses the new barangay's delivery days instead of stale ones.

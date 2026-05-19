@@ -259,6 +259,30 @@ extension DatabasePrivacyOperations on DatabaseHelper {
   Future<bool> deleteCustomerByPhone(String phoneNumber) async {
     final db = await DatabaseHelper.instance.database;
     final normalized = PhoneNumberUtils.normalize(phoneNumber);
+    final customerRows = await db.query(
+      'customers',
+      columns: ['id'],
+      where: 'contact_number = ?',
+      whereArgs: [normalized],
+      limit: 1,
+    );
+    final customerId = customerRows.isEmpty
+        ? null
+        : customerRows.first['id'] as int;
+    final orderRows = await db.query(
+      'orders',
+      columns: ['id'],
+      where: customerId == null
+          ? 'phone_number = ?'
+          : 'customer_id = ? OR phone_number = ?',
+      whereArgs: customerId == null ? [normalized] : [customerId, normalized],
+    );
+    final smsRows = await db.query(
+      'sms_messages',
+      columns: ['id'],
+      where: 'phone_number = ?',
+      whereArgs: [normalized],
+    );
 
     await insertAuditLog(
       action: 'customer_erasure_requested',
@@ -324,6 +348,24 @@ extension DatabasePrivacyOperations on DatabaseHelper {
       phoneNumber: normalized,
       metadata: {'customer_deleted': deleted},
     );
+    for (final row in orderRows) {
+      final id = (row['id'] as num?)?.toInt();
+      if (id != null) {
+        await enqueueSupabaseSyncUpsert(tableName: 'orders', rowId: id);
+      }
+    }
+    if (customerId != null && deleted) {
+      await enqueueSupabaseSyncDeletion(
+        tableName: 'customers',
+        rowId: customerId,
+      );
+    }
+    for (final row in smsRows) {
+      final id = (row['id'] as num?)?.toInt();
+      if (id != null) {
+        await enqueueSupabaseSyncDeletion(tableName: 'sms_messages', rowId: id);
+      }
+    }
     return deleted;
   }
 }

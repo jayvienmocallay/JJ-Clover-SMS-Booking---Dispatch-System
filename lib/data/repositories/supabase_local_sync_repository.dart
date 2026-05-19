@@ -15,6 +15,17 @@ class SupabaseLocalSyncRepository {
     return db.query(tableName, orderBy: 'id ASC');
   }
 
+  Future<List<Map<String, dynamic>>> getRowsByIds(
+    String tableName,
+    Set<int> rowIds,
+  ) {
+    _assertAllowedSyncTable(tableName);
+    return DatabaseHelper.instance.getRowsByIdsForSupabaseSync(
+      tableName,
+      rowIds,
+    );
+  }
+
   Future<int> countRows(String tableName) async {
     _assertAllowedSyncTable(tableName);
     final db = await DatabaseHelper.instance.database;
@@ -59,12 +70,62 @@ class SupabaseLocalSyncRepository {
     return DatabaseHelper.instance.getDueSupabaseSyncDeletions(limit: limit);
   }
 
+  Future<List<Map<String, dynamic>>> dueUpsertRows(
+    String tableName, {
+    int limit = 200,
+  }) {
+    _assertAllowedSyncTable(tableName);
+    return DatabaseHelper.instance.getDueSupabaseSyncUpserts(
+      tableName: tableName,
+      limit: limit,
+    );
+  }
+
   Future<void> markDeletedRowSynced(int id) {
     return DatabaseHelper.instance.markSupabaseSyncDeletionSucceeded(id);
   }
 
   Future<void> markDeletedRowFailed(int id, Object error) {
     return DatabaseHelper.instance.markSupabaseSyncDeletionFailed(id, error);
+  }
+
+  Future<void> markUpsertsSucceeded(Iterable<int> ids) {
+    return DatabaseHelper.instance.markSupabaseSyncUpsertsSucceeded(ids);
+  }
+
+  Future<void> markUpsertRowsSucceeded(String tableName, Iterable<int> rowIds) {
+    _assertAllowedSyncTable(tableName);
+    return DatabaseHelper.instance.markSupabaseSyncUpsertRowsSucceeded(
+      tableName,
+      rowIds,
+    );
+  }
+
+  Future<void> markUpsertFailed(int id, Object error) {
+    return DatabaseHelper.instance.markSupabaseSyncUpsertFailed(id, error);
+  }
+
+  Future<int> lastRemoteId(String tableName) {
+    _assertAllowedSyncTable(tableName);
+    return DatabaseHelper.instance.getSupabaseSyncLastRemoteId(tableName);
+  }
+
+  Future<bool> isBaselineUploaded(String tableName) {
+    _assertAllowedSyncTable(tableName);
+    return DatabaseHelper.instance.isSupabaseSyncBaselineUploaded(tableName);
+  }
+
+  Future<void> saveSyncState(
+    String tableName, {
+    int? lastRemoteId,
+    bool? baselineUploaded,
+  }) {
+    _assertAllowedSyncTable(tableName);
+    return DatabaseHelper.instance.saveSupabaseSyncState(
+      tableName,
+      lastRemoteId: lastRemoteId,
+      baselineUploaded: baselineUploaded,
+    );
   }
 
   void _assertAllowedSyncTable(String tableName) {
