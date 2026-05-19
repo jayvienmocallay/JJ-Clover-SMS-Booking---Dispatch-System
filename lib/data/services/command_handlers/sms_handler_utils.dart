@@ -32,7 +32,12 @@ class SmsHandlerUtils {
     String message, {
     String? sourceMessageId,
     bool waitForSend = false,
-  }) {
+  }) async {
+    if (await _isMuted(phoneNumber)) {
+      debugPrint('Reply suppressed for muted contact: $phoneNumber');
+      return;
+    }
+
     final completer = Completer<void>();
     final outgoingSourceMessageId = _outgoingSourceMessageId(
       sourceMessageId,
@@ -49,7 +54,12 @@ class SmsHandlerUtils {
     );
 
     unawaited(_drainQueue());
-    return waitForSend ? completer.future : Future<void>.value();
+    if (waitForSend) await completer.future;
+  }
+
+  static Future<bool> _isMuted(String phoneNumber) async {
+    final customer = await _customers.getCustomerByPhone(phoneNumber);
+    return (customer?['is_muted'] as int? ?? 0) == 1;
   }
 
   @visibleForTesting

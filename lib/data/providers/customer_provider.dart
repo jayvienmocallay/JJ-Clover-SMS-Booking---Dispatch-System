@@ -92,6 +92,31 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
+  /// Updates mute/block/spam contact flags without touching schedules.
+  Future<bool> updateContactFlags(
+    int customerId, {
+    bool? isMuted,
+    bool? isBlocked,
+    bool? isSpam,
+  }) async {
+    _error = null;
+    try {
+      final updated = await _repository.updateCustomerContactFlags(
+        customerId,
+        isMuted: isMuted,
+        isBlocked: isBlocked,
+        isSpam: isSpam,
+      );
+      _ensureRowsChanged(updated, 'No customer was updated.');
+      await loadCustomers();
+      return _error == null;
+    } catch (e) {
+      _error = _errorMessage(e);
+      _notifyIfActive();
+      return false;
+    }
+  }
+
   /// Returns customer data by ID from cache
   Map<String, dynamic>? getById(int id) {
     try {

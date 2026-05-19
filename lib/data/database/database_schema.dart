@@ -28,6 +28,9 @@ Future<void> createDatabaseSchema(Database db, int version) async {
       consent_timestamp TEXT,
       consent_channel TEXT,
       consent_version TEXT,
+      is_muted INTEGER NOT NULL DEFAULT 0,
+      is_blocked INTEGER NOT NULL DEFAULT 0,
+      is_spam INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (barangay_id) REFERENCES barangays (id)
     )
   ''');
@@ -293,6 +296,10 @@ Future<void> upgradeDatabaseSchema(
     await _createDeletionRetryQueueTable(db);
   }
 
+  if (oldVersion < 12) {
+    await _addCustomerContactStatusColumns(db);
+  }
+
   // Create sms_messages table if not exists (for old databases)
   await _createSmsMessagesTable(db);
   await _createIncomingSmsReceiptsTable(db);
@@ -479,6 +486,7 @@ Future<void> ensureDatabaseSchemaIntegrity(Database db) async {
   await _addColumnIfMissing(db, 'customers', 'consent_timestamp', 'TEXT');
   await _addColumnIfMissing(db, 'customers', 'consent_channel', 'TEXT');
   await _addColumnIfMissing(db, 'customers', 'consent_version', 'TEXT');
+  await _addCustomerContactStatusColumns(db);
   await _createPendingSmsActionsTable(db);
   await _createAuditLogsTable(db);
   await _createDeletionRetryQueueTable(db);
@@ -504,6 +512,27 @@ Future<void> ensureDatabaseSchemaIntegrity(Database db) async {
 // expire after [SmsRegistrationCopy.pendingActionTtl] and are pruned at
 // each interaction. Survives process restarts so a customer can finish
 // a multi-step flow even if the device reboots between SMS messages.
+Future<void> _addCustomerContactStatusColumns(Database db) async {
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    'is_muted',
+    'INTEGER NOT NULL DEFAULT 0',
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    'is_blocked',
+    'INTEGER NOT NULL DEFAULT 0',
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    'is_spam',
+    'INTEGER NOT NULL DEFAULT 0',
+  );
+}
+
 Future<void> _createPendingSmsActionsTable(Database db) async {
   await db.execute('''
     CREATE TABLE IF NOT EXISTS pending_sms_actions (

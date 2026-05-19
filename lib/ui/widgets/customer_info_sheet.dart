@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/order_model.dart';
+import '../../data/providers/customer_provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/order_repository.dart';
@@ -249,6 +250,46 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Order rejected')));
       }
+    }
+  }
+
+  Future<void> _toggleContactFlag({
+    bool? isMuted,
+    bool? isBlocked,
+    bool? isSpam,
+    required String successMessage,
+  }) async {
+    final customer = _customer;
+    final customerId = customer?.id;
+    if (customerId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Register this customer first.')),
+      );
+      return;
+    }
+
+    try {
+      final provider = context.read<CustomerProvider>();
+      final updated = await provider.updateContactFlags(
+        customerId,
+        isMuted: isMuted,
+        isBlocked: isBlocked,
+        isSpam: isSpam,
+      );
+      if (!updated) {
+        throw StateError(provider.error ?? 'No customer was updated.');
+      }
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(successMessage)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 
@@ -674,28 +715,43 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
               },
             ),
           _listAction(
-            icon: Icons.volume_off_outlined,
-            label: 'Mute Messages',
+            icon: _customer?.isMuted == true
+                ? Icons.volume_up_outlined
+                : Icons.volume_off_outlined,
+            label: _customer?.isMuted == true
+                ? 'Unmute Messages'
+                : 'Mute Messages',
             color: AppColors.of(context).mutedForeground,
-            onTap: () => ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Mute — coming soon'))),
+            onTap: () => _toggleContactFlag(
+              isMuted: !(_customer?.isMuted ?? false),
+              successMessage: _customer?.isMuted == true
+                  ? 'Messages unmuted'
+                  : 'Messages muted',
+            ),
           ),
           _listAction(
             icon: Icons.block_outlined,
-            label: 'Block Number',
+            label: _customer?.isBlocked == true
+                ? 'Unblock Number'
+                : 'Block Number',
             color: AppColors.of(context).statusAway,
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Block — coming soon')),
+            onTap: () => _toggleContactFlag(
+              isBlocked: !(_customer?.isBlocked ?? false),
+              successMessage: _customer?.isBlocked == true
+                  ? 'Number unblocked'
+                  : 'Number blocked',
             ),
           ),
           _listAction(
             icon: Icons.report_outlined,
-            label: 'Mark as Spam',
+            label: _customer?.isSpam == true ? 'Unmark Spam' : 'Mark as Spam',
             color: AppColors.of(context).statusAway,
-            onTap: () => ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Spam — coming soon'))),
+            onTap: () => _toggleContactFlag(
+              isSpam: !(_customer?.isSpam ?? false),
+              successMessage: _customer?.isSpam == true
+                  ? 'Removed from spam'
+                  : 'Marked as spam',
+            ),
           ),
         ]),
       ],
