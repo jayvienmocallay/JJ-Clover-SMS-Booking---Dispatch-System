@@ -72,7 +72,7 @@ void main() {
   test('changePassword throws on wrong current PIN', () async {
     final svc = _makeService();
     await svc.setPassword('old');
-    expect(
+    await expectLater(
       () => svc.changePassword(currentPassword: 'bad', newPassword: 'new'),
       throwsA(isA<StateError>()),
     );

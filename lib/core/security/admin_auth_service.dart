@@ -4,7 +4,7 @@ abstract class AdminAuthService {
   Future<bool> isAdminConfigured();
   bool get isUnlocked;
   Future<bool> verifyPassword(String password);
-  Future<void> unlockFor({Duration duration});
+  Future<void> unlockFor({Duration duration = const Duration(minutes: 5)});
   Future<void> lock();
   Future<void> setPassword(String password);
   Future<void> changePassword({
