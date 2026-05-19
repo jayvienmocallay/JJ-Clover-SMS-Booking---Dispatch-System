@@ -32,7 +32,12 @@ class SmsHandlerUtils {
     String message, {
     String? sourceMessageId,
     bool waitForSend = false,
-  }) {
+  }) async {
+    if (await _isMuted(phoneNumber)) {
+      debugPrint('Reply suppressed for muted contact: $phoneNumber');
+      return;
+    }
+
     final completer = Completer<void>();
     final outgoingSourceMessageId = _outgoingSourceMessageId(
       sourceMessageId,
@@ -49,7 +54,12 @@ class SmsHandlerUtils {
     );
 
     unawaited(_drainQueue());
-    return waitForSend ? completer.future : Future<void>.value();
+    if (waitForSend) await completer.future;
+  }
+
+  static Future<bool> _isMuted(String phoneNumber) async {
+    final customer = await _customers.getCustomerByPhone(phoneNumber);
+    return (customer?['is_muted'] as int? ?? 0) == 1;
   }
 
   @visibleForTesting
@@ -191,6 +201,26 @@ class SmsHandlerUtils {
     return result;
   }
 
+  static Future<void> sendOrderRejectedReply(
+    String phoneNumber, {
+    int? quantity,
+    String? reason,
+  }) {
+    return sendReply(
+      phoneNumber,
+      buildOrderRejectedMessage(quantity: quantity, reason: reason),
+    );
+  }
+
+  static String buildOrderRejectedMessage({int? quantity, String? reason}) {
+    final quantityText = quantity != null && quantity > 0
+        ? ' (${quantity} gallon${quantity == 1 ? '' : 's'})'
+        : '';
+    final reasonText = _formatRejectionReason(reason);
+    return 'JJ Clover: We are sorry, but your water order$quantityText was rejected.'
+        '$reasonText Please reply or contact us if you need help placing a new order. Thank you!';
+  }
+
   /// Saves a message that couldn't be processed as a regular order so it
   /// remains visible in the Messages / Unrecognized tab.
   static Future<int> saveUnrecognized(
@@ -256,6 +286,13 @@ class SmsHandlerUtils {
       default:
         return status;
     }
+  }
+
+  static String _formatRejectionReason(String? reason) {
+    final trimmed = reason?.trim();
+    if (trimmed == null || trimmed.isEmpty) return '';
+    final suffix = RegExp(r'[.!?]$').hasMatch(trimmed) ? '' : '.';
+    return ' Reason: $trimmed$suffix';
   }
 }
 

@@ -261,6 +261,13 @@ class SmsBackgroundService {
         'sent_at': DateTime.now().toIso8601String(),
       });
       AppEventBus().notifyMessageReceived();
+
+      if (await _isBlockedOrSpam(normalizedSender)) {
+        debugPrint('SMS ignored from blocked/spam contact: $normalizedSender');
+        await _receipts.complete(effectiveSourceMessageId);
+        return;
+      }
+
       await PushNotificationService.showMessageNotification(
         title: 'Bag-ong Mensahe',
         body: 'Mensahe gikan $sender',
@@ -414,6 +421,12 @@ class SmsBackgroundService {
     } finally {
       _isRetryingReceipts = false;
     }
+  }
+
+  Future<bool> _isBlockedOrSpam(String phoneNumber) async {
+    final customer = await _customers.getCustomerByPhone(phoneNumber);
+    return (customer?['is_blocked'] as int? ?? 0) == 1 ||
+        (customer?['is_spam'] as int? ?? 0) == 1;
   }
 
   String _smsModeLabel(SystemMode mode) {

@@ -61,12 +61,13 @@ void main() {
 
       final provider = OrderProvider(OrderRepository());
 
-      await provider.updateStatus(
+      final completed = await provider.updateStatus(
         orderId,
         'completed',
         notes: 'Provider completion',
       );
 
+      expect(completed, isTrue);
       expect(provider.error, isNull);
       expect(provider.todayOrders, isNotEmpty);
       expect(
@@ -84,12 +85,27 @@ void main() {
       expect(logs.single['staff_id'], 3);
       expect(logs.single['notes'], 'Provider completion');
 
-      await provider.updateStatus(orderId, 'completed');
+      final repeatedCompletion = await provider.updateStatus(
+        orderId,
+        'completed',
+      );
 
+      expect(repeatedCompletion, isTrue);
       expect(provider.error, isNull);
       expect(await helper.getDeliveryLogsForOrder(orderId), hasLength(1));
     },
   );
+
+  test('updateStatus returns false when no order rows are affected', () async {
+    final provider = OrderProvider(OrderRepository());
+
+    final updated = await provider.updateStatus(999999, 'confirmed');
+
+    expect(updated, isFalse);
+    expect(provider.error, 'No order was updated.');
+
+    provider.dispose();
+  });
 
   test('loadOrders exposes upcoming pre-booked orders', () async {
     final helper = DatabaseHelper.instance;

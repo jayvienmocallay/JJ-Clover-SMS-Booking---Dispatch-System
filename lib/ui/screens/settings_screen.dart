@@ -2,16 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../data/models/order_model.dart';
 import '../../data/repositories/barangay_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
+import '../../data/services/command_handlers/sms_handler_utils.dart';
 import '../../data/services/supabase_sync_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/complete_order_sheet.dart';
 import '../widgets/shared/app_page_header.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/loading_state.dart';
 import 'package:jj_clover_sms/main.dart' show setThemeMode, themeNotifier;
+import 'dart:async' show unawaited;
+import '../../core/security/admin_auth_service.dart';
+import '../../data/repositories/audit_log_repository.dart';
+import '../security/admin_gate.dart';
 
 // ─────────────────────────────────────────────
 // Main Settings Screen (inline + nav for Data/About)
@@ -37,12 +44,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _loadError;
   late final BarangayRepository _barangayRepo;
   late final SettingsRepository _settingsRepo;
+  late final AdminAuthService _adminAuth;
+  late final AuditLogRepository _auditRepo;
 
   @override
   void initState() {
     super.initState();
     _barangayRepo = context.read<BarangayRepository>();
     _settingsRepo = context.read<SettingsRepository>();
+    _adminAuth = context.read<AdminAuthService>();
+    _auditRepo = context.read<AuditLogRepository>();
     _loadData();
   }
 
@@ -136,9 +147,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       (b) => (b['name'] as String).toLowerCase() == name.toLowerCase(),
     );
     if (exists) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Barangay already exists')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Barangay already exists')),
+      );
+      return;
+    }
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to add a barangay.',
+    )) {
       return;
     }
     final zoneData = _daysToZone(_selectedDays);
@@ -147,27 +164,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'delivery_zone': zoneData.zone,
       if (zoneData.deliveryDay != null) 'delivery_day': zoneData.deliveryDay,
     });
+    unawaited(_auditRepo.record(
+      action: 'barangay_created',
+      entityType: 'barangay',
+      metadata: {
+        'name': name,
+        'delivery_zone': zoneData.zone,
+        'delivery_day': zoneData.deliveryDay,
+      },
+    ));
     _barangayController.clear();
     setState(() => _selectedDays.clear());
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$name added successfully')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$name added successfully')),
+      );
     }
     await _loadData();
   }
 
   Future<void> _removeBarangay(int id) async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to remove a barangay.',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    final barangay = _barangays.firstWhere(
+      (b) => b['id'] == id,
+      orElse: () => <String, dynamic>{},
+    );
+    final name = barangay['name'] as String? ?? 'this barangay';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.of(context).card,
+        title: Text(
+          'Remove Barangay',
+          style: TextStyle(color: AppColors.of(context).foreground),
+        ),
+        content: Text(
+          'Remove "$name"? This may affect customers and delivery schedules.',
+          style: TextStyle(color: AppColors.of(context).mutedForeground),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.of(context).statusMaintenance,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     await _barangayRepo.deleteBarangay(id);
+    unawaited(_auditRepo.record(
+      action: 'barangay_deleted',
+      entityType: 'barangay',
+      entityId: id.toString(),
+      metadata: {'name': name},
+    ));
     await _loadData();
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Barangay removed ✓')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Barangay removed')),
+      );
     }
   }
 
   Future<void> _showTimePicker() async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to change the order cut-off time.',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    final oldHour = _cutoffHour;
+    final oldMinute = _cutoffMinute;
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: _cutoffHour, minute: _cutoffMinute),
@@ -190,6 +271,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _cutoffHour = picked.hour;
         _cutoffMinute = picked.minute;
       });
+      unawaited(_auditRepo.record(
+        action: 'cutoff_time_changed',
+        entityType: 'setting',
+        entityId: 'cutoff_time',
+        metadata: {
+          'old_hour': oldHour,
+          'old_minute': oldMinute,
+          'new_hour': picked.hour,
+          'new_minute': picked.minute,
+        },
+      ));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -206,6 +298,225 @@ class _SettingsScreenState extends State<SettingsScreen> {
         : (_cutoffHour == 0 ? 12 : _cutoffHour);
     final amPm = _cutoffHour >= 12 ? 'PM' : 'AM';
     return '$hour:${_cutoffMinute.toString().padLeft(2, '0')} $amPm';
+  }
+
+  Widget _buildAdminPinSection() {
+    final palette = AppColors.of(context);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: palette.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: palette.primaryLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.admin_panel_settings, size: 20, color: palette.primary),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Admin PIN',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: palette.foreground,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: palette.primaryLight,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Admin',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: palette.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Protect sensitive actions with a PIN.',
+                      style: TextStyle(fontSize: 13, color: palette.mutedForeground),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _changePinFlow,
+                  icon: const Icon(Icons.edit, size: 16),
+                  label: const Text('Change PIN'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _lockAdminSession,
+                  icon: const Icon(Icons.lock, size: 16),
+                  label: const Text('Lock Now'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _changePinFlow() async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to change the admin PIN.',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    await _showChangePinDialog();
+  }
+
+  Future<void> _showChangePinDialog() async {
+    final palette = AppColors.of(context);
+    final newPinController = TextEditingController();
+    final confirmController = TextEditingController();
+    String? dialogError;
+    bool submitting = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: palette.card,
+          title: Text('Set New PIN', style: TextStyle(color: palette.foreground)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: newPinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                enabled: !submitting,
+                decoration: InputDecoration(
+                  labelText: 'New PIN (min 4 digits)',
+                  filled: true,
+                  fillColor: palette.background,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                enabled: !submitting,
+                decoration: InputDecoration(
+                  labelText: 'Confirm new PIN',
+                  filled: true,
+                  fillColor: palette.background,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              if (dialogError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  dialogError!,
+                  style: TextStyle(fontSize: 13, color: palette.statusMaintenance),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: submitting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: submitting
+                  ? null
+                  : () async {
+                      final pin = newPinController.text;
+                      if (pin.length < 4) {
+                        setDialogState(() => dialogError = 'PIN must be at least 4 digits.');
+                        return;
+                      }
+                      if (pin != confirmController.text) {
+                        setDialogState(() => dialogError = 'PINs do not match.');
+                        return;
+                      }
+                      setDialogState(() => submitting = true);
+                      await _adminAuth.setPassword(pin);
+                      unawaited(_auditRepo.record(
+                        action: 'admin_pin_changed',
+                        entityType: 'setting',
+                        entityId: 'admin_pin',
+                      ));
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Admin PIN updated.')),
+                        );
+                      }
+                    },
+              child: submitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    newPinController.dispose();
+    confirmController.dispose();
+  }
+
+  void _lockAdminSession() {
+    _adminAuth.lock();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Admin session locked.')),
+    );
   }
 
   @override
@@ -368,6 +679,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         // Barangay List
         _buildBarangaySection(),
+        const SizedBox(height: 16),
+
+        // Admin PIN
+        _buildAdminPinSection(),
         const SizedBox(height: 16),
 
         // Delivery Manifest
@@ -787,6 +1102,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: editDays.isEmpty
                           ? null
                           : () async {
+                              if (!await requireAdminPassword(
+                                context,
+                                reason: 'Admin password required to change barangay delivery days.',
+                              )) {
+                                return;
+                              }
+                              if (!mounted) return;
                               final messenger = ScaffoldMessenger.of(context);
                               final zoneData = _daysToZone(editDays);
                               await _barangayRepo.updateBarangay(id, {
@@ -794,6 +1116,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 'delivery_zone': zoneData.zone,
                                 'delivery_day': zoneData.deliveryDay,
                               });
+                              unawaited(_auditRepo.record(
+                                action: 'barangay_updated',
+                                entityType: 'barangay',
+                                entityId: id.toString(),
+                                metadata: {
+                                  'name': name,
+                                  'delivery_zone': zoneData.zone,
+                                  'delivery_day': zoneData.deliveryDay,
+                                },
+                              ));
                               if (ctx.mounted) Navigator.pop(ctx);
                               await _loadData();
                               if (!mounted) return;
@@ -1081,7 +1413,21 @@ class _DataSyncPage extends StatelessWidget {
                   Icons.sync,
                   'Auto Sync',
                   syncService.autoSyncEnabled,
-                  syncService.setAutoSync,
+                  (v) async {
+                    if (!await requireAdminPassword(
+                      context,
+                      reason: 'Admin password required to change cloud sync settings.',
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
+                    syncService.setAutoSync(v);
+                    unawaited(context.read<AuditLogRepository>().record(
+                      action: 'cloud_sync_auto_changed',
+                      entityType: 'setting',
+                      metadata: {'enabled': v},
+                    ));
+                  },
                 ),
                 const SizedBox(height: 8),
                 _syncToggle(
@@ -1089,7 +1435,21 @@ class _DataSyncPage extends StatelessWidget {
                   Icons.wifi,
                   'Sync over Wi-Fi only',
                   syncService.wifiOnly,
-                  syncService.setWifiOnly,
+                  (v) async {
+                    if (!await requireAdminPassword(
+                      context,
+                      reason: 'Admin password required to change cloud sync settings.',
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
+                    syncService.setWifiOnly(v);
+                    unawaited(context.read<AuditLogRepository>().record(
+                      action: 'cloud_sync_wifi_only_changed',
+                      entityType: 'setting',
+                      metadata: {'wifi_only': v},
+                    ));
+                  },
                 ),
                 const SizedBox(height: 12),
                 Container(
@@ -1166,6 +1526,17 @@ class _DataSyncPage extends StatelessWidget {
                   onTap: syncService.status == SyncStatus.syncing
                       ? null
                       : () async {
+                          if (!await requireAdminPassword(
+                            context,
+                            reason: 'Admin password required to manually sync data.',
+                          )) {
+                            return;
+                          }
+                          if (!context.mounted) return;
+                          unawaited(context.read<AuditLogRepository>().record(
+                            action: 'cloud_sync_manual_started',
+                            entityType: 'setting',
+                          ));
                           await syncService.syncAll();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -1226,7 +1597,7 @@ class _DataSyncPage extends StatelessWidget {
     IconData icon,
     String label,
     bool value,
-    ValueChanged<bool> onChanged,
+    Future<void> Function(bool) onChanged,
   ) {
     final palette = AppColors.of(context);
     return Container(
@@ -1257,7 +1628,7 @@ class _DataSyncPage extends StatelessWidget {
           Switch(
             value: value,
             activeThumbColor: palette.primary,
-            onChanged: onChanged,
+            onChanged: (v) { onChanged(v); },
           ),
         ],
       ),
@@ -1530,16 +1901,14 @@ class _DeliveryManifestSheet extends StatelessWidget {
                                       order: o,
                                       customerName: customerName,
                                       onStart: o['status'] == 'confirmed'
-                                          ? () => orderProv.updateStatus(
-                                              o['id'] as int,
-                                              'in_transit',
+                                          ? () => _startDelivery(
+                                              context,
+                                              o,
+                                              orderProv,
                                             )
                                           : null,
                                       onComplete: o['status'] == 'in_transit'
-                                          ? () => orderProv.updateStatus(
-                                              o['id'] as int,
-                                              'completed',
-                                            )
+                                          ? () => _completeDelivery(context, o)
                                           : null,
                                     );
                                   }),
@@ -1556,6 +1925,93 @@ class _DeliveryManifestSheet extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _startDelivery(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+    OrderProvider orderProvider,
+  ) async {
+    final order = Order.fromMap(orderData);
+    final orderId = order.id;
+    if (orderId == null) return;
+
+    final smsMessage = _deliveryStartedSms(order);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final palette = AppColors.of(ctx);
+        return AlertDialog(
+          backgroundColor: palette.card,
+          title: Text(
+            'Start Delivery?',
+            style: Theme.of(ctx).textTheme.headlineSmall,
+          ),
+          content: Text(
+            'This will move the order to In Transit and notify the customer by SMS.',
+            style: Theme.of(
+              ctx,
+            ).textTheme.bodyMedium?.copyWith(color: palette.mutedForeground),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: palette.statusBusy,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Start Delivery'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+
+    final started = await orderProvider.updateStatus(orderId, 'in_transit');
+    if (!context.mounted) return;
+    if (!started) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(orderProvider.error ?? 'Delivery was not started.'),
+        ),
+      );
+      return;
+    }
+
+    await SmsHandlerUtils.sendReply(order.phoneNumber, smsMessage);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Delivery started. Customer SMS notification queued.'),
+      ),
+    );
+  }
+
+  Future<void> _completeDelivery(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+  ) async {
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => CompleteOrderSheet(order: Order.fromMap(orderData)),
+    );
+  }
+
+  String _deliveryStartedSms(Order order) {
+    final quantity = order.quantity > 0
+        ? ' (${order.quantity} gallon${order.quantity == 1 ? '' : 's'})'
+        : '';
+    return 'JJ Clover: Your water order$quantity is on the way. '
+        'Please prepare to receive it. Thank you!';
   }
 }
 

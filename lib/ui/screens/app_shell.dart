@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
+import '../../core/constants/app_constants.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/customer_provider.dart';
 import '../../data/services/alarm_service.dart';
@@ -38,6 +39,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   bool _isInitialLoading = true;
   bool _isAutoRefreshing = false;
   bool _autoRefreshPending = false;
+  Timer? _autoRefreshTimer;
 
   StreamSubscription? _messageSubscription;
   StreamSubscription? _orderSubscription;
@@ -62,6 +64,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _orderSubscription = AppEventBus().onOrderReceived.listen((_) {
       unawaited(_autoRefresh());
     });
+
+    if (!kIsWeb) {
+      _autoRefreshTimer = Timer.periodic(
+        const Duration(seconds: AppConstants.autoRefreshSeconds),
+        (_) => unawaited(_autoRefresh()),
+      );
+    }
 
     AlarmService.instance.addListener(_onAlarmChanged);
     unawaited(AlarmService.instance.startUiSync());
@@ -117,6 +126,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _messageSubscription?.cancel();
     _orderSubscription?.cancel();
     AlarmService.instance.removeListener(_onAlarmChanged);
@@ -160,7 +170,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Future<void> _acknowledgeWalkInAlert() async {
     final alarm = AlarmService.instance;
     final phone = alarm.customerPhone;
-    final reply = SystemModeManager.instance.getDropReply();
+    final reply =
+        alarm.replyMessage ?? SystemModeManager.instance.getDropReply();
 
     if (mounted) {
       setState(() => _showWalkInAlert = false);

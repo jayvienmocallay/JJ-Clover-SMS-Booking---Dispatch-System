@@ -5,6 +5,7 @@ import '../../data/models/order_model.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/repositories/order_repository.dart';
 import '../theme/app_theme.dart';
+import '../screens/chat_screen.dart';
 import 'complete_order_sheet.dart';
 import 'delivery_issue_sheet.dart';
 import 'staff_assignment_sheet.dart';
@@ -15,8 +16,8 @@ class OrderDetailSheet extends StatefulWidget {
   final String? phone;
   final String? barangay;
   final String? address;
-  final VoidCallback? onConfirm;
-  final VoidCallback? onReject;
+  final Future<bool> Function()? onConfirm;
+  final Future<bool> Function()? onReject;
   final Future<bool> Function()? onStartDelivery;
   final VoidCallback? onCompleted;
 
@@ -40,6 +41,7 @@ class OrderDetailSheet extends StatefulWidget {
 class _OrderDetailSheetState extends State<OrderDetailSheet> {
   List<Map<String, dynamic>> _logs = [];
   bool _loadingLogs = false;
+  String? _runningAction;
 
   @override
   void initState() {
@@ -92,19 +94,19 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
           StaffAssignmentSheet(initialStaffId: widget.order.staffId),
     );
     if (staffId == null) return;
-    await provider.assignStaffToOrder(orderId, staffId);
+    final assigned = await provider.assignStaffToOrder(orderId, staffId);
     if (!mounted) return;
-    if (provider.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(provider.error!)));
+    if (!assigned) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(provider.error ?? 'Staff was not assigned.')),
+      );
       return;
     }
     widget.onCompleted?.call();
     Navigator.pop(context, true);
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Staff assigned ✓')));
+    ).showSnackBar(const SnackBar(content: Text('Staff assigned')));
   }
 
   Future<void> _showDeliveryIssueSheet() async {
@@ -121,16 +123,18 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
       builder: (_) => const DeliveryIssueSheet(),
     );
     if (result == null) return;
-    await provider.recordDeliveryIssue(
+    final recorded = await provider.recordDeliveryIssue(
       orderId,
       note: result.note,
       keepForRedispatch: result.keepForRedispatch,
     );
     if (!mounted) return;
-    if (provider.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(provider.error!)));
+    if (!recorded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.error ?? 'Delivery issue was not saved.'),
+        ),
+      );
       return;
     }
     widget.onCompleted?.call();
@@ -139,17 +143,70 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
       SnackBar(
         content: Text(
           result.keepForRedispatch
-              ? 'Delivery note saved and returned to dispatch ✓'
-              : 'Delivery note saved and order moved out of dispatch ✓',
+              ? 'Delivery note saved and returned to dispatch'
+              : 'Delivery note saved and order moved out of dispatch',
         ),
       ),
     );
   }
 
-  Future<void> _handleStartDelivery() async {
-    final started = await widget.onStartDelivery?.call() ?? false;
-    if (started && mounted) {
+  Future<void> _handleStartDelivery() =>
+      _runSheetAction('start', widget.onStartDelivery);
+
+  Future<void> _handleConfirm() => _runSheetAction('confirm', widget.onConfirm);
+
+  Future<void> _handleReject() => _runSheetAction('reject', widget.onReject);
+
+  Future<void> _runSheetAction(
+    String action,
+    Future<bool> Function()? callback,
+  ) async {
+    if (_runningAction != null) return;
+    setState(() => _runningAction = action);
+    var succeeded = false;
+    try {
+      succeeded = await callback?.call() ?? false;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Action failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _runningAction = null);
+    }
+    if (succeeded && mounted) {
       Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _openChat() async {
+    final phone = widget.phone ?? widget.order.phoneNumber;
+    if (phone.trim().isEmpty) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            ChatScreen(phoneNumber: phone, contactName: widget.customerName),
+      ),
+    );
+  }
+
+  Future<void> _openMap() async {
+    final parts = [
+      widget.address,
+      widget.barangay,
+    ].whereType<String>().where((value) => value.trim().isNotEmpty).toList();
+    if (parts.isEmpty) return;
+
+    final uri = Uri.https('www.google.com', '/maps/search/', {
+      'api': '1',
+      'query': parts.join(', '),
+    });
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not open map.')));
     }
   }
 
@@ -210,8 +267,14 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                 ),
                 labelColor: palette.foreground,
                 unselectedLabelColor: palette.mutedForeground,
-                labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                tabs: const [Tab(text: 'Details'), Tab(text: 'History')],
+                labelStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+                tabs: const [
+                  Tab(text: 'Details'),
+                  Tab(text: 'History'),
+                ],
               ),
             ),
           ),
@@ -226,14 +289,17 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
             ),
           ),
           // Action buttons
-          if (_actions.isNotEmpty)
-            _buildActionButtons(context, order, palette),
+          if (_actions.isNotEmpty) _buildActionButtons(context, order, palette),
         ],
       ),
     );
   }
 
-  Widget _buildDetailsTab(BuildContext context, Order order, AppPalette palette) {
+  Widget _buildDetailsTab(
+    BuildContext context,
+    Order order,
+    AppPalette palette,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Column(
@@ -277,69 +343,106 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                     ],
                   ),
                 ),
-                _iconBtn(context, Icons.phone, palette.statusOperating, onTap: () async {
-                  final phone = widget.phone ?? order.phoneNumber;
-                  try {
-                    final launched = await launchUrl(Uri(scheme: 'tel', path: phone), mode: LaunchMode.externalApplication); if (!launched) { throw Exception('Could not open dialer'); }
-                  } catch (_) {}
-                }),
+                _iconBtn(
+                  context,
+                  Icons.phone,
+                  palette.statusOperating,
+                  onTap: () async {
+                    final phone = widget.phone ?? order.phoneNumber;
+                    try {
+                      final launched = await launchUrl(
+                        Uri(scheme: 'tel', path: phone),
+                        mode: LaunchMode.externalApplication,
+                      );
+                      if (!launched) {
+                        throw Exception('Could not open dialer');
+                      }
+                    } catch (_) {}
+                  },
+                ),
                 const SizedBox(width: 8),
-                _iconBtn(context, Icons.chat_bubble_outline, palette.primary),
+                _iconBtn(
+                  context,
+                  Icons.chat_bubble_outline,
+                  palette.primary,
+                  onTap: _openChat,
+                ),
               ],
             ),
           ),
           const SizedBox(height: 16),
           // Address section
-          if (widget.address?.isNotEmpty == true || widget.barangay?.isNotEmpty == true) ...[
+          if (widget.address?.isNotEmpty == true ||
+              widget.barangay?.isNotEmpty == true) ...[
             Text('Address', style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: palette.muted,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.location_on, size: 18, color: palette.primary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (widget.address?.isNotEmpty == true)
-                          Text(widget.address!, style: Theme.of(context).textTheme.bodyMedium),
-                        if (widget.barangay?.isNotEmpty == true)
-                          Text(widget.barangay!, style: Theme.of(context).textTheme.bodySmall),
-                        const SizedBox(height: 4),
-                        Text(
-                          'View on map',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: palette.primary,
-                            fontWeight: FontWeight.w600,
+            GestureDetector(
+              onTap: _openMap,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: palette.muted,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.location_on, size: 18, color: palette.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (widget.address?.isNotEmpty == true)
+                            Text(
+                              widget.address!,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          if (widget.barangay?.isNotEmpty == true)
+                            Text(
+                              widget.barangay!,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'View on map',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: palette.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
           ],
           // Order information
-          Text('Order Information', style: Theme.of(context).textTheme.labelMedium),
+          Text(
+            'Order Information',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
           const SizedBox(height: 8),
           _sectionCard([
             _detailRow('Type', _typeLabel(order.type)),
-            _detailRow('Product / Item', '${order.quantity} Gallon${order.quantity == 1 ? '' : 's'}'),
+            _detailRow(
+              'Product / Item',
+              '${order.quantity} Gallon${order.quantity == 1 ? '' : 's'}',
+            ),
             _detailRow('Quantity', '${order.quantity}'),
-            if (order.staffId != null) _detailRow('Assigned Staff', '#${order.staffId}'),
-            if (order.deliveryDay != null) _detailRow('Delivery Day', order.deliveryDay!),
-            if (order.scheduledFor != null) _detailRow('Scheduled', _formatDate(order.scheduledFor!)),
+            if (order.staffId != null)
+              _detailRow('Assigned Staff', '#${order.staffId}'),
+            if (order.deliveryDay != null)
+              _detailRow('Delivery Day', order.deliveryDay!),
+            if (order.scheduledFor != null)
+              _detailRow('Scheduled', _formatDate(order.scheduledFor!)),
             _detailRow('Placed', _formatDateTime(order.createdAt)),
-            if (order.cancelReason?.isNotEmpty == true) _detailRow('Reason', order.cancelReason!),
+            if (order.cancelReason?.isNotEmpty == true)
+              _detailRow('Reason', order.cancelReason!),
           ]),
           const SizedBox(height: 16),
         ],
@@ -363,10 +466,18 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context, Order order, AppPalette palette) {
-    final canCancel = order.status == OrderStatus.pending && widget.onReject != null;
-    final canConfirm = order.status == OrderStatus.pending && widget.onConfirm != null;
-    final canStartDelivery = order.status == OrderStatus.confirmed && widget.onStartDelivery != null;
+  Widget _buildActionButtons(
+    BuildContext context,
+    Order order,
+    AppPalette palette,
+  ) {
+    final canCancel =
+        order.status == OrderStatus.pending && widget.onReject != null;
+    final canConfirm =
+        order.status == OrderStatus.pending && widget.onConfirm != null;
+    final canStartDelivery =
+        order.status == OrderStatus.confirmed && widget.onStartDelivery != null;
+    final isBusy = _runningAction != null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -375,7 +486,10 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
       ),
       child: Column(
         children: [
-          if (_actions.isNotEmpty && !canCancel && !canConfirm && !canStartDelivery)
+          if (_actions.isNotEmpty &&
+              !canCancel &&
+              !canConfirm &&
+              !canStartDelivery)
             _sectionCard(_actions)
           else ...[
             Row(
@@ -383,22 +497,24 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                 if (canCancel)
                   Expanded(
                     child: GestureDetector(
-                      onTap: widget.onReject,
+                      onTap: isBusy ? null : _handleReject,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: palette.statusMaintenance),
                         ),
-                        child: Text(
-                          'Cancel',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: palette.statusMaintenance,
-                          ),
-                        ),
+                        child: _runningAction == 'reject'
+                            ? _buttonSpinner(palette.statusMaintenance)
+                            : Text(
+                                'Cancel',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: palette.statusMaintenance,
+                                ),
+                              ),
                       ),
                     ),
                   ),
@@ -407,47 +523,48 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                 if (canConfirm)
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        widget.onConfirm!();
-                        Navigator.pop(context, true);
-                      },
+                      onTap: isBusy ? null : _handleConfirm,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
                           color: palette.primary,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'Confirm Order',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: _runningAction == 'confirm'
+                            ? _buttonSpinner(Colors.white)
+                            : const Text(
+                                'Confirm Order',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
                   ),
                 if (canStartDelivery)
                   Expanded(
                     child: GestureDetector(
-                      onTap: _handleStartDelivery,
+                      onTap: isBusy ? null : _handleStartDelivery,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
                           color: palette.statusBusy,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'Start Delivery',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: _runningAction == 'start'
+                            ? _buttonSpinner(Colors.white)
+                            : const Text(
+                                'Start Delivery',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
                   ),
@@ -469,15 +586,32 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
       if ((order.status == OrderStatus.confirmed ||
               order.status == OrderStatus.inTransit) &&
           order.type != OrderType.unrecognized)
-        _actionRow(Icons.badge_outlined, 'Assign staff', _showStaffAssignmentSheet),
+        _actionRow(
+          Icons.badge_outlined,
+          'Assign staff',
+          _showStaffAssignmentSheet,
+        ),
       if (order.status == OrderStatus.inTransit)
-        _actionRow(Icons.report_problem_outlined, 'Record delivery issue', _showDeliveryIssueSheet),
+        _actionRow(
+          Icons.report_problem_outlined,
+          'Record delivery issue',
+          _showDeliveryIssueSheet,
+        ),
       if (order.status == OrderStatus.inTransit)
-        _actionRow(Icons.check_circle, 'Complete delivery', _showCompletionSheet),
+        _actionRow(
+          Icons.check_circle,
+          'Complete delivery',
+          _showCompletionSheet,
+        ),
     ];
   }
 
-  Widget _iconBtn(BuildContext context, IconData icon, Color color, {VoidCallback? onTap}) {
+  Widget _iconBtn(
+    BuildContext context,
+    IconData icon,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -492,6 +626,19 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     );
   }
 
+  Widget _buttonSpinner(Color color) {
+    return Center(
+      child: SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(color),
+        ),
+      ),
+    );
+  }
+
   Widget _statusPill(BuildContext context, String status) {
     final palette = AppColors.of(context);
     Color color;
@@ -499,24 +646,44 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     String label;
     switch (status) {
       case 'pending':
-        color = palette.statusAway; bg = palette.statusAwayLight; label = 'Pending';
+        color = palette.statusAway;
+        bg = palette.statusAwayLight;
+        label = 'Pending';
         break;
       case 'confirmed':
-        color = palette.statusOperating; bg = palette.statusOperatingLight; label = 'Confirmed';
+        color = palette.statusOperating;
+        bg = palette.statusOperatingLight;
+        label = 'Confirmed';
         break;
       case 'in_transit':
-        color = palette.statusBusy; bg = palette.statusBusyLight; label = 'In Transit';
+        color = palette.statusBusy;
+        bg = palette.statusBusyLight;
+        label = 'In Transit';
         break;
       case 'completed':
-        color = palette.statusOperating; bg = palette.statusOperatingLight; label = 'Completed';
+        color = palette.statusOperating;
+        bg = palette.statusOperatingLight;
+        label = 'Completed';
         break;
       default:
-        color = palette.mutedForeground; bg = palette.muted; label = status;
+        color = palette.mutedForeground;
+        bg = palette.muted;
+        label = status;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
     );
   }
 
@@ -524,13 +691,9 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     final order = widget.order;
     return [
       if (order.status == OrderStatus.pending && widget.onConfirm != null)
-        _actionRow(
-          Icons.check_circle_outline,
-          'Confirm order',
-          widget.onConfirm!,
-        ),
+        _actionRow(Icons.check_circle_outline, 'Confirm order', _handleConfirm),
       if (order.status == OrderStatus.pending && widget.onReject != null)
-        _actionRow(Icons.cancel_outlined, 'Reject order', widget.onReject!),
+        _actionRow(Icons.cancel_outlined, 'Reject order', _handleReject),
       if ((order.status == OrderStatus.confirmed ||
               order.status == OrderStatus.inTransit) &&
           order.type != OrderType.unrecognized)
@@ -607,19 +770,19 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     );
   }
 
-  Widget _actionRow(IconData icon, String label, VoidCallback onTap) {
+  Widget _actionRow(
+    IconData icon,
+    String label,
+    Future<void> Function() onTap,
+  ) {
     final palette = AppColors.of(context);
+    final isBusy = _runningAction != null;
     return InkWell(
-      onTap: () async {
-        onTap();
-        if (mounted &&
-            label != 'Complete delivery' &&
-            label != 'Assign staff' &&
-            label != 'Start delivery' &&
-            label != 'Record delivery issue') {
-          Navigator.pop(context, true);
-        }
-      },
+      onTap: isBusy
+          ? null
+          : () async {
+              await onTap();
+            },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         child: Row(
@@ -629,7 +792,17 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
             Expanded(
               child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
             ),
-            Icon(Icons.chevron_right, color: palette.mutedForeground),
+            if (isBusy)
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
+                ),
+              )
+            else
+              Icon(Icons.chevron_right, color: palette.mutedForeground),
           ],
         ),
       ),

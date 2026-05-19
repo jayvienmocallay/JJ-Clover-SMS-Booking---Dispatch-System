@@ -40,6 +40,15 @@ class Customer {
   /// Version string of the privacy notice the customer agreed to.
   final String? consentVersion;
 
+  /// Whether outgoing automated/manual SMS replies should be suppressed.
+  final bool isMuted;
+
+  /// Whether incoming SMS from this customer should be ignored.
+  final bool isBlocked;
+
+  /// Whether this customer is marked as spam and incoming SMS should be ignored.
+  final bool isSpam;
+
   Customer({
     this.id,
     required this.name,
@@ -52,6 +61,9 @@ class Customer {
     this.consentTimestamp,
     this.consentChannel,
     this.consentVersion,
+    this.isMuted = false,
+    this.isBlocked = false,
+    this.isSpam = false,
   });
 
   /// Creates a [Customer] instance from a database row map.
@@ -69,6 +81,9 @@ class Customer {
       consentTimestamp: map['consent_timestamp'] as String?,
       consentChannel: map['consent_channel'] as String?,
       consentVersion: map['consent_version'] as String?,
+      isMuted: (map['is_muted'] as int? ?? 0) == 1,
+      isBlocked: (map['is_blocked'] as int? ?? 0) == 1,
+      isSpam: (map['is_spam'] as int? ?? 0) == 1,
     );
   }
 
@@ -86,6 +101,9 @@ class Customer {
       consentTimestamp: map['consent_timestamp'] as String?,
       consentChannel: map['consent_channel'] as String?,
       consentVersion: map['consent_version'] as String?,
+      isMuted: (map['is_muted'] as int? ?? 0) == 1,
+      isBlocked: (map['is_blocked'] as int? ?? 0) == 1,
+      isSpam: (map['is_spam'] as int? ?? 0) == 1,
     );
   }
 
@@ -102,6 +120,9 @@ class Customer {
       if (consentTimestamp != null) 'consent_timestamp': consentTimestamp,
       if (consentChannel != null) 'consent_channel': consentChannel,
       if (consentVersion != null) 'consent_version': consentVersion,
+      'is_muted': isMuted ? 1 : 0,
+      'is_blocked': isBlocked ? 1 : 0,
+      'is_spam': isSpam ? 1 : 0,
     };
   }
 }

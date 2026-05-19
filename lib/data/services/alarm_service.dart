@@ -32,21 +32,28 @@ class AlarmService extends ChangeNotifier {
   String? _customerPhone;
   int? _quantity;
   DateTime? _triggeredAt;
+  String? _replyMessage;
 
   bool get isPlaying => _isPlaying;
   String? get customerPhone => _customerPhone;
   int? get quantity => _quantity;
   DateTime? get triggeredAt => _triggeredAt;
+  String? get replyMessage => _replyMessage;
 
   /// Triggers the alarm for a DROP order.
   ///
   /// [phone] is the customer's phone number.
   /// [qty] is the number of gallons in the DROP order.
-  Future<void> trigger({required String phone, required int qty}) async {
+  Future<void> trigger({
+    required String phone,
+    required int qty,
+    String? replyMessage,
+  }) async {
     final alert = _DropAlarmAlert(
       phone: phone,
       quantity: qty,
       triggeredAt: DateTime.now(),
+      replyMessage: replyMessage,
     );
 
     await _persistAlert(alert);
@@ -125,6 +132,7 @@ class AlarmService extends ChangeNotifier {
     _customerPhone = alert.phone;
     _quantity = alert.quantity;
     _triggeredAt = alert.triggeredAt;
+    _replyMessage = alert.replyMessage;
     _isPlaying = true;
     notifyListeners();
 
@@ -150,6 +158,10 @@ class AlarmService extends ChangeNotifier {
     await _clearPersistedAlert();
 
     _isPlaying = false;
+    _customerPhone = null;
+    _quantity = null;
+    _triggeredAt = null;
+    _replyMessage = null;
     notifyListeners();
 
     try {
@@ -210,7 +222,9 @@ class AlarmService extends ChangeNotifier {
   bool _isSameAlert(_DropAlarmAlert alert) {
     return _customerPhone == alert.phone &&
         _quantity == alert.quantity &&
-        _triggeredAt?.toIso8601String() == alert.triggeredAt.toIso8601String();
+        _triggeredAt?.toIso8601String() ==
+            alert.triggeredAt.toIso8601String() &&
+        _replyMessage == alert.replyMessage;
   }
 
   /// Disposes the audio player (call on app shutdown).
@@ -227,17 +241,20 @@ class _DropAlarmAlert {
     required this.phone,
     required this.quantity,
     required this.triggeredAt,
+    this.replyMessage,
   });
 
   final String phone;
   final int quantity;
   final DateTime triggeredAt;
+  final String? replyMessage;
 
   Map<String, dynamic> toJson() {
     return {
       'phone': phone,
       'quantity': quantity,
       'triggeredAt': triggeredAt.toIso8601String(),
+      'replyMessage': replyMessage,
     };
   }
 
@@ -278,6 +295,7 @@ class _DropAlarmAlert {
       phone: phone,
       quantity: quantity is int ? quantity : int.tryParse('$quantity') ?? 0,
       triggeredAt: triggeredAt,
+      replyMessage: json['replyMessage'] as String?,
     );
   }
 }

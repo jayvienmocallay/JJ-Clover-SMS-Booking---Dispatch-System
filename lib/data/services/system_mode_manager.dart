@@ -53,8 +53,8 @@ class SystemModeManager extends ChangeNotifier {
     switch (_currentMode) {
       case SystemMode.operating:
       case SystemMode.staffAway:
-        return true;
       case SystemMode.full:
+        return true;
       case SystemMode.maintenance:
         return false;
     }
@@ -84,6 +84,10 @@ class SystemModeManager extends ChangeNotifier {
         }
         return '$reply Gi-queue ang imong order para sa $queuedDeliveryDay.';
       case SystemMode.full:
+        if (queuedDeliveryDay != null && queuedDeliveryDay.isNotEmpty) {
+          return 'Nadawat ang order. Puno na ang schedule karon. '
+              'Gi-queue ang imong order para sa $queuedDeliveryDay.';
+        }
         return 'Puno na ang schedule karon. Palihug mo-order sa sunod nga iskedyul.';
       case SystemMode.maintenance:
         return 'Naay maintenance ang sistema. Sirado mi karon.';

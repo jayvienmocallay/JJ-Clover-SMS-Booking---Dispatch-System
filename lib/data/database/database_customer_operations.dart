@@ -156,7 +156,7 @@ extension DatabaseCustomerOperations on DatabaseHelper {
     final db = await DatabaseHelper.instance.database;
     return await db.rawQuery('''
     SELECT c.id, c.name, c.contact_number, c.address,
-           c.barangay_id,
+           c.barangay_id, c.is_muted, c.is_blocked, c.is_spam,
            b.name AS barangay, b.delivery_zone
     FROM customers c
     INNER JOIN barangays b ON c.barangay_id = b.id
@@ -185,7 +185,7 @@ extension DatabaseCustomerOperations on DatabaseHelper {
     final result = await db.rawQuery(
       '''
     SELECT c.id, c.name, c.contact_number, c.address,
-           c.barangay_id,
+           c.barangay_id, c.is_muted, c.is_blocked, c.is_spam,
            b.name AS barangay, b.delivery_zone
     FROM customers c
     INNER JOIN barangays b ON c.barangay_id = b.id
@@ -247,6 +247,7 @@ extension DatabaseCustomerOperations on DatabaseHelper {
       }
       rethrow;
     }
+    if (updated == 0) return 0;
 
     // Re-create schedules if barangay changed so zone validation
     // uses the new barangay's delivery days instead of stale ones.
@@ -287,6 +288,27 @@ extension DatabaseCustomerOperations on DatabaseHelper {
     }
 
     return updated;
+  }
+
+  Future<int> updateCustomerContactFlags(
+    int customerId, {
+    bool? isMuted,
+    bool? isBlocked,
+    bool? isSpam,
+  }) async {
+    final updates = <String, Object?>{};
+    if (isMuted != null) updates['is_muted'] = isMuted ? 1 : 0;
+    if (isBlocked != null) updates['is_blocked'] = isBlocked ? 1 : 0;
+    if (isSpam != null) updates['is_spam'] = isSpam ? 1 : 0;
+    if (updates.isEmpty) return 0;
+
+    final db = await DatabaseHelper.instance.database;
+    return db.update(
+      'customers',
+      updates,
+      where: 'id = ?',
+      whereArgs: [customerId],
+    );
   }
 
   Future<Map<String, dynamic>?> getBarangayByName(String name) async {

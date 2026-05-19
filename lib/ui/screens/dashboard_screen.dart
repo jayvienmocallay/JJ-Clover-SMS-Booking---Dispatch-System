@@ -25,6 +25,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _todayBarangays = [];
+  List<Map<String, dynamic>> _barangays = [];
   late final BarangayRepository _barangayRepo;
 
   @override
@@ -41,22 +42,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final todayBarangays = <String>[];
 
     for (final brgy in barangays) {
-      final zone = brgy['delivery_zone'] as String;
       final name = brgy['name'] as String;
-      final dbDeliveryDay = brgy['delivery_day'] as String?;
-
-      List<String> days;
-      if (zone == 'Zone C' && dbDeliveryDay != null) {
-        days = dbDeliveryDay.split(',').map((d) => d.trim()).toList();
-      } else {
-        days = ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
-      }
+      final days = _deliveryDaysForBarangay(brgy);
       if (days.contains(today)) {
         todayBarangays.add(name);
       }
     }
 
-    if (mounted) setState(() => _todayBarangays = todayBarangays);
+    if (mounted) {
+      setState(() {
+        _barangays = barangays;
+        _todayBarangays = todayBarangays;
+      });
+    }
+  }
+
+  List<String> _deliveryDaysForBarangay(Map<String, dynamic> barangay) {
+    final zone = barangay['delivery_zone'] as String? ?? '';
+    final name = barangay['name'] as String? ?? '';
+    final dbDeliveryDay = barangay['delivery_day'] as String?;
+    if (dbDeliveryDay != null && dbDeliveryDay.trim().isNotEmpty) {
+      return dbDeliveryDay
+          .split(',')
+          .map((day) => day.trim())
+          .where((day) => day.isNotEmpty)
+          .toList();
+    }
+    return ZoneScheduleMap.getDaysForZone(zone, barangayName: name);
   }
 
   Future<void> _refresh() async {
@@ -107,7 +119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 16),
 
                   Text(
-                    'Auto-refresh: 15s',
+                    'Auto-refresh: ${AppConstants.autoRefreshSeconds}s',
                     style: Theme.of(context).textTheme.labelSmall,
                     textAlign: TextAlign.center,
                   ),
@@ -760,17 +772,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   List<String> _getBarangaysForDay(String day) {
-    final result = <String>[];
-    if (ZoneScheduleMap.zoneADays.contains(day)) {
-      result.addAll(['San Isidro', 'San Jose']);
-    }
-    if (ZoneScheduleMap.zoneBDays.contains(day)) {
-      result.addAll(['Poblacion', 'Santa Rosa']);
-    }
-    ZoneScheduleMap.zoneCBarangayDays.forEach((brgy, brgyDay) {
-      if (brgyDay == day) result.add(brgy);
-    });
-    return result;
+    return _barangays
+        .where((barangay) => _deliveryDaysForBarangay(barangay).contains(day))
+        .map((barangay) => barangay['name'] as String? ?? 'Unknown')
+        .toList();
   }
 
   Widget _buildRecentOrders(

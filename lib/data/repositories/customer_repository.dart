@@ -40,4 +40,18 @@ class CustomerRepository {
   Future<int> updateCustomer(int id, Map<String, dynamic> data) {
     return DatabaseHelper.instance.updateCustomer(id, data);
   }
+
+  Future<int> updateCustomerContactFlags(
+    int id, {
+    bool? isMuted,
+    bool? isBlocked,
+    bool? isSpam,
+  }) {
+    return DatabaseHelper.instance.updateCustomerContactFlags(
+      id,
+      isMuted: isMuted,
+      isBlocked: isBlocked,
+      isSpam: isSpam,
+    );
+  }
 }

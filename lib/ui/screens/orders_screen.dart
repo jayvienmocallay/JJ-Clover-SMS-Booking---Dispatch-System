@@ -16,6 +16,9 @@ import '../widgets/shared/app_page_header.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/empty_state.dart';
 import '../widgets/shared/search_field.dart';
+import 'dart:async' show unawaited;
+import '../../data/repositories/audit_log_repository.dart';
+import '../security/admin_gate.dart';
 import 'delivery_logs_screen.dart';
 import 'order_history_screen.dart';
 
@@ -36,6 +39,7 @@ class OrdersScreen extends StatefulWidget {
 class _OrdersScreenState extends State<OrdersScreen> {
   late int _filterIndex;
   String _searchQuery = '';
+  late final AuditLogRepository _auditRepo;
 
   static const _filterStatuses = ['all', 'pending', 'confirmed', 'in_transit'];
 
@@ -43,6 +47,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   void initState() {
     super.initState();
     _filterIndex = _clampFilterIndex(widget.initialFilterIndex);
+    _auditRepo = context.read<AuditLogRepository>();
   }
 
   @override
@@ -235,12 +240,22 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  Future<void> _confirmOrder(Order order, OrderProvider orderProv) async {
-    await orderProv.updateStatus(order.id!, 'confirmed');
-    if (!mounted) return;
+  Future<bool> _confirmOrder(Order order, OrderProvider orderProv) async {
+    final orderId = order.id;
+    if (orderId == null) return false;
+
+    final confirmed = await orderProv.updateStatus(orderId, 'confirmed');
+    if (!mounted) return false;
+    if (!confirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(orderProv.error ?? 'Order was not confirmed.')),
+      );
+      return false;
+    }
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Order confirmed ✓')));
+    ).showSnackBar(const SnackBar(content: Text('Order confirmed')));
+    return true;
   }
 
   Future<bool> _startDelivery(Order order, OrderProvider orderProv) async {
@@ -302,12 +317,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
     if (confirmed != true || !mounted) return false;
 
-    await orderProv.updateStatus(orderId, 'in_transit');
+    final started = await orderProv.updateStatus(orderId, 'in_transit');
     if (!mounted) return false;
-    if (orderProv.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(orderProv.error!)));
+    if (!started) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(orderProv.error ?? 'Delivery was not started.')),
+      );
       return false;
     }
 
@@ -660,68 +675,147 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  void _showRejectDialog(int orderId, OrderProvider orderProv) {
+  Future<bool> _showRejectDialog(int orderId, OrderProvider orderProv) async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to reject an order.',
+    )) {
+      return false;
+    }
+    if (!mounted) return false;
     String? reason;
-    showDialog(
+    var isSubmitting = false;
+    String? dialogError;
+    Order? orderToReject;
+    try {
+      final row = orderProv.todayOrders.firstWhere((o) => o['id'] == orderId);
+      orderToReject = Order.fromMap(row);
+    } catch (_) {
+      try {
+        final row = orderProv.upcomingPreBookOrders.firstWhere(
+          (o) => o['id'] == orderId,
+        );
+        orderToReject = Order.fromMap(row);
+      } catch (_) {}
+    }
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.of(ctx).card,
-        title: Text(
-          'Reject Order',
-          style: Theme.of(ctx).textTheme.headlineSmall,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Are you sure you want to reject this order?',
-              style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                color: AppColors.of(ctx).mutedForeground,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              onChanged: (v) => reason = v,
-              style: Theme.of(ctx).textTheme.bodyMedium,
-              decoration: InputDecoration(
-                hintText: 'Reason (optional)',
-                filled: true,
-                fillColor: AppColors.of(ctx).background,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(kButtonRadius),
-                  borderSide: BorderSide.none,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.of(ctx).card,
+          title: Text(
+            'Reject Order',
+            style: Theme.of(ctx).textTheme.headlineSmall,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to reject this order?',
+                style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.of(ctx).mutedForeground,
                 ),
               ),
+              const SizedBox(height: 16),
+              TextField(
+                enabled: !isSubmitting,
+                onChanged: (v) => reason = v,
+                style: Theme.of(ctx).textTheme.bodyMedium,
+                decoration: InputDecoration(
+                  hintText: 'Reason (optional)',
+                  filled: true,
+                  fillColor: AppColors.of(ctx).background,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(kButtonRadius),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              if (dialogError != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  dialogError!,
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color: AppColors.of(ctx).statusMaintenance,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.of(ctx).statusMaintenance,
+              ),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        isSubmitting = true;
+                        dialogError = null;
+                      });
+                      final updated = await orderProv.updateStatus(
+                        orderId,
+                        'rejected',
+                        reason: reason?.trim(),
+                      );
+                      if (!ctx.mounted) return;
+                      if (!updated) {
+                        setDialogState(() {
+                          isSubmitting = false;
+                          dialogError =
+                              orderProv.error ?? 'Order was not rejected.';
+                        });
+                        return;
+                      }
+                      Navigator.pop(ctx, true);
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Reject'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.of(ctx).statusMaintenance,
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await orderProv.updateStatus(
-                orderId,
-                'rejected',
-                reason: reason?.trim(),
-              );
-              if (!mounted) return;
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Order rejected ✓')));
-            },
-            child: const Text('Reject'),
-          ),
-        ],
       ),
     );
+    if (confirmed != true || !mounted) return false;
+
+    unawaited(_auditRepo.record(
+      action: 'order_rejected',
+      entityType: 'order',
+      entityId: orderId.toString(),
+      metadata: {'reason': reason ?? ''},
+    ));
+    if (orderToReject != null) {
+      await SmsHandlerUtils.sendOrderRejectedReply(
+        orderToReject.phoneNumber,
+        quantity: orderToReject.quantity,
+        reason: reason,
+      );
+    }
+    if (!mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          orderToReject == null
+              ? 'Order rejected'
+              : 'Order rejected. Customer SMS notification queued.',
+        ),
+      ),
+    );
+    return true;
   }
 }
 

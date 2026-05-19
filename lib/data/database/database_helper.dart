@@ -48,7 +48,7 @@ class DatabaseHelper {
   static Database? _database;
   static bool _schemaIntegrityChecked = false;
   static Completer<Database>? _dbCompleter;
-  static const int databaseVersion = 11;
+  static const int databaseVersion = 12;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
   static const Duration _resubmitCooldownAfter = Duration(hours: 1);
   static const String readMessageIdsKey = 'read_message_ids';

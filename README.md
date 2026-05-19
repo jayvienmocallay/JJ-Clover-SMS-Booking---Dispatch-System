@@ -5,6 +5,12 @@ and dispatch. It receives customer SMS commands, validates delivery zones,
 stores encrypted operational data, and helps staff track orders, schedules,
 customers, messages, and delivery logs.
 
+## SMS Guide
+
+For a learner-friendly walkthrough of the Android SMS receiver, Dart command
+router, supported commands, replies, storage, and troubleshooting flow, see
+[`docs/SMS_SYSTEM_GUIDE.md`](docs/SMS_SYSTEM_GUIDE.md).
+
 ## Platform Support
 
 Supported:
