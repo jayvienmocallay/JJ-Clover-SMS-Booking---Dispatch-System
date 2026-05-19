@@ -167,6 +167,23 @@ void main() {
     expect(outgoing.map((r) => r['status']), containsAll(['failed', 'sent']));
   });
 
+  test('rejection message includes reason when provided', () {
+    final message = SmsHandlerUtils.buildOrderRejectedMessage(
+      quantity: 3,
+      reason: 'Outside delivery area',
+    );
+
+    expect(message, contains('water order (3 gallons) was rejected'));
+    expect(message, contains('Reason: Outside delivery area.'));
+  });
+
+  test('rejection message omits reason when not provided', () {
+    final message = SmsHandlerUtils.buildOrderRejectedMessage(quantity: 1);
+
+    expect(message, contains('water order (1 gallon) was rejected'));
+    expect(message, isNot(contains('Reason:')));
+  });
+
   test(
     'fire-and-forget reply does not cause uncaught async test errors',
     () async {

@@ -193,6 +193,8 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
   }
 
   Future<void> _rejectOrder() async {
+    final order = _activeOrder;
+    if (order == null) return;
     String? reason;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -244,13 +246,19 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
 
     if (confirmed != true) return;
     final updated = await _updateOrderStatus('rejected', reason: reason);
-    if (mounted) {
-      if (updated) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Order rejected')));
-      }
-    }
+    if (!updated || !mounted) return;
+
+    await SmsHandlerUtils.sendOrderRejectedReply(
+      order.phoneNumber,
+      quantity: order.quantity,
+      reason: reason,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Order rejected. Customer SMS notification queued.'),
+      ),
+    );
   }
 
   Future<void> _toggleContactFlag({
