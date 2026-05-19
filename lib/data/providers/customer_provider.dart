@@ -42,33 +42,37 @@ class CustomerProvider extends ChangeNotifier {
   }
 
   /// Inserts a new customer and refreshes the list
-  Future<void> addCustomer(Map<String, dynamic> customerData) async {
+  Future<bool> addCustomer(Map<String, dynamic> customerData) async {
     _error = null;
     try {
       final insertedId = await _repository.insertCustomer(customerData);
       _ensureRowsChanged(insertedId, 'Customer was not created.');
       await loadCustomers();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
+      _error = _errorMessage(e);
       _notifyIfActive();
+      return false;
     }
   }
 
   /// Deletes a customer by ID
-  Future<void> deleteCustomer(int customerId) async {
+  Future<bool> deleteCustomer(int customerId) async {
     _error = null;
     try {
       final deleted = await _repository.deleteCustomer(customerId);
       _ensureRowsChanged(deleted, 'No customer was deleted.');
       await loadCustomers();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
+      _error = _errorMessage(e);
       _notifyIfActive();
+      return false;
     }
   }
 
   /// Updates customer information
-  Future<void> updateCustomer(
+  Future<bool> updateCustomer(
     int customerId,
     Map<String, dynamic> customerData,
   ) async {
@@ -80,10 +84,11 @@ class CustomerProvider extends ChangeNotifier {
       );
       _ensureRowsChanged(updated, 'No customer was updated.');
       await loadCustomers();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
+      _error = _errorMessage(e);
       _notifyIfActive();
-      rethrow;
+      return false;
     }
   }
 
@@ -111,5 +116,10 @@ class CustomerProvider extends ChangeNotifier {
     if (result == 0) {
       throw StateError(message);
     }
+  }
+
+  String _errorMessage(Object error) {
+    if (error is StateError) return error.message;
+    return error.toString();
   }
 }

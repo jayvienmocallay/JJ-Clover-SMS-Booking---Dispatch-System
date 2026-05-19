@@ -247,6 +247,7 @@ extension DatabaseCustomerOperations on DatabaseHelper {
       }
       rethrow;
     }
+    if (updated == 0) return 0;
 
     // Re-create schedules if barangay changed so zone validation
     // uses the new barangay's delivery days instead of stale ones.

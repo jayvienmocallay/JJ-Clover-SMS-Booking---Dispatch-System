@@ -84,7 +84,7 @@ class OrderProvider extends ChangeNotifier {
   }
 
   /// Updates an order's status and refreshes the list
-  Future<void> updateStatus(
+  Future<bool> updateStatus(
     int orderId,
     String newStatus, {
     String? reason,
@@ -100,25 +100,29 @@ class OrderProvider extends ChangeNotifier {
       );
       _ensureRowsChanged(updated, 'No order was updated.');
       await loadOrders();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
+      _error = _errorMessage(e);
       _notifyIfActive();
+      return false;
     }
   }
 
-  Future<void> assignStaffToOrder(int orderId, int staffId) async {
+  Future<bool> assignStaffToOrder(int orderId, int staffId) async {
     _error = null;
     try {
       final updated = await _repository.assignStaffToOrder(orderId, staffId);
       _ensureRowsChanged(updated, 'No order was updated.');
       await loadOrders();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
+      _error = _errorMessage(e);
       _notifyIfActive();
+      return false;
     }
   }
 
-  Future<void> recordDeliveryIssue(
+  Future<bool> recordDeliveryIssue(
     int orderId, {
     required String note,
     required bool keepForRedispatch,
@@ -132,13 +136,15 @@ class OrderProvider extends ChangeNotifier {
       );
       _ensureRowsChanged(updated, 'No order was updated.');
       await loadOrders();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
+      _error = _errorMessage(e);
       _notifyIfActive();
+      return false;
     }
   }
 
-  Future<void> completeOrder(
+  Future<bool> completeOrder(
     int orderId, {
     int? quantityDelivered,
     int? returnedContainers,
@@ -158,22 +164,26 @@ class OrderProvider extends ChangeNotifier {
       );
       _ensureRowsChanged(updated, 'No order was updated.');
       await loadOrders();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
+      _error = _errorMessage(e);
       _notifyIfActive();
+      return false;
     }
   }
 
   /// Inserts a new order and refreshes the list
-  Future<void> addOrder(Map<String, dynamic> orderData) async {
+  Future<bool> addOrder(Map<String, dynamic> orderData) async {
     _error = null;
     try {
       final insertedId = await _repository.insertOrder(orderData);
       _ensureRowsChanged(insertedId, 'Order was not created.');
       await loadOrders();
+      return _error == null;
     } catch (e) {
-      _error = e.toString();
+      _error = _errorMessage(e);
       _notifyIfActive();
+      return false;
     }
   }
 
@@ -186,5 +196,10 @@ class OrderProvider extends ChangeNotifier {
     if (result == 0) {
       throw StateError(message);
     }
+  }
+
+  String _errorMessage(Object error) {
+    if (error is StateError) return error.message;
+    return error.toString();
   }
 }

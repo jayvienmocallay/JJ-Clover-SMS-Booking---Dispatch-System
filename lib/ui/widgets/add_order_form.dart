@@ -33,7 +33,9 @@ class _AddOrderFormState extends State<AddOrderForm> {
   int? _selectedBarangayId;
   bool _saveCustomerForFutureOrders = false;
   bool _isSubmitting = false;
+  bool _isLoadingBarangays = false;
   List<Map<String, dynamic>> _barangays = [];
+  String? _barangayLoadError;
   int _phoneLookupSerial = 0;
   String? _autofilledName;
   String? _autofilledAddress;
@@ -74,9 +76,26 @@ class _AddOrderFormState extends State<AddOrderForm> {
   }
 
   Future<void> _loadBarangays() async {
-    final rows = await _barangayRepository.getBarangays();
-    if (!mounted) return;
-    setState(() => _barangays = rows);
+    if (_isLoadingBarangays) return;
+    setState(() {
+      _isLoadingBarangays = true;
+      _barangayLoadError = null;
+    });
+    try {
+      final rows = await _barangayRepository.getBarangays();
+      if (!mounted) return;
+      setState(() => _barangays = rows);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _barangays = [];
+        _barangayLoadError = 'Unable to load barangays. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingBarangays = false);
+      }
+    }
   }
 
   Future<void> _submit() async {
@@ -127,6 +146,14 @@ class _AddOrderFormState extends State<AddOrderForm> {
         if (phone.isEmpty) {
           throw const OrderCreationException('Please enter the phone number.');
         }
+        if (_isLoadingBarangays) {
+          throw const OrderCreationException(
+            'Please wait for barangays to load.',
+          );
+        }
+        if (_barangayLoadError != null) {
+          throw OrderCreationException(_barangayLoadError!);
+        }
         if (_selectedBarangayId == null) {
           throw const OrderCreationException('Please select a barangay.');
         }
@@ -141,24 +168,38 @@ class _AddOrderFormState extends State<AddOrderForm> {
           'consent_channel': 'manual',
           'consent_version': 'manual-v1',
         });
+        if (customerId == 0) {
+          throw const OrderCreationException('Customer was not created.');
+        }
       }
 
-      await _orderCreation.createManualOrder(
+      final orderId = await _orderCreation.createManualOrder(
         customerId: customerId,
         phoneNumber: phone,
         type: type,
         quantity: _quantity,
         address: address,
       );
+      if (orderId == 0) {
+        throw const OrderCreationException('Order was not created.');
+      }
 
       if (!mounted) return;
       await orderProvider.loadOrders();
       await customerProvider.loadCustomers();
       if (!mounted) return;
+      final refreshError = orderProvider.error ?? customerProvider.error;
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Order created')));
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            refreshError == null
+                ? 'Order created'
+                : 'Order created, but refresh failed: $refreshError',
+          ),
+        ),
+      );
     } on OrderCreationException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -300,6 +341,35 @@ class _AddOrderFormState extends State<AddOrderForm> {
 
   Widget _barangayDropdown() {
     final palette = AppColors.of(context);
+    if (_barangayLoadError != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: palette.background,
+          borderRadius: BorderRadius.circular(kButtonRadius),
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _barangayLoadError!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: palette.mutedForeground,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            TextButton(
+              onPressed: _isLoadingBarangays ? null : _loadBarangays,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return DropdownButtonFormField<int>(
       initialValue: _selectedBarangayId,
       items: _barangays.map((barangay) {
@@ -311,9 +381,13 @@ class _AddOrderFormState extends State<AddOrderForm> {
           ),
         );
       }).toList(),
-      onChanged: (value) => setState(() => _selectedBarangayId = value),
+      onChanged: _isLoadingBarangays
+          ? null
+          : (value) => setState(() => _selectedBarangayId = value),
       decoration: InputDecoration(
-        hintText: _barangays.isEmpty
+        hintText: _isLoadingBarangays
+            ? 'Loading barangays...'
+            : _barangays.isEmpty
             ? 'No barangays. Add them in Settings.'
             : 'Select barangay',
         filled: true,

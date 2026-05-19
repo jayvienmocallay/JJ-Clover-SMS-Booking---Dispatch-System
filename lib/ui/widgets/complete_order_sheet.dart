@@ -53,7 +53,7 @@ class _CompleteOrderSheetState extends State<CompleteOrderSheet> {
 
     setState(() => _submitting = true);
     final provider = context.read<OrderProvider>();
-    await provider.completeOrder(
+    final completed = await provider.completeOrder(
       widget.order.id!,
       quantityDelivered: _quantityDelivered,
       returnedContainers: _returnedContainers,
@@ -65,9 +65,9 @@ class _CompleteOrderSheetState extends State<CompleteOrderSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
 
-    if (provider.error != null) {
+    if (!completed) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.error!)),
+        SnackBar(content: Text(provider.error ?? 'Order was not completed.')),
       );
       return;
     }
@@ -162,13 +162,15 @@ class _CompleteOrderSheetState extends State<CompleteOrderSheet> {
             const SizedBox(height: 16),
             Text(
               '${widget.order.quantity} gallon${widget.order.quantity == 1 ? '' : 's'} ordered',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.mutedForeground,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: palette.mutedForeground),
             ),
             const SizedBox(height: 20),
-            Text('Quantity delivered',
-                style: Theme.of(context).textTheme.labelMedium),
+            Text(
+              'Quantity delivered',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -193,8 +195,10 @@ class _CompleteOrderSheetState extends State<CompleteOrderSheet> {
               ],
             ),
             const SizedBox(height: 16),
-            Text('Returned containers',
-                style: Theme.of(context).textTheme.labelMedium),
+            Text(
+              'Returned containers',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _returnedController,
@@ -210,10 +214,14 @@ class _CompleteOrderSheetState extends State<CompleteOrderSheet> {
               contentPadding: EdgeInsets.zero,
               value: _cashCollected,
               onChanged: (value) => setState(() => _cashCollected = value),
-              title: Text('Cash collected',
-                  style: Theme.of(context).textTheme.bodyMedium),
+              title: Text(
+                'Cash collected',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               subtitle: Text(
-                _cashCollected ? 'Mark log as paid in cash' : 'Cash not collected yet',
+                _cashCollected
+                    ? 'Mark log as paid in cash'
+                    : 'Cash not collected yet',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),

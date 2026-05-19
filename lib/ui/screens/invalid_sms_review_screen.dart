@@ -37,12 +37,18 @@ class _InvalidSmsReviewScreenState extends State<InvalidSmsReviewScreen> {
   Future<void> _markReviewed(Order order) async {
     final id = order.id;
     if (id == null) return;
-    await context.read<OrderRepository>().updateOrderStatus(
+    final updated = await context.read<OrderRepository>().updateOrderStatus(
       id,
       'rejected',
       reason: order.cancelReason ?? 'Reviewed invalid SMS',
     );
     if (!mounted) return;
+    if (updated == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Message was not marked reviewed.')),
+      );
+      return;
+    }
     await _loadRows();
     if (!mounted) return;
     ScaffoldMessenger.of(

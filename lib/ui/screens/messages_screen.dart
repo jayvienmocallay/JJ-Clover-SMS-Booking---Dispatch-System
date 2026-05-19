@@ -56,6 +56,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
       return;
     }
     _isRefreshing = true;
+    if (!silent) {
+      setState(() {
+        _error = null;
+        if (_smsMessages.isEmpty) _isLoading = true;
+      });
+    }
     try {
       final results = await Future.wait([
         _smsRepo.getAllSmsMessages(),
@@ -74,10 +80,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
         _error = null;
         _isLoading = false;
       });
-    } catch (e) {
-      if (mounted && !silent) {
+    } catch (_) {
+      if (mounted && (!silent || _smsMessages.isEmpty)) {
         setState(() {
-          _error = e.toString();
+          _error = 'Unable to load messages. Please try again.';
           _isLoading = false;
         });
       }
@@ -92,7 +98,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   List<String> _getUniquePhones() {
     return _smsMessages
-        .map((m) => m['phone_number'] as String)
+        .map((m) => m['phone_number'] as String? ?? '')
+        .where((phone) => phone.isNotEmpty)
         .toSet()
         .toList();
   }
@@ -141,6 +148,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
               mascot: MascotPose.checklist,
               title: 'Messages could not load',
               message: _error!,
+              action: ElevatedButton.icon(
+                onPressed: _loadMessages,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
             )
           else if (uniquePhones.isEmpty)
             const EmptyState(
@@ -157,19 +169,22 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   Widget _conversationTile(String phone) {
-    final phoneMsgs = _smsMessages
-        .where((m) => m['phone_number'] == phone)
-        .toList();
+    final phoneMsgs =
+        _smsMessages
+            .asMap()
+            .entries
+            .where((entry) => entry.value['phone_number'] == phone)
+            .toList()
+          ..sort((a, b) {
+            final timeCompare = _messageSortDate(
+              b.value,
+            ).compareTo(_messageSortDate(a.value));
+            if (timeCompare != 0) return timeCompare;
+            return a.key.compareTo(b.key);
+          });
     if (phoneMsgs.isEmpty) return const SizedBox.shrink();
-    phoneMsgs.sort((a, b) {
-      final timeA =
-          DateTime.tryParse(a['sent_at'] as String? ?? '') ?? DateTime.now();
-      final timeB =
-          DateTime.tryParse(b['sent_at'] as String? ?? '') ?? DateTime.now();
-      return timeB.compareTo(timeA);
-    });
 
-    final lastMsg = phoneMsgs.first;
+    final lastMsg = phoneMsgs.first.value;
     final displayName = _phoneToName[phone];
     final message = lastMsg['message'] as String? ?? '';
     final direction = lastMsg['direction'] as String? ?? 'incoming';
@@ -254,6 +269,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
     } catch (_) {
       return '';
     }
+  }
+
+  DateTime _messageSortDate(Map<String, dynamic> message) {
+    return DateTime.tryParse(message['sent_at'] as String? ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
   }
 }
 

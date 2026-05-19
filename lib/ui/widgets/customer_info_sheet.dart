@@ -117,9 +117,9 @@ class _CustomerInfoSheetState extends State<CustomerInfoSheet> {
     if (id == null) return false;
     try {
       final provider = context.read<OrderProvider>();
-      await provider.updateStatus(id, status, reason: reason);
-      if (provider.error != null) {
-        throw StateError(provider.error!);
+      final updated = await provider.updateStatus(id, status, reason: reason);
+      if (!updated) {
+        throw StateError(provider.error ?? 'No order was updated.');
       }
       await _loadData();
       return true;

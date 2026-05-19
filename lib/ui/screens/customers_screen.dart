@@ -71,12 +71,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
     if (confirmed == true && mounted) {
       final customerProvider = context.read<CustomerProvider>();
-      await customerProvider.deleteCustomer(customerId);
+      final deleted = await customerProvider.deleteCustomer(customerId);
       if (mounted) {
-        final error = customerProvider.error;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error ?? '$name deleted')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              deleted
+                  ? '$name deleted'
+                  : customerProvider.error ?? 'Customer was not deleted.',
+            ),
+          ),
+        );
       }
     }
   }
@@ -269,6 +274,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final currentBarangayId = customer['barangay_id'] as int?;
     int? selectedBarangayId = currentBarangayId;
     final List<Map<String, dynamic>> barangays = [];
+    final barangayRepository = context.read<BarangayRepository>();
+    Future<List<Map<String, dynamic>>> loadBarangaysFuture() =>
+        Future.sync(() => barangayRepository.getBarangays());
+    Future<List<Map<String, dynamic>>>? barangaysFuture;
+    var isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -279,11 +289,79 @@ class _CustomersScreenState extends State<CustomersScreen> {
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) {
+          barangaysFuture ??= loadBarangaysFuture();
           return FutureBuilder<List<Map<String, dynamic>>>(
-            future: context.read<BarangayRepository>().getBarangays(),
+            future: barangaysFuture,
             builder: (ctx, snapshot) {
+              if (snapshot.hasError) {
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    20,
+                    20,
+                    20 + MediaQuery.of(ctx).viewInsets.bottom,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.of(context).border,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Edit Customer',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.of(context).foreground,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Unable to load barangays. Please try again.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.of(context).mutedForeground,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setSheetState(() {
+                                barangaysFuture = loadBarangaysFuture();
+                              });
+                            },
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }
               if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const SizedBox(
+                  height: 240,
+                  child: Center(child: CircularProgressIndicator()),
+                );
               }
               barangays.clear();
               barangays.addAll(snapshot.data!);
@@ -446,23 +524,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             context,
                           );
 
-                          try {
-                            await customerProvider.updateCustomer(customerId, {
-                              'name': name,
-                              'contact_number': phone,
-                              'address': address.isNotEmpty ? address : null,
-                              'barangay_id': selectedBarangayId,
-                            });
-                          } on CustomerPhoneAlreadyExistsException {
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'A customer with $phone already exists',
-                                ),
-                              ),
-                            );
-                            return;
-                          } catch (_) {
+                          if (isSaving) return;
+                          setSheetState(() => isSaving = true);
+                          final updated = await customerProvider
+                              .updateCustomer(customerId, {
+                                'name': name,
+                                'contact_number': phone,
+                                'address': address.isNotEmpty ? address : null,
+                                'barangay_id': selectedBarangayId,
+                              });
+                          if (!ctx.mounted) return;
+                          setSheetState(() => isSaving = false);
+
+                          if (!updated) {
                             scaffoldMessenger.showSnackBar(
                               SnackBar(
                                 content: Text(
@@ -473,30 +547,40 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             );
                             return;
                           }
-                          if (customerProvider.error != null) {
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(content: Text(customerProvider.error!)),
-                            );
-                            return;
-                          }
 
                           if (ctx.mounted) Navigator.pop(ctx);
+                          scaffoldMessenger.showSnackBar(
+                            const SnackBar(content: Text('Customer updated')),
+                          );
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
-                            color: AppColors.of(context).primary,
+                            color: isSaving
+                                ? AppColors.of(context).muted
+                                : AppColors.of(context).primary,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Center(
-                            child: Text(
-                              'Save Changes',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
+                          child: Center(
+                            child: isSaving
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        AppColors.of(context).primary,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Save Changes',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
@@ -592,6 +676,9 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
   final _addressController = TextEditingController();
   int? _selectedBarangayId;
   List<Map<String, dynamic>> _barangays = [];
+  bool _isSubmitting = false;
+  bool _isLoadingBarangays = false;
+  String? _barangayLoadError;
   late final BarangayRepository _barangayRepo;
   late final CustomerRepository _customerRepo;
 
@@ -604,9 +691,26 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
   }
 
   Future<void> _loadBarangays() async {
-    if (kIsWeb) return;
-    final barangays = await _barangayRepo.getBarangays();
-    if (mounted) setState(() => _barangays = barangays);
+    if (kIsWeb || _isLoadingBarangays) return;
+    setState(() {
+      _isLoadingBarangays = true;
+      _barangayLoadError = null;
+    });
+    try {
+      final barangays = await _barangayRepo.getBarangays();
+      if (!mounted) return;
+      setState(() => _barangays = barangays);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _barangays = [];
+        _barangayLoadError = 'Unable to load barangays. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingBarangays = false);
+      }
+    }
   }
 
   @override
@@ -618,6 +722,8 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
   }
 
   Future<void> _submit() async {
+    if (_isSubmitting) return;
+
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
     final address = _addressController.text.trim();
@@ -642,6 +748,20 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       return;
     }
 
+    if (_isLoadingBarangays) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please wait for barangays to load.')),
+      );
+      return;
+    }
+
+    if (_barangayLoadError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_barangayLoadError!)),
+      );
+      return;
+    }
+
     if (_selectedBarangayId == null) {
       final scaffoldMessenger = ScaffoldMessenger.of(context);
       scaffoldMessenger.showSnackBar(
@@ -650,47 +770,56 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
       return;
     }
 
-    final existing = await _customerRepo.getCustomerByPhone(phone);
-    if (!mounted) return;
-    if (existing != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('A customer with $phone already exists')),
-      );
-      return;
-    }
+    setState(() => _isSubmitting = true);
+    try {
+      final existing = await _customerRepo.getCustomerByPhone(phone);
+      if (!mounted) return;
+      if (existing != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('A customer with $phone already exists')),
+        );
+        return;
+      }
 
-    // Task 020 — Record RA 10173 consent metadata so UI- and SMS-registered
-    // customers carry the same audit trail (channel + version + timestamp).
-    final customerData = {
-      'name': name,
-      'contact_number': phone,
-      'address': address.isNotEmpty ? address : null,
-      'barangay_id': _selectedBarangayId,
-      'consent_given': 1,
-      'consent_timestamp': DateTime.now().toIso8601String(),
-      'consent_channel': SmsRegistrationCopy.channelAppUi,
-      'consent_version': SmsRegistrationCopy.consentVersion,
-    };
+      // Task 020 — Record RA 10173 consent metadata so UI- and SMS-registered
+      // customers carry the same audit trail (channel + version + timestamp).
+      final customerData = {
+        'name': name,
+        'contact_number': phone,
+        'address': address.isNotEmpty ? address : null,
+        'barangay_id': _selectedBarangayId,
+        'consent_given': 1,
+        'consent_timestamp': DateTime.now().toIso8601String(),
+        'consent_channel': SmsRegistrationCopy.channelAppUi,
+        'consent_version': SmsRegistrationCopy.consentVersion,
+      };
 
-    // ignore: use_build_context_synchronously
-    final customerProv = context.read<CustomerProvider>();
-    // ignore: use_build_context_synchronously
-    final navigator = Navigator.of(context);
-    final snackBarMsg = '$name added successfully';
-    // ignore: use_build_context_synchronously
-    final successSnack = SnackBar(content: Text(snackBarMsg));
+      final customerProv = context.read<CustomerProvider>();
+      final navigator = Navigator.of(context);
+      final snackBarMsg = '$name added successfully';
+      final successSnack = SnackBar(content: Text(snackBarMsg));
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-    // ignore: use_build_context_synchronously
-    await customerProv.addCustomer(customerData);
-    if (!mounted) return;
-    if (customerProv.error != null) {
+      final created = await customerProv.addCustomer(customerData);
+      if (!mounted) return;
+      if (!created) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(customerProv.error ?? 'Customer was not created.'),
+          ),
+        );
+        return;
+      }
+      navigator.pop();
+      scaffoldMessenger.showSnackBar(successSnack);
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(customerProv.error!)));
-      return;
+      ).showSnackBar(SnackBar(content: Text('Failed to add customer: $e')));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
-    navigator.pop();
-    ScaffoldMessenger.of(context).showSnackBar(successSnack);
   }
 
   @override
@@ -968,45 +1097,78 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
           ),
         ),
         const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: AppColors.of(context).background,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.of(context).border),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int?>(
-              value: _selectedBarangayId,
-              isExpanded: true,
-              dropdownColor: AppColors.of(context).card,
-              hint: Text(
-                _barangays.isEmpty
-                    ? 'No barangays. Add them in Settings.'
-                    : 'Select Barangay...',
-                style: TextStyle(
-                  color: AppColors.of(context).mutedForeground,
-                  fontSize: 14,
+        if (_barangayLoadError != null)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.of(context).background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.of(context).border),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _barangayLoadError!,
+                    style: TextStyle(
+                      color: AppColors.of(context).mutedForeground,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
-              ),
-              items: _barangays
-                  .map(
-                    (b) => DropdownMenuItem<int?>(
-                      value: b['id'] as int,
-                      child: Text(
-                        '${b['name']} (${b['delivery_zone']})',
-                        style: TextStyle(
-                          color: AppColors.of(context).foreground,
-                          fontSize: 14,
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: _isLoadingBarangays ? null : _loadBarangays,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: AppColors.of(context).background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.of(context).border),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int?>(
+                value: _selectedBarangayId,
+                isExpanded: true,
+                dropdownColor: AppColors.of(context).card,
+                hint: Text(
+                  _isLoadingBarangays
+                      ? 'Loading barangays...'
+                      : _barangays.isEmpty
+                      ? 'No barangays. Add them in Settings.'
+                      : 'Select Barangay...',
+                  style: TextStyle(
+                    color: AppColors.of(context).mutedForeground,
+                    fontSize: 14,
+                  ),
+                ),
+                items: _barangays
+                    .map(
+                      (b) => DropdownMenuItem<int?>(
+                        value: b['id'] as int,
+                        child: Text(
+                          '${b['name']} (${b['delivery_zone']})',
+                          style: TextStyle(
+                            color: AppColors.of(context).foreground,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (val) => setState(() => _selectedBarangayId = val),
+                    )
+                    .toList(),
+                onChanged: _isLoadingBarangays
+                    ? null
+                    : (val) => setState(() => _selectedBarangayId = val),
+              ),
             ),
           ),
-        ),
         const SizedBox(height: 24),
 
         // Action buttons
@@ -1015,22 +1177,35 @@ class _AddCustomerFormState extends State<_AddCustomerForm> {
             // Save button
             Expanded(
               child: GestureDetector(
-                onTap: _submit,
+                onTap: _isSubmitting ? null : _submit,
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    color: AppColors.of(context).primary,
+                    color: _isSubmitting
+                        ? AppColors.of(context).muted
+                        : AppColors.of(context).primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Center(
-                    child: Text(
-                      'Save Customer',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                  child: Center(
+                    child: _isSubmitting
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.of(context).primary,
+                              ),
+                            ),
+                          )
+                        : const Text(
+                            'Save Customer',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
               ),

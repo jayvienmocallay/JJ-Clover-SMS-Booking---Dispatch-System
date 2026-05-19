@@ -1603,12 +1603,14 @@ class _DeliveryManifestSheet extends StatelessWidget {
     );
     if (confirmed != true) return;
 
-    await orderProvider.updateStatus(orderId, 'in_transit');
+    final started = await orderProvider.updateStatus(orderId, 'in_transit');
     if (!context.mounted) return;
-    if (orderProvider.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(orderProvider.error!)));
+    if (!started) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(orderProvider.error ?? 'Delivery was not started.'),
+        ),
+      );
       return;
     }
 

@@ -41,6 +41,7 @@ class OrderDetailSheet extends StatefulWidget {
 class _OrderDetailSheetState extends State<OrderDetailSheet> {
   List<Map<String, dynamic>> _logs = [];
   bool _loadingLogs = false;
+  String? _runningAction;
 
   @override
   void initState() {
@@ -93,19 +94,19 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
           StaffAssignmentSheet(initialStaffId: widget.order.staffId),
     );
     if (staffId == null) return;
-    await provider.assignStaffToOrder(orderId, staffId);
+    final assigned = await provider.assignStaffToOrder(orderId, staffId);
     if (!mounted) return;
-    if (provider.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(provider.error!)));
+    if (!assigned) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(provider.error ?? 'Staff was not assigned.')),
+      );
       return;
     }
     widget.onCompleted?.call();
     Navigator.pop(context, true);
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Staff assigned ✓')));
+    ).showSnackBar(const SnackBar(content: Text('Staff assigned')));
   }
 
   Future<void> _showDeliveryIssueSheet() async {
@@ -122,16 +123,18 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
       builder: (_) => const DeliveryIssueSheet(),
     );
     if (result == null) return;
-    await provider.recordDeliveryIssue(
+    final recorded = await provider.recordDeliveryIssue(
       orderId,
       note: result.note,
       keepForRedispatch: result.keepForRedispatch,
     );
     if (!mounted) return;
-    if (provider.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(provider.error!)));
+    if (!recorded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.error ?? 'Delivery issue was not saved.'),
+        ),
+      );
       return;
     }
     widget.onCompleted?.call();
@@ -140,30 +143,39 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
       SnackBar(
         content: Text(
           result.keepForRedispatch
-              ? 'Delivery note saved and returned to dispatch ✓'
-              : 'Delivery note saved and order moved out of dispatch ✓',
+              ? 'Delivery note saved and returned to dispatch'
+              : 'Delivery note saved and order moved out of dispatch',
         ),
       ),
     );
   }
 
-  Future<void> _handleStartDelivery() async {
-    final started = await widget.onStartDelivery?.call() ?? false;
-    if (started && mounted) {
-      Navigator.pop(context, true);
-    }
-  }
+  Future<void> _handleStartDelivery() =>
+      _runSheetAction('start', widget.onStartDelivery);
 
-  Future<void> _handleConfirm() async {
-    final confirmed = await widget.onConfirm?.call() ?? false;
-    if (confirmed && mounted) {
-      Navigator.pop(context, true);
-    }
-  }
+  Future<void> _handleConfirm() => _runSheetAction('confirm', widget.onConfirm);
 
-  Future<void> _handleReject() async {
-    final rejected = await widget.onReject?.call() ?? false;
-    if (rejected && mounted) {
+  Future<void> _handleReject() => _runSheetAction('reject', widget.onReject);
+
+  Future<void> _runSheetAction(
+    String action,
+    Future<bool> Function()? callback,
+  ) async {
+    if (_runningAction != null) return;
+    setState(() => _runningAction = action);
+    var succeeded = false;
+    try {
+      succeeded = await callback?.call() ?? false;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Action failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _runningAction = null);
+    }
+    if (succeeded && mounted) {
       Navigator.pop(context, true);
     }
   }
@@ -465,6 +477,7 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
         order.status == OrderStatus.pending && widget.onConfirm != null;
     final canStartDelivery =
         order.status == OrderStatus.confirmed && widget.onStartDelivery != null;
+    final isBusy = _runningAction != null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -484,22 +497,24 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                 if (canCancel)
                   Expanded(
                     child: GestureDetector(
-                      onTap: _handleReject,
+                      onTap: isBusy ? null : _handleReject,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: palette.statusMaintenance),
                         ),
-                        child: Text(
-                          'Cancel',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: palette.statusMaintenance,
-                          ),
-                        ),
+                        child: _runningAction == 'reject'
+                            ? _buttonSpinner(palette.statusMaintenance)
+                            : Text(
+                                'Cancel',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: palette.statusMaintenance,
+                                ),
+                              ),
                       ),
                     ),
                   ),
@@ -508,44 +523,48 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
                 if (canConfirm)
                   Expanded(
                     child: GestureDetector(
-                      onTap: _handleConfirm,
+                      onTap: isBusy ? null : _handleConfirm,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
                           color: palette.primary,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'Confirm Order',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: _runningAction == 'confirm'
+                            ? _buttonSpinner(Colors.white)
+                            : const Text(
+                                'Confirm Order',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
                   ),
                 if (canStartDelivery)
                   Expanded(
                     child: GestureDetector(
-                      onTap: _handleStartDelivery,
+                      onTap: isBusy ? null : _handleStartDelivery,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
                           color: palette.statusBusy,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'Start Delivery',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: _runningAction == 'start'
+                            ? _buttonSpinner(Colors.white)
+                            : const Text(
+                                'Start Delivery',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
                   ),
@@ -603,6 +622,19 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, size: 18, color: color),
+      ),
+    );
+  }
+
+  Widget _buttonSpinner(Color color) {
+    return Center(
+      child: SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(color),
+        ),
       ),
     );
   }
@@ -738,21 +770,19 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
     );
   }
 
-  Widget _actionRow(IconData icon, String label, VoidCallback onTap) {
+  Widget _actionRow(
+    IconData icon,
+    String label,
+    Future<void> Function() onTap,
+  ) {
     final palette = AppColors.of(context);
+    final isBusy = _runningAction != null;
     return InkWell(
-      onTap: () async {
-        onTap();
-        if (mounted &&
-            label != 'Complete delivery' &&
-            label != 'Assign staff' &&
-            label != 'Start delivery' &&
-            label != 'Record delivery issue' &&
-            label != 'Confirm order' &&
-            label != 'Reject order') {
-          Navigator.pop(context, true);
-        }
-      },
+      onTap: isBusy
+          ? null
+          : () async {
+              await onTap();
+            },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         child: Row(
@@ -762,7 +792,17 @@ class _OrderDetailSheetState extends State<OrderDetailSheet> {
             Expanded(
               child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
             ),
-            Icon(Icons.chevron_right, color: palette.mutedForeground),
+            if (isBusy)
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
+                ),
+              )
+            else
+              Icon(Icons.chevron_right, color: palette.mutedForeground),
           ],
         ),
       ),
