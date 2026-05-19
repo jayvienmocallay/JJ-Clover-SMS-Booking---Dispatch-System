@@ -18,13 +18,17 @@ class AdminCredentialRepository {
   final SecureStorageDeleter _delete;
   final Random Function() _secureRandomFactory;
 
-  factory AdminCredentialRepository({FlutterSecureStorage? secureStorage}) {
+  factory AdminCredentialRepository({
+    FlutterSecureStorage? secureStorage,
+    Random Function()? secureRandomFactory,
+  }) {
     final storage = secureStorage ?? const FlutterSecureStorage();
     return AdminCredentialRepository.fromStorageCallbacks(
       read: ({required key}) => storage.read(key: key),
       write: ({required key, required value}) =>
           storage.write(key: key, value: value),
       delete: ({required key}) => storage.delete(key: key),
+      secureRandomFactory: secureRandomFactory,
     );
   }
 

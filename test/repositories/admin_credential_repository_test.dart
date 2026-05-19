@@ -68,4 +68,18 @@ void main() {
     expect(await repo.hasCredentials(), isFalse);
     expect(await repo.verify('1234'), isFalse);
   });
+
+  test('same password produces different hash each call due to random salt', () async {
+    final store = <String, String>{};
+    final repo = _makeRepo(store);
+    await repo.setPassword('same');
+    final hash1 = store[AdminCredentialRepository.hashKey];
+    final salt1 = store[AdminCredentialRepository.saltKey];
+    await repo.setPassword('same');
+    final hash2 = store[AdminCredentialRepository.hashKey];
+    final salt2 = store[AdminCredentialRepository.saltKey];
+    // Random salt means same password → different hash each time
+    expect(hash1, isNot(hash2));
+    expect(salt1, isNot(salt2));
+  });
 }
