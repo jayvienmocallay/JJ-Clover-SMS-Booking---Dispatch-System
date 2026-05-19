@@ -156,6 +156,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
         final supabase = Supabase.instance.client;
         await _processDeletionRetryQueue(supabase);
+        await _processSyncedRowDeletions(supabase);
         for (final table in _syncTables) {
           await _syncTable(supabase, table);
         }
@@ -183,6 +184,14 @@ class SupabaseSyncService extends ChangeNotifier {
   }
 
   Future<void> _syncTable(SupabaseClient client, String tableName) async {
+    final pendingDeletedIds = await _localSync.pendingDeletedRowIds(tableName);
+    final remoteRows = await _fetchRemoteRows(client, tableName);
+    final insertedRemoteRows = await _localSync.mergeRemoteRows(
+      tableName,
+      remoteRows,
+      excludedIds: pendingDeletedIds,
+    );
+
     final rows = await _localSync.getRowsForSync(tableName);
     if (rows.isEmpty) return;
 
@@ -200,7 +209,48 @@ class SupabaseSyncService extends ChangeNotifier {
       await client.from(tableName).upsert(cleanedBatch, onConflict: 'id');
     }
 
-    debugPrint('Synced ${rows.length} rows from $tableName');
+    debugPrint(
+      'Synced $tableName: pulled $insertedRemoteRows remote rows, '
+      'pushed ${rows.length} local rows',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchRemoteRows(
+    SupabaseClient client,
+    String tableName,
+  ) async {
+    const pageSize = 500;
+    final rows = <Map<String, dynamic>>[];
+
+    for (int offset = 0; ; offset += pageSize) {
+      final page = await client
+          .from(tableName)
+          .select()
+          .order('id', ascending: true)
+          .range(offset, offset + pageSize - 1);
+      final pageRows = page
+          .map((row) => Map<String, dynamic>.from(row as Map))
+          .toList();
+      rows.addAll(pageRows);
+      if (pageRows.length < pageSize) break;
+    }
+
+    return rows;
+  }
+
+  Future<void> _processSyncedRowDeletions(SupabaseClient client) async {
+    final dueDeletes = await _localSync.dueDeletedRows();
+    for (final delete in dueDeletes) {
+      final id = delete['id'] as int;
+      final tableName = delete['table_name'] as String;
+      final rowId = (delete['row_id'] as num).toInt();
+      try {
+        await client.from(tableName).delete().eq('id', rowId);
+        await _localSync.markDeletedRowSynced(id);
+      } on Exception catch (e) {
+        await _localSync.markDeletedRowFailed(id, e);
+      }
+    }
   }
 
   Future<void> _processDeletionRetryQueue(SupabaseClient client) async {

@@ -23,6 +23,7 @@ part 'database_sms_operations.dart';
 part 'database_settings_operations.dart';
 part 'database_pending_sms_operations.dart';
 part 'database_privacy_operations.dart';
+part 'database_sync_operations.dart';
 
 class CustomerPhoneAlreadyExistsException implements Exception {
   final String contactNumber;
@@ -48,7 +49,7 @@ class DatabaseHelper {
   static Database? _database;
   static bool _schemaIntegrityChecked = false;
   static Completer<Database>? _dbCompleter;
-  static const int databaseVersion = 11;
+  static const int databaseVersion = 12;
   static const Duration _receiptRetryAfter = Duration(minutes: 10);
   static const Duration _resubmitCooldownAfter = Duration(hours: 1);
   static const String readMessageIdsKey = 'read_message_ids';

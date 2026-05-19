@@ -129,6 +129,7 @@ Future<void> createDatabaseSchema(Database db, int version) async {
   await _createPendingSmsActionsTable(db);
   await _createAuditLogsTable(db);
   await _createDeletionRetryQueueTable(db);
+  await _createSupabaseSyncDeletionsTable(db);
 
   // Task 006 â€” Seed default data in order: barangays first, then customers, then schedules.
   // Order matters because of foreign key dependencies:
@@ -293,6 +294,10 @@ Future<void> upgradeDatabaseSchema(
     await _createDeletionRetryQueueTable(db);
   }
 
+  if (oldVersion < 12) {
+    await _createSupabaseSyncDeletionsTable(db);
+  }
+
   // Create sms_messages table if not exists (for old databases)
   await _createSmsMessagesTable(db);
   await _createIncomingSmsReceiptsTable(db);
@@ -301,6 +306,7 @@ Future<void> upgradeDatabaseSchema(
   await _createPendingSmsActionsTable(db);
   await _createAuditLogsTable(db);
   await _createDeletionRetryQueueTable(db);
+  await _createSupabaseSyncDeletionsTable(db);
 }
 
 Future<void> _createAppSettingsTable(Database db) async {
@@ -573,6 +579,32 @@ Future<void> _createDeletionRetryQueueTable(Database db) async {
   await db.execute(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_deletion_retry_active_phone '
     'ON deletion_retry_queue(phone_number, operation) '
+    "WHERE status IN ('pending', 'failed')",
+  );
+}
+
+Future<void> _createSupabaseSyncDeletionsTable(Database db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS supabase_sync_deletions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name TEXT NOT NULL,
+      row_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      next_attempt_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_supabase_sync_deletions_due '
+    'ON supabase_sync_deletions(status, next_attempt_at)',
+  );
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS '
+    'idx_supabase_sync_deletions_active_row '
+    'ON supabase_sync_deletions(table_name, row_id) '
     "WHERE status IN ('pending', 'failed')",
   );
 }

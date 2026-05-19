@@ -26,7 +26,15 @@ extension DatabaseCustomerOperations on DatabaseHelper {
   /// Delete a barangay by ID
   Future<int> deleteBarangay(int id) async {
     final db = await DatabaseHelper.instance.database;
-    return await db.delete('barangays', where: 'id = ?', whereArgs: [id]);
+    final deleted = await db.delete(
+      'barangays',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (deleted > 0) {
+      await enqueueSupabaseSyncDeletion(tableName: 'barangays', rowId: id);
+    }
+    return deleted;
   }
 
   /// Update a barangay's zone and delivery day.
@@ -89,7 +97,15 @@ extension DatabaseCustomerOperations on DatabaseHelper {
   /// Delete a customer by ID
   Future<int> deleteCustomer(int id) async {
     final db = await DatabaseHelper.instance.database;
-    return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+    final deleted = await db.delete(
+      'customers',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (deleted > 0) {
+      await enqueueSupabaseSyncDeletion(tableName: 'customers', rowId: id);
+    }
+    return deleted;
   }
 
   // Task 003, Task 005 â€” Customer CRUD operations

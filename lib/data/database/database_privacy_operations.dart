@@ -193,11 +193,31 @@ extension DatabasePrivacyOperations on DatabaseHelper {
     var deleted = 0;
 
     await db.transaction<void>((txn) async {
+      final expiredSmsIds = await txn.query(
+        'sms_messages',
+        columns: ['id'],
+        where: 'sent_at < ?',
+        whereArgs: [reference.subtract(smsRetention).toIso8601String()],
+      );
       deleted += await txn.delete(
         'sms_messages',
         where: 'sent_at < ?',
         whereArgs: [reference.subtract(smsRetention).toIso8601String()],
       );
+      final nowIso = DateTime.now().toIso8601String();
+      for (final row in expiredSmsIds) {
+        final id = (row['id'] as num?)?.toInt();
+        if (id == null) continue;
+        await txn.insert('supabase_sync_deletions', {
+          'table_name': 'sms_messages',
+          'row_id': id,
+          'status': 'pending',
+          'attempts': 0,
+          'next_attempt_at': nowIso,
+          'created_at': nowIso,
+          'updated_at': nowIso,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
       deleted += await txn.delete(
         'incoming_sms_receipts',
         where: 'updated_at < ?',
