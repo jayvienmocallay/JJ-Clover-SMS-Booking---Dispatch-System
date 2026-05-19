@@ -17,6 +17,10 @@ import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/customer_avatar.dart';
 import '../widgets/shared/empty_state.dart';
 import '../widgets/shared/search_field.dart';
+import 'dart:async' show unawaited;
+import '../../core/security/admin_auth_service.dart';
+import '../../data/repositories/audit_log_repository.dart';
+import '../security/admin_gate.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
@@ -27,6 +31,15 @@ class CustomersScreen extends StatefulWidget {
 
 class _CustomersScreenState extends State<CustomersScreen> {
   String _search = '';
+  late final AdminAuthService _adminAuth;
+  late final AuditLogRepository _auditRepo;
+
+  @override
+  void initState() {
+    super.initState();
+    _adminAuth = context.read<AdminAuthService>();
+    _auditRepo = context.read<AuditLogRepository>();
+  }
 
   /// Filters customers by name, phone, or barangay
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> customers) {
@@ -41,6 +54,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _deleteCustomer(int customerId, String name) async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to delete a customer.',
+    )) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -72,13 +89,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
     if (confirmed == true && mounted) {
       final customerProvider = context.read<CustomerProvider>();
       final deleted = await customerProvider.deleteCustomer(customerId);
+      if (deleted) {
+        unawaited(_auditRepo.record(
+          action: 'customer_deleted',
+          entityType: 'customer',
+          entityId: customerId.toString(),
+          metadata: {'name': name},
+        ));
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              deleted
-                  ? '$name deleted'
-                  : customerProvider.error ?? 'Customer was not deleted.',
+              deleted ? '$name deleted' : 'Could not delete $name.',
             ),
           ),
         );
@@ -230,8 +253,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             ),
                           ),
                           IconButton(
-                            tooltip: 'Edit customer',
-                            onPressed: () => _editCustomer(c),
+                            tooltip: 'Edit customer (Admin required)',
+                            onPressed: () async {
+                              if (!await requireAdminPassword(
+                                context,
+                                reason: 'Admin password required to edit customer information.',
+                              )) return;
+                              if (!mounted) return;
+                              _editCustomer(c);
+                            },
                             icon: Icon(
                               Icons.edit,
                               size: 20,
@@ -239,7 +269,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             ),
                           ),
                           IconButton(
-                            tooltip: 'Delete customer',
+                            tooltip: 'Delete customer (Admin required)',
                             onPressed: () =>
                                 _deleteCustomer(c['id'] as int, name),
                             icon: Icon(
