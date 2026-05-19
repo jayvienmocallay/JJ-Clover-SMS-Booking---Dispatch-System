@@ -15,6 +15,10 @@ import '../widgets/shared/app_page_header.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/loading_state.dart';
 import 'package:jj_clover_sms/main.dart' show setThemeMode, themeNotifier;
+import 'dart:async' show unawaited;
+import '../../core/security/admin_auth_service.dart';
+import '../../data/repositories/audit_log_repository.dart';
+import '../security/admin_gate.dart';
 
 // ─────────────────────────────────────────────
 // Main Settings Screen (inline + nav for Data/About)
@@ -40,12 +44,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _loadError;
   late final BarangayRepository _barangayRepo;
   late final SettingsRepository _settingsRepo;
+  late final AdminAuthService _adminAuth;
+  late final AuditLogRepository _auditRepo;
 
   @override
   void initState() {
     super.initState();
     _barangayRepo = context.read<BarangayRepository>();
     _settingsRepo = context.read<SettingsRepository>();
+    _adminAuth = context.read<AdminAuthService>();
+    _auditRepo = context.read<AuditLogRepository>();
     _loadData();
   }
 
@@ -139,38 +147,100 @@ class _SettingsScreenState extends State<SettingsScreen> {
       (b) => (b['name'] as String).toLowerCase() == name.toLowerCase(),
     );
     if (exists) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Barangay already exists')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Barangay already exists')),
+      );
       return;
     }
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to add a barangay.',
+    )) return;
     final zoneData = _daysToZone(_selectedDays);
     await _barangayRepo.insertBarangay({
       'name': name,
       'delivery_zone': zoneData.zone,
       if (zoneData.deliveryDay != null) 'delivery_day': zoneData.deliveryDay,
     });
+    unawaited(_auditRepo.record(
+      action: 'barangay_created',
+      entityType: 'barangay',
+      metadata: {
+        'name': name,
+        'delivery_zone': zoneData.zone,
+        'delivery_day': zoneData.deliveryDay,
+      },
+    ));
     _barangayController.clear();
     setState(() => _selectedDays.clear());
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$name added successfully')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$name added successfully')),
+      );
     }
     await _loadData();
   }
 
   Future<void> _removeBarangay(int id) async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to remove a barangay.',
+    )) return;
+    final barangay = _barangays.firstWhere(
+      (b) => b['id'] == id,
+      orElse: () => <String, dynamic>{},
+    );
+    final name = barangay['name'] as String? ?? 'this barangay';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.of(context).card,
+        title: Text(
+          'Remove Barangay',
+          style: TextStyle(color: AppColors.of(context).foreground),
+        ),
+        content: Text(
+          'Remove "$name"? This may affect customers and delivery schedules.',
+          style: TextStyle(color: AppColors.of(context).mutedForeground),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.of(context).statusMaintenance,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     await _barangayRepo.deleteBarangay(id);
+    unawaited(_auditRepo.record(
+      action: 'barangay_deleted',
+      entityType: 'barangay',
+      entityId: id.toString(),
+      metadata: {'name': name},
+    ));
     await _loadData();
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Barangay removed ✓')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Barangay removed')),
+      );
     }
   }
 
   Future<void> _showTimePicker() async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to change the order cut-off time.',
+    )) return;
+    final oldHour = _cutoffHour;
+    final oldMinute = _cutoffMinute;
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: _cutoffHour, minute: _cutoffMinute),
@@ -193,6 +263,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _cutoffHour = picked.hour;
         _cutoffMinute = picked.minute;
       });
+      unawaited(_auditRepo.record(
+        action: 'cutoff_time_changed',
+        entityType: 'setting',
+        entityId: 'cutoff_time',
+        metadata: {
+          'old_hour': oldHour,
+          'old_minute': oldMinute,
+          'new_hour': picked.hour,
+          'new_minute': picked.minute,
+        },
+      ));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -790,6 +871,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: editDays.isEmpty
                           ? null
                           : () async {
+                              if (!await requireAdminPassword(
+                                context,
+                                reason: 'Admin password required to change barangay delivery days.',
+                              )) return;
                               final messenger = ScaffoldMessenger.of(context);
                               final zoneData = _daysToZone(editDays);
                               await _barangayRepo.updateBarangay(id, {
@@ -797,6 +882,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 'delivery_zone': zoneData.zone,
                                 'delivery_day': zoneData.deliveryDay,
                               });
+                              unawaited(_auditRepo.record(
+                                action: 'barangay_updated',
+                                entityType: 'barangay',
+                                entityId: id.toString(),
+                                metadata: {
+                                  'name': name,
+                                  'delivery_zone': zoneData.zone,
+                                  'delivery_day': zoneData.deliveryDay,
+                                },
+                              ));
                               if (ctx.mounted) Navigator.pop(ctx);
                               await _loadData();
                               if (!mounted) return;
@@ -1229,7 +1324,7 @@ class _DataSyncPage extends StatelessWidget {
     IconData icon,
     String label,
     bool value,
-    ValueChanged<bool> onChanged,
+    Future<void> Function(bool) onChanged,
   ) {
     final palette = AppColors.of(context);
     return Container(
@@ -1260,7 +1355,7 @@ class _DataSyncPage extends StatelessWidget {
           Switch(
             value: value,
             activeThumbColor: palette.primary,
-            onChanged: onChanged,
+            onChanged: (v) { onChanged(v); },
           ),
         ],
       ),
