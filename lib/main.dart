@@ -21,6 +21,9 @@ import 'package:jj_clover_sms/data/repositories/sms_message_repository.dart';
 import 'package:jj_clover_sms/data/repositories/settings_repository.dart';
 import 'package:jj_clover_sms/data/repositories/delivery_log_repository.dart';
 import 'package:jj_clover_sms/data/repositories/database_runtime_repository.dart';
+import 'package:jj_clover_sms/core/security/admin_auth_service.dart';
+import 'package:jj_clover_sms/data/repositories/admin_credential_repository.dart';
+import 'package:jj_clover_sms/data/repositories/audit_log_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jj_clover_sms/data/providers/customer_provider.dart';
 import 'package:jj_clover_sms/ui/theme/app_theme.dart';
@@ -140,6 +143,13 @@ class MyApp extends StatelessWidget {
         Provider(create: (_) => SmsMessageRepository()),
         Provider(create: (_) => SettingsRepository()),
         Provider(create: (_) => DeliveryLogRepository()),
+        Provider(create: (_) => AdminCredentialRepository()),
+        Provider<AdminAuthService>(
+          create: (ctx) => DefaultAdminAuthService(
+            credentialRepository: ctx.read<AdminCredentialRepository>(),
+          ),
+        ),
+        Provider(create: (_) => AuditLogRepository()),
         // Task 011 — OrderProvider: reactive order state for dashboard + order screens
         ChangeNotifierProvider(
           create: (ctx) => OrderProvider(ctx.read<OrderRepository>()),
