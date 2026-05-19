@@ -1,11 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jj_clover_sms/core/security/admin_auth_service.dart';
 import 'package:jj_clover_sms/data/providers/customer_provider.dart';
+import 'package:jj_clover_sms/data/repositories/audit_log_repository.dart';
 import 'package:jj_clover_sms/data/repositories/barangay_repository.dart';
 import 'package:jj_clover_sms/data/repositories/customer_repository.dart';
 import 'package:jj_clover_sms/ui/screens/customers_screen.dart';
 import 'package:jj_clover_sms/ui/theme/app_theme.dart';
 import 'package:provider/provider.dart';
+
+/// Always-unlocked stub — lets the admin gate pass without showing a dialog.
+class _AlwaysUnlockedAdminAuthService implements AdminAuthService {
+  @override
+  bool get isUnlocked => true;
+  @override
+  Future<bool> isAdminConfigured() async => true;
+  @override
+  Future<bool> verifyPassword(String password) async => true;
+  @override
+  Future<void> unlockFor({Duration duration = const Duration(minutes: 5)}) async {}
+  @override
+  Future<void> lock() async {}
+  @override
+  Future<void> setPassword(String password) async {}
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {}
+}
+
+class _NoOpAuditLogRepository extends AuditLogRepository {
+  @override
+  Future<int> record({
+    required String action,
+    required String entityType,
+    String? entityId,
+    String? phoneNumber,
+    Map<String, dynamic>? metadata,
+    DateTime? createdAt,
+  }) async => 0;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +73,12 @@ void main() {
               {'id': 1, 'name': 'Poblacion', 'delivery_zone': 'A'},
             ]),
           ),
+          Provider<AdminAuthService>(
+            create: (_) => _AlwaysUnlockedAdminAuthService(),
+          ),
+          Provider<AuditLogRepository>(
+            create: (_) => _NoOpAuditLogRepository(),
+          ),
         ],
         child: MaterialApp(
           theme: _testTheme,
@@ -48,9 +89,9 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Edit customer'), findsOneWidget);
+    expect(find.byTooltip('Edit customer (Admin required)'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Edit customer'));
+    await tester.tap(find.byTooltip('Edit customer (Admin required)'));
     await tester.pumpAndSettle();
 
     expect(
