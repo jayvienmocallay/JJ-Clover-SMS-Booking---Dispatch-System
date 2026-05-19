@@ -170,7 +170,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Future<void> _acknowledgeWalkInAlert() async {
     final alarm = AlarmService.instance;
     final phone = alarm.customerPhone;
-    final reply = SystemModeManager.instance.getDropReply();
+    final reply =
+        alarm.replyMessage ?? SystemModeManager.instance.getDropReply();
 
     if (mounted) {
       setState(() => _showWalkInAlert = false);

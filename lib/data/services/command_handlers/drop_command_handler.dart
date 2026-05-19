@@ -23,6 +23,7 @@ class DropCommandHandler {
     required String sourceMessageId,
   }) async {
     final normalizedSender = PhoneNumberUtils.normalize(sender);
+    final acceptedReply = _modeManager.getDropReply();
 
     // Step 1: Mode gate — only MAINTENANCE rejects drop-offs
     if (!_modeManager.canAcceptDrop()) {
@@ -88,6 +89,7 @@ class DropCommandHandler {
     await AlarmService.instance.trigger(
       phone: normalizedSender,
       qty: parsed.quantity ?? 0,
+      replyMessage: acceptedReply,
     );
   }
 }
