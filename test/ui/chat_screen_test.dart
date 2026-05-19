@@ -1,9 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jj_clover_sms/data/repositories/audit_log_repository.dart';
 import 'package:jj_clover_sms/data/repositories/sms_message_repository.dart';
 import 'package:jj_clover_sms/ui/screens/chat_screen.dart';
 import 'package:jj_clover_sms/ui/theme/app_theme.dart';
 import 'package:provider/provider.dart';
+
+class _NoOpAuditLogRepository extends AuditLogRepository {
+  @override
+  Future<int> record({
+    required String action,
+    required String entityType,
+    String? entityId,
+    String? phoneNumber,
+    Map<String, dynamic>? metadata,
+    DateTime? createdAt,
+  }) async => 0;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -31,8 +44,11 @@ void main() {
       ]);
 
       await tester.pumpWidget(
-        Provider<SmsMessageRepository>.value(
-          value: smsRepo,
+        MultiProvider(
+          providers: [
+            Provider<SmsMessageRepository>.value(value: smsRepo),
+            Provider<AuditLogRepository>(create: (_) => _NoOpAuditLogRepository()),
+          ],
           child: MaterialApp(
             theme: _testTheme,
             home: const ChatScreen(

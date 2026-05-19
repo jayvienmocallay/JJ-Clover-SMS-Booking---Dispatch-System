@@ -16,6 +16,9 @@ import '../widgets/shared/app_page_header.dart';
 import '../widgets/shared/brand_mascot.dart';
 import '../widgets/shared/empty_state.dart';
 import '../widgets/shared/search_field.dart';
+import 'dart:async' show unawaited;
+import '../../data/repositories/audit_log_repository.dart';
+import '../security/admin_gate.dart';
 import 'delivery_logs_screen.dart';
 import 'order_history_screen.dart';
 
@@ -36,6 +39,7 @@ class OrdersScreen extends StatefulWidget {
 class _OrdersScreenState extends State<OrdersScreen> {
   late int _filterIndex;
   String _searchQuery = '';
+  late final AuditLogRepository _auditRepo;
 
   static const _filterStatuses = ['all', 'pending', 'confirmed', 'in_transit'];
 
@@ -43,6 +47,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   void initState() {
     super.initState();
     _filterIndex = _clampFilterIndex(widget.initialFilterIndex);
+    _auditRepo = context.read<AuditLogRepository>();
   }
 
   @override
@@ -671,6 +676,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Future<bool> _showRejectDialog(int orderId, OrderProvider orderProv) async {
+    if (!await requireAdminPassword(
+      context,
+      reason: 'Admin password required to reject an order.',
+    )) {
+      return false;
+    }
+    if (!mounted) return false;
     String? reason;
     var isSubmitting = false;
     String? dialogError;
@@ -768,6 +780,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
     if (confirmed != true || !mounted) return false;
 
+    unawaited(_auditRepo.record(
+      action: 'order_rejected',
+      entityType: 'order',
+      entityId: orderId.toString(),
+      metadata: {'reason': reason ?? ''},
+    ));
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Order rejected')));
