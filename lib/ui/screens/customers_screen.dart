@@ -54,7 +54,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
     if (!await requireAdminPassword(
       context,
       reason: 'Admin password required to delete a customer.',
-    )) return;
+    )) {
+      return;
+    }
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -255,7 +258,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               if (!await requireAdminPassword(
                                 context,
                                 reason: 'Admin password required to edit customer information.',
-                              )) return;
+                              )) {
+                                return;
+                              }
                               if (!mounted) return;
                               _editCustomer(c);
                             },

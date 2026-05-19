@@ -679,7 +679,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
     if (!await requireAdminPassword(
       context,
       reason: 'Admin password required to reject an order.',
-    )) return false;
+    )) {
+      return false;
+    }
+    if (!mounted) return false;
     String? reason;
     var isSubmitting = false;
     String? dialogError;

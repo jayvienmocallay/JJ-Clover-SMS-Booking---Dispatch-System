@@ -155,7 +155,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!await requireAdminPassword(
       context,
       reason: 'Admin password required to add a barangay.',
-    )) return;
+    )) {
+      return;
+    }
     final zoneData = _daysToZone(_selectedDays);
     await _barangayRepo.insertBarangay({
       'name': name,
@@ -185,7 +187,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!await requireAdminPassword(
       context,
       reason: 'Admin password required to remove a barangay.',
-    )) return;
+    )) {
+      return;
+    }
+    if (!mounted) return;
     final barangay = _barangays.firstWhere(
       (b) => b['id'] == id,
       orElse: () => <String, dynamic>{},
@@ -238,7 +243,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!await requireAdminPassword(
       context,
       reason: 'Admin password required to change the order cut-off time.',
-    )) return;
+    )) {
+      return;
+    }
+    if (!mounted) return;
     final oldHour = _cutoffHour;
     final oldMinute = _cutoffMinute;
     final picked = await showTimePicker(
@@ -393,7 +401,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!await requireAdminPassword(
       context,
       reason: 'Admin password required to change the admin PIN.',
-    )) return;
+    )) {
+      return;
+    }
     if (!mounted) return;
     await _showChangePinDialog();
   }
@@ -1095,7 +1105,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               if (!await requireAdminPassword(
                                 context,
                                 reason: 'Admin password required to change barangay delivery days.',
-                              )) return;
+                              )) {
+                                return;
+                              }
+                              if (!mounted) return;
                               final messenger = ScaffoldMessenger.of(context);
                               final zoneData = _daysToZone(editDays);
                               await _barangayRepo.updateBarangay(id, {
@@ -1404,7 +1417,10 @@ class _DataSyncPage extends StatelessWidget {
                     if (!await requireAdminPassword(
                       context,
                       reason: 'Admin password required to change cloud sync settings.',
-                    )) return;
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
                     syncService.setAutoSync(v);
                     unawaited(context.read<AuditLogRepository>().record(
                       action: 'cloud_sync_auto_changed',
@@ -1423,7 +1439,10 @@ class _DataSyncPage extends StatelessWidget {
                     if (!await requireAdminPassword(
                       context,
                       reason: 'Admin password required to change cloud sync settings.',
-                    )) return;
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
                     syncService.setWifiOnly(v);
                     unawaited(context.read<AuditLogRepository>().record(
                       action: 'cloud_sync_wifi_only_changed',
@@ -1510,7 +1529,10 @@ class _DataSyncPage extends StatelessWidget {
                           if (!await requireAdminPassword(
                             context,
                             reason: 'Admin password required to manually sync data.',
-                          )) return;
+                          )) {
+                            return;
+                          }
+                          if (!context.mounted) return;
                           unawaited(context.read<AuditLogRepository>().record(
                             action: 'cloud_sync_manual_started',
                             entityType: 'setting',

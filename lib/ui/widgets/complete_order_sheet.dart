@@ -64,7 +64,9 @@ class _CompleteOrderSheetState extends State<CompleteOrderSheet> {
         reason:
             'Admin password required to complete a delivery with quantity, '
             'payment, or container discrepancies.',
-      )) return;
+      )) {
+        return;
+      }
     }
 
     final smsMessage = _deliveryCompletedSms();

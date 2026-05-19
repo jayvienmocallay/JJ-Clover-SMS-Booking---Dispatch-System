@@ -264,7 +264,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!await requireAdminPassword(
       context,
       reason: 'Admin password required to delete local SMS history.',
-    )) return;
+    )) {
+      return;
+    }
     if (!await _confirmDeleteMessage(message)) return;
     final id = message['id'] as int?;
     if (id == null) return;
