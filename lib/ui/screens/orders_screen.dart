@@ -686,6 +686,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
     String? reason;
     var isSubmitting = false;
     String? dialogError;
+    Order? orderToReject;
+    try {
+      final row = orderProv.todayOrders.firstWhere((o) => o['id'] == orderId);
+      orderToReject = Order.fromMap(row);
+    } catch (_) {
+      try {
+        final row = orderProv.upcomingPreBookOrders.firstWhere(
+          (o) => o['id'] == orderId,
+        );
+        orderToReject = Order.fromMap(row);
+      } catch (_) {}
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -786,9 +798,23 @@ class _OrdersScreenState extends State<OrdersScreen> {
       entityId: orderId.toString(),
       metadata: {'reason': reason ?? ''},
     ));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Order rejected')));
+    if (orderToReject != null) {
+      await SmsHandlerUtils.sendOrderRejectedReply(
+        orderToReject.phoneNumber,
+        quantity: orderToReject.quantity,
+        reason: reason,
+      );
+    }
+    if (!mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          orderToReject == null
+              ? 'Order rejected'
+              : 'Order rejected. Customer SMS notification queued.',
+        ),
+      ),
+    );
     return true;
   }
 }
