@@ -18,7 +18,6 @@ import '../widgets/shared/customer_avatar.dart';
 import '../widgets/shared/empty_state.dart';
 import '../widgets/shared/search_field.dart';
 import 'dart:async' show unawaited;
-import '../../core/security/admin_auth_service.dart';
 import '../../data/repositories/audit_log_repository.dart';
 import '../security/admin_gate.dart';
 
@@ -31,13 +30,11 @@ class CustomersScreen extends StatefulWidget {
 
 class _CustomersScreenState extends State<CustomersScreen> {
   String _search = '';
-  late final AdminAuthService _adminAuth;
   late final AuditLogRepository _auditRepo;
 
   @override
   void initState() {
     super.initState();
-    _adminAuth = context.read<AdminAuthService>();
     _auditRepo = context.read<AuditLogRepository>();
   }
 
