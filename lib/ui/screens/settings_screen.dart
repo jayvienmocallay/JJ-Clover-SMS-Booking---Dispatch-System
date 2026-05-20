@@ -1537,7 +1537,7 @@ class _DataSyncPage extends StatelessWidget {
                             action: 'cloud_sync_manual_started',
                             entityType: 'setting',
                           ));
-                          await syncService.syncAll();
+                          await syncService.syncAll(forceRemotePull: true);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(

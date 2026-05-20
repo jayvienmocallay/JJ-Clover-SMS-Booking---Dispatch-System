@@ -16,6 +16,7 @@ class SupabaseSyncService extends ChangeNotifier {
   static final SupabaseSyncService instance = SupabaseSyncService._();
 
   bool _initialized = false;
+  bool _cloudAvailable = false;
   bool _autoSyncEnabled = false;
   bool _wifiOnly = false;
   SyncStatus _status = SyncStatus.idle;
@@ -32,6 +33,7 @@ class SupabaseSyncService extends ChangeNotifier {
       RetentionPolicyRepository();
 
   bool get initialized => _initialized;
+  bool get cloudAvailable => _cloudAvailable;
   bool get autoSyncEnabled => _autoSyncEnabled;
   bool get wifiOnly => _wifiOnly;
   SyncStatus get status => _status;
@@ -54,9 +56,19 @@ class SupabaseSyncService extends ChangeNotifier {
     'orders', // depends on customers
     'sms_messages', // no dependencies
   ];
+  static const Duration _remotePullInterval = Duration(minutes: 30);
 
-  Future<void> initialize() async {
-    if (_initialized) return;
+  Future<void> initialize({bool cloudAvailable = false}) async {
+    _cloudAvailable = cloudAvailable;
+    if (_initialized) {
+      if (_cloudAvailable && _autoSyncEnabled) {
+        _startAutoSync();
+      } else if (!_cloudAvailable) {
+        _stopAutoSync();
+      }
+      notifyListeners();
+      return;
+    }
 
     final autoSync = await _settings.getSetting('auto_sync_enabled');
     final wifi = await _settings.getSetting('sync_wifi_only');
@@ -68,7 +80,7 @@ class SupabaseSyncService extends ChangeNotifier {
 
     _initialized = true;
 
-    if (_autoSyncEnabled) {
+    if (_autoSyncEnabled && _cloudAvailable) {
       _startAutoSync();
     }
 
@@ -81,8 +93,10 @@ class SupabaseSyncService extends ChangeNotifier {
     await _settings.setSetting('auto_sync_enabled', enabled.toString());
 
     if (enabled) {
-      _startAutoSync();
-      unawaited(syncAll());
+      if (_cloudAvailable) {
+        _startAutoSync();
+        unawaited(syncAll());
+      }
     } else {
       _stopAutoSync();
     }
@@ -129,10 +143,21 @@ class SupabaseSyncService extends ChangeNotifier {
     return true;
   }
 
-  Future<void> syncAll() async {
+  Future<void> syncAll({bool forceRemotePull = false}) async {
     if (_status == SyncStatus.syncing) return;
+    if (!_cloudAvailable) {
+      _lastError = 'Supabase is not configured';
+      _status = SyncStatus.error;
+      _stopAutoSync();
+      notifyListeners();
+      debugPrint('Sync skipped: Supabase is not configured');
+      return;
+    }
 
+    final totalTimer = Stopwatch()..start();
+    final connectivityTimer = Stopwatch()..start();
     final connectivity = await Connectivity().checkConnectivity();
+    connectivityTimer.stop();
     if (!_shouldSync(connectivity)) {
       _lastError = 'No suitable network connection';
       _status = SyncStatus.error;
@@ -143,6 +168,10 @@ class SupabaseSyncService extends ChangeNotifier {
     _status = SyncStatus.syncing;
     _lastError = null;
     notifyListeners();
+    debugPrint(
+      'Sync started: connectivity=${connectivityTimer.elapsedMilliseconds}ms '
+      'forceRemotePull=$forceRemotePull',
+    );
 
     const retryDelays = [Duration(seconds: 3), Duration(seconds: 8)];
     Exception? lastException;
@@ -155,12 +184,21 @@ class SupabaseSyncService extends ChangeNotifier {
         }
 
         final supabase = Supabase.instance.client;
-        await _processDeletionRetryQueue(supabase);
-        await _processSyncedRowDeletions(supabase);
+        await _timed(
+          'process customer erasure retries',
+          () => _processDeletionRetryQueue(supabase),
+        );
+        await _timed(
+          'process synced row deletions',
+          () => _processSyncedRowDeletions(supabase),
+        );
         for (final table in _syncTables) {
-          await _syncTable(supabase, table);
+          await _syncTable(supabase, table, forceRemotePull: forceRemotePull);
         }
-        await _retentionPolicy.applyDefaultPolicy();
+        await _timed(
+          'apply retention policy',
+          _retentionPolicy.applyDefaultPolicy,
+        );
 
         _lastSyncedAt = DateTime.now();
         _status = SyncStatus.success;
@@ -171,6 +209,8 @@ class SupabaseSyncService extends ChangeNotifier {
         );
         await _updatePendingCount();
         notifyListeners();
+        totalTimer.stop();
+        debugPrint('Sync finished in ${totalTimer.elapsedMilliseconds}ms');
         return;
       } on Exception catch (e) {
         lastException = e;
@@ -183,34 +223,60 @@ class SupabaseSyncService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _syncTable(SupabaseClient client, String tableName) async {
+  Future<void> _syncTable(
+    SupabaseClient client,
+    String tableName, {
+    required bool forceRemotePull,
+  }) async {
+    final tableTimer = Stopwatch()..start();
     final pendingDeletedIds = await _localSync.pendingDeletedRowIds(tableName);
-    final lastRemoteId = await _localSync.lastRemoteId(tableName);
-    final remoteRows = await _fetchRemoteRows(
-      client,
+    final shouldPullRemote = await _shouldPullRemote(
       tableName,
-      afterId: lastRemoteId,
+      force: forceRemotePull,
     );
-    final insertedRemoteRows = await _localSync.mergeRemoteRows(
-      tableName,
-      remoteRows,
-      excludedIds: pendingDeletedIds,
-    );
-    final maxRemoteId = _maxRowId(remoteRows);
-    if (maxRemoteId > lastRemoteId) {
-      await _localSync.saveSyncState(tableName, lastRemoteId: maxRemoteId);
+    var insertedRemoteRows = 0;
+    if (shouldPullRemote) {
+      final lastRemoteId = await _localSync.lastRemoteId(tableName);
+      final remoteRows = await _timed(
+        'fetch remote $tableName',
+        () => _fetchRemoteRows(client, tableName, afterId: lastRemoteId),
+      );
+      insertedRemoteRows = await _timed(
+        'merge remote $tableName',
+        () => _localSync.mergeRemoteRows(
+          tableName,
+          remoteRows,
+          excludedIds: pendingDeletedIds,
+        ),
+      );
+      final maxRemoteId = _maxRowId(remoteRows);
+      if (maxRemoteId > lastRemoteId) {
+        await _localSync.saveSyncState(tableName, lastRemoteId: maxRemoteId);
+      }
+      await _markRemotePulled(tableName);
     }
 
     final baselineUploaded = await _localSync.isBaselineUploaded(tableName);
     final rows = baselineUploaded
         ? await _getDueLocalRows(tableName)
         : await _localSync.getRowsForSync(tableName);
-    if (rows.isEmpty) return;
+    if (rows.isEmpty) {
+      tableTimer.stop();
+      debugPrint(
+        'Synced $tableName in ${tableTimer.elapsedMilliseconds}ms: '
+        'remotePull=$shouldPullRemote pulled $insertedRemoteRows, pushed 0',
+      );
+      return;
+    }
 
-    const batchSize = 50;
+    const batchSize = 200;
     for (int i = 0; i < rows.length; i += batchSize) {
       final batch = rows.skip(i).take(batchSize).toList();
-      await client.from(tableName).upsert(_cleanRows(batch), onConflict: 'id');
+      await _timed(
+        'upsert $tableName batch ${i ~/ batchSize + 1}',
+        () =>
+            client.from(tableName).upsert(_cleanRows(batch), onConflict: 'id'),
+      );
       if (!baselineUploaded) {
         await _localSync.markUpsertRowsSucceeded(tableName, _rowIds(batch));
       }
@@ -225,9 +291,11 @@ class SupabaseSyncService extends ChangeNotifier {
       await _localSync.saveSyncState(tableName, baselineUploaded: true);
     }
 
+    tableTimer.stop();
     debugPrint(
-      'Synced $tableName: pulled $insertedRemoteRows remote rows, '
-      'pushed ${rows.length} local rows',
+      'Synced $tableName in ${tableTimer.elapsedMilliseconds}ms: '
+      'remotePull=$shouldPullRemote pulled $insertedRemoteRows, '
+      'pushed ${rows.length}',
     );
   }
 
@@ -312,6 +380,41 @@ class SupabaseSyncService extends ChangeNotifier {
       if (id != null && id > maxId) maxId = id;
     }
     return maxId;
+  }
+
+  Future<bool> _shouldPullRemote(
+    String tableName, {
+    required bool force,
+  }) async {
+    if (force) return true;
+    final lastPulled = await _settings.getSetting(
+      _remotePullSetting(tableName),
+    );
+    if (lastPulled == null) return true;
+    final parsed = DateTime.tryParse(lastPulled);
+    if (parsed == null) return true;
+    return DateTime.now().difference(parsed) >= _remotePullInterval;
+  }
+
+  Future<void> _markRemotePulled(String tableName) {
+    return _settings.setSetting(
+      _remotePullSetting(tableName),
+      DateTime.now().toIso8601String(),
+    );
+  }
+
+  String _remotePullSetting(String tableName) {
+    return 'supabase_last_remote_pull_$tableName';
+  }
+
+  Future<T> _timed<T>(String label, Future<T> Function() action) async {
+    final timer = Stopwatch()..start();
+    try {
+      return await action();
+    } finally {
+      timer.stop();
+      debugPrint('Sync step "$label" took ${timer.elapsedMilliseconds}ms');
+    }
   }
 
   Future<void> _processSyncedRowDeletions(SupabaseClient client) async {
