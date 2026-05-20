@@ -20,13 +20,23 @@ extension DatabaseCustomerOperations on DatabaseHelper {
   /// Insert a new barangay
   Future<int> insertBarangay(Map<String, dynamic> barangayData) async {
     final db = await DatabaseHelper.instance.database;
-    return await db.insert('barangays', barangayData);
+    final id = await db.insert('barangays', barangayData);
+    await enqueueSupabaseSyncUpsert(tableName: 'barangays', rowId: id);
+    return id;
   }
 
   /// Delete a barangay by ID
   Future<int> deleteBarangay(int id) async {
     final db = await DatabaseHelper.instance.database;
-    return await db.delete('barangays', where: 'id = ?', whereArgs: [id]);
+    final deleted = await db.delete(
+      'barangays',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (deleted > 0) {
+      await enqueueSupabaseSyncDeletion(tableName: 'barangays', rowId: id);
+    }
+    return deleted;
   }
 
   /// Update a barangay's zone and delivery day.
@@ -40,6 +50,9 @@ extension DatabaseCustomerOperations on DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+    if (updated > 0) {
+      await enqueueSupabaseSyncUpsert(tableName: 'barangays', rowId: id);
+    }
 
     // Re-create schedules for all customers in this barangay
     final zone = data['delivery_zone'] as String?;
@@ -89,7 +102,15 @@ extension DatabaseCustomerOperations on DatabaseHelper {
   /// Delete a customer by ID
   Future<int> deleteCustomer(int id) async {
     final db = await DatabaseHelper.instance.database;
-    return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+    final deleted = await db.delete(
+      'customers',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (deleted > 0) {
+      await enqueueSupabaseSyncDeletion(tableName: 'customers', rowId: id);
+    }
+    return deleted;
   }
 
   // Task 003, Task 005 â€” Customer CRUD operations
@@ -141,6 +162,7 @@ extension DatabaseCustomerOperations on DatabaseHelper {
       }
     }
 
+    await enqueueSupabaseSyncUpsert(tableName: 'customers', rowId: customerId);
     return customerId;
   }
 
@@ -248,6 +270,7 @@ extension DatabaseCustomerOperations on DatabaseHelper {
       rethrow;
     }
     if (updated == 0) return 0;
+    await enqueueSupabaseSyncUpsert(tableName: 'customers', rowId: customerId);
 
     // Re-create schedules if barangay changed so zone validation
     // uses the new barangay's delivery days instead of stale ones.

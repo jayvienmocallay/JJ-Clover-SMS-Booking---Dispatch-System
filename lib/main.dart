@@ -98,16 +98,24 @@ Future<void> main() async {
       debugPrint('Database initialization error: $e');
     }
 
-    try {
-      await Supabase.initialize(
-        url: SupabaseConfig.url,
-        anonKey: SupabaseConfig.anonKey,
-      );
-      await SupabaseSyncService.instance.initialize();
-      debugPrint('Supabase initialized successfully');
-    } catch (e) {
-      debugPrint('Supabase initialization error: $e');
-      await SupabaseSyncService.instance.initialize();
+    // Initialize Supabase cloud sync — only when real credentials are set.
+    if (SupabaseConfig.isConfigured) {
+      try {
+        await Supabase.initialize(
+          url: SupabaseConfig.url,
+          anonKey: SupabaseConfig.anonKey,
+        );
+        await SupabaseSyncService.instance.initialize(cloudAvailable: true);
+        debugPrint('Supabase initialized successfully');
+      } catch (e) {
+        debugPrint('Supabase initialization error: $e');
+        await SupabaseSyncService.instance.initialize(cloudAvailable: false);
+      }
+    } else {
+      // Load saved sync preferences even without live credentials so the
+      // Settings screen reflects the last-known sync state on startup.
+      await SupabaseSyncService.instance.initialize(cloudAvailable: false);
+      debugPrint('Supabase not configured — skipping cloud sync');
     }
   }
 

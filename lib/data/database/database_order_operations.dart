@@ -8,11 +8,15 @@ extension DatabaseOrderOperations on DatabaseHelper {
     if (phoneNumber != null) {
       normalizedData['phone_number'] = PhoneNumberUtils.normalize(phoneNumber);
     }
-    return await db.insert(
+    final id = await db.insert(
       'orders',
       normalizedData,
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
+    if (id != 0) {
+      await enqueueSupabaseSyncUpsert(tableName: 'orders', rowId: id);
+    }
+    return id;
   }
 
   Future<int> promotePendingUnrecognizedOrder(
@@ -29,12 +33,16 @@ extension DatabaseOrderOperations on DatabaseHelper {
     }
     normalizedData['cancel_reason'] = null;
 
-    return await db.update(
+    final updated = await db.update(
       'orders',
       normalizedData,
       where: 'id = ? AND type = ? AND status = ?',
       whereArgs: [id, 'unrecognized', 'pending'],
     );
+    if (updated > 0) {
+      await enqueueSupabaseSyncUpsert(tableName: 'orders', rowId: id);
+    }
+    return updated;
   }
 
   Future<List<Map<String, dynamic>>> getOrders({
@@ -160,7 +168,16 @@ extension DatabaseOrderOperations on DatabaseHelper {
     }
     final data = <String, dynamic>{'status': status};
     if (reason != null && reason.isNotEmpty) data['cancel_reason'] = reason;
-    return await db.update('orders', data, where: 'id = ?', whereArgs: [id]);
+    final updated = await db.update(
+      'orders',
+      data,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (updated > 0) {
+      await enqueueSupabaseSyncUpsert(tableName: 'orders', rowId: id);
+    }
+    return updated;
   }
 
   Future<int> completeOrder(
@@ -173,7 +190,7 @@ extension DatabaseOrderOperations on DatabaseHelper {
     DateTime? deliveredAt,
   }) async {
     final db = await DatabaseHelper.instance.database;
-    return await db.transaction<int>((txn) async {
+    final updated = await db.transaction<int>((txn) async {
       final orders = await txn.query(
         'orders',
         where: 'id = ?',
@@ -228,6 +245,10 @@ extension DatabaseOrderOperations on DatabaseHelper {
       await txn.insert('delivery_logs', logData);
       return updated;
     });
+    if (updated > 0) {
+      await enqueueSupabaseSyncUpsert(tableName: 'orders', rowId: id);
+    }
+    return updated;
   }
 
   String? _nonEmptyString(String? value) {
