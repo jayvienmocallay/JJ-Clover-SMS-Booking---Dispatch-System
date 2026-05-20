@@ -98,24 +98,16 @@ Future<void> main() async {
       debugPrint('Database initialization error: $e');
     }
 
-    // Initialize Supabase cloud sync — only when real credentials are set.
-    if (SupabaseConfig.url != 'https://vkvrmcazvqrwlzrtigbk.supabase.co' &&
-        SupabaseConfig.anonKey != 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZrdnJtY2F6dnFyd2x6cnRpZ2JrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0ODczODYsImV4cCI6MjA5MzA2MzM4Nn0.FBqaJDh_FoMk8PJDsiV92FgIvZ7-F5iHYa3PS2Bd6fA') {
-      try {
-        await Supabase.initialize(
-          url: SupabaseConfig.url,
-          anonKey: SupabaseConfig.anonKey,
-        );
-        await SupabaseSyncService.instance.initialize();
-        debugPrint('Supabase initialized successfully');
-      } catch (e) {
-        debugPrint('Supabase initialization error: $e');
-      }
-    } else {
-      // Load saved sync preferences even without live credentials so the
-      // Settings screen reflects the last-known sync state on startup.
+    try {
+      await Supabase.initialize(
+        url: SupabaseConfig.url,
+        anonKey: SupabaseConfig.anonKey,
+      );
       await SupabaseSyncService.instance.initialize();
-      debugPrint('Supabase not configured — skipping cloud sync');
+      debugPrint('Supabase initialized successfully');
+    } catch (e) {
+      debugPrint('Supabase initialization error: $e');
+      await SupabaseSyncService.instance.initialize();
     }
   }
 
