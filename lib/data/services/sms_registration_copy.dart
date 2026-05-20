@@ -51,7 +51,7 @@ class SmsRegistrationCopy {
                                                 'Nakarehistro na! $name | $barangay | $address\n'
             'Gikolekta ang data sumala sa RA 10173. I-text ang MYDATA para makita o '
             'DELETEDATA para tangtangon ang imong data bisan kanusa.\n'
-                        'Pwede na ka mo-text ug DELIVER [qty] o DROP [qty] para mo-order.';
+                        'Pwede na ka mo-text ug DELIVER [kadaghanon] o DROP [kadaghanon] para mo-order.';
 
   /// Sent when REGISTER is missing required fields.
   static const String registerMissingFields =
@@ -79,7 +79,7 @@ class SmsRegistrationCopy {
 
   /// Sent when a known number sends REGISTER.
   static const String alreadyRegistered =
-      'Nakarehistro na ka. I-text ang DELIVER [qty] o DROP [qty] para mo-order, '
+      'Nakarehistro na ka. I-text ang DELIVER [kadaghanon] o DROP [kadaghanon] para mo-order, '
       'MYDATA para makita ang imong data, o DELETEDATA para tangtangon kini.';
 
     /// Sent when REGISTER arrives without required parts.
@@ -93,9 +93,8 @@ class SmsRegistrationCopy {
       'Hi! Kini awtomatikong tubag gikan sa JJ Clover Water Refilling '
       'Station para sa field testing.\n\n'
       'Para mo-order ug water delivery, i-text:\n'
-      'DELIVER [qty] - pananglitan DELIVER 5\n'
-      'DELIVER [qty] NEW - para sa bag-ong galon\n'
-      'DROP [qty] - para sa walk-in pickup\n'
+      'DELIVER [kadaghanon] - pananglitan DELIVER 5\n'
+      'DROP [kadaghanon] - para sa walk-in pickup\n'
       'STATUS - para mahibal-an ang status sa estasyon\n\n'
       'Ang imong mensahe awtomatikong iproseso.';
 
